@@ -99,8 +99,15 @@ export default function WorkoutTab() {
               ))}
             </View>
 
+            <PrimaryButton
+              label="기구 QR 찍기"
+              variant="secondary"
+              onPress={() => router.push('/workout/scan')}
+            />
+
             <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-              운동을 누르면 하는 방법이 나옵니다. 기구 앞 QR 을 휴대폰으로 찍으셔도 됩니다.
+              운동을 누르면 하는 방법이 나옵니다. 오늘 목록에 없는 기구도 앞에 붙은 QR 을
+              찍으면 설명과 영상을 볼 수 있어요.
             </Text>
           </>
         )}

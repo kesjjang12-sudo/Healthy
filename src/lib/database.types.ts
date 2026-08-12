@@ -145,6 +145,23 @@ export type RoutineItem = {
   is_completed: boolean;
 };
 
+/**
+ * get_equipment_by_qr RPC 응답. 오늘 처방 여부와 무관하게 QR 로 바로 찾은
+ * 기구 정보 — target_weight/sets/reps/is_completed 처럼 "이 사람에게 처방된
+ * 값"은 없다(그건 RoutineItem 만 갖는다). 트레이너에게 문의하라는 안내로
+ * 대신한다.
+ */
+export type EquipmentLookup = {
+  id: string;
+  name: string;
+  description: string | null;
+  target_muscle: string | null;
+  video_url: string;
+  qr_code_val: string;
+  base_weight_kg: number | null;
+  weight_step_kg: number;
+};
+
 /** generate_daily_routine RPC 응답 */
 export type GenerateRoutineResult = {
   routine_date: string;
@@ -339,6 +356,10 @@ export type Database = {
       get_apartment_leaderboard: {
         Args: { p_apt_id: string; p_limit?: number };
         Returns: LeaderboardRow[];
+      };
+      get_equipment_by_qr: {
+        Args: { p_qr_code: string };
+        Returns: EquipmentLookup;
       };
     };
     Enums: Record<string, never>;
