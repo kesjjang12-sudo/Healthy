@@ -1,67 +1,67 @@
 import { Redirect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Keypad } from '@/components/keypad';
 import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Spacing } from '@/constants/theme';
-import { AuthError } from '@/features/auth/api';
+import { CheckInError, kioskCheckIn } from '@/features/auth/kiosk-api';
 import { formatPhoneNumber, isValidPhoneNumber, PHONE_MAX_DIGITS } from '@/features/auth/phone';
-import { useSession } from '@/features/auth/session';
 import { useDeviceRole } from '@/features/device-role/context';
+import type { KioskCheckInResult } from '@/lib/database.types';
 
 /** 가로가 이만큼 넓으면 태블릿 가로 모드로 보고 2단 배치로 바꾼다. */
 const WIDE_LAYOUT_MIN_WIDTH = 900;
 
-/** 아직 안 누른 자리를 옅게 깔아 둔다. 누를수록 회색이 줄어드는 게 보인다. */
+/** 아직 안 누른 자리를 옅게 깔아 둔다. */
 const DIGIT_MASK = '010-0000-0000';
 
+/** 체크인 완료 화면을 보여주는 시간. 줄 서 있는 다음 사람을 오래 기다리게 하면 안 된다. */
+const RESULT_DISPLAY_MS = 6_000;
+
 /**
- * 이 화면은 원래 "전화번호 = 로그인" 이었던 예전 흐름이다.
- *
- * 역할이 키오스크로 정해진 기기는 전용 체크인 화면(/kiosk/checkin)으로 보낸다.
- * 역할이 아직 없는 기기는 먼저 device-setup 에서 골라야 한다.
- *
- * 역할이 "개인"인 기기는 지금은 이 화면을 그대로 쓴다 — 카카오/구글 로그인과
- * 탭 구조(/login, (tabs)/...)가 아직 없어서다. 다음 단계에서 이 화면 전체가
- * 로그인 화면으로 바뀌면 이 디스패처 로직도 함께 정리된다.
+ * 헬스장 입구 태블릿 전용 체크인 화면. 예전 index.tsx 의 키패드 UI를 그대로
+ * 가져오되, 로그인이 아니라 출입 체크인만 한다 — 개인 홈 화면으로 넘어가지
+ * 않고, 이 화면 안에서 결과만 잠깐 보여준 뒤 다음 사람을 위해 저절로
+ * 초기화된다.
  */
-export default function PhoneAuthScreen() {
+export default function KioskCheckinScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { role, isLoading: isRoleLoading } = useDeviceRole();
-  const { user, isRestoring, signIn, touch } = useSession();
 
   const [digits, setDigits] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [result, setResult] = useState<KioskCheckInResult | null>(null);
 
-  const handleDigit = useCallback(
-    (digit: string) => {
-      touch();
-      setErrorMessage(null);
-      setDigits((current) => (current.length >= PHONE_MAX_DIGITS ? current : `${current}${digit}`));
-    },
-    [touch],
-  );
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const reset = useCallback(() => {
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+    setResult(null);
+    setDigits('');
+    setErrorMessage(null);
+  }, []);
+
+  const handleDigit = useCallback((digit: string) => {
+    setErrorMessage(null);
+    setDigits((current) => (current.length >= PHONE_MAX_DIGITS ? current : `${current}${digit}`));
+  }, []);
 
   const handleBackspace = useCallback(() => {
-    touch();
     setErrorMessage(null);
     setDigits((current) => current.slice(0, -1));
-  }, [touch]);
+  }, []);
 
   const handleClear = useCallback(() => {
-    touch();
     setErrorMessage(null);
     setDigits('');
-  }, [touch]);
+  }, []);
 
   const handleSubmit = useCallback(async () => {
-    touch();
-
     if (!isValidPhoneNumber(digits)) {
       setErrorMessage('전화번호 11자리를 모두 눌러주세요.');
       return;
@@ -71,27 +71,49 @@ export default function PhoneAuthScreen() {
     setErrorMessage(null);
 
     try {
-      const result = await signIn(digits);
+      const checkIn = await kioskCheckIn(digits);
       setDigits('');
-      // 설문을 끝내야 AI 루틴을 만들 수 있다. is_new_user 가 아니라 onboarded_at 으로
-      // 판단해야 지난번에 설문 도중 나간 사람도 남은 문항부터 이어서 받는다.
-      router.replace(result.user.profile_data?.onboarded_at ? '/home' : '/onboarding');
+
+      if (checkIn.needs_pairing && checkIn.pairing_code) {
+        // 처음 오신 분(또는 아직 폰 앱과 연결 안 된 분)은 바로 QR 화면으로.
+        router.push({
+          pathname: '/kiosk/pairing',
+          params: { code: checkIn.pairing_code },
+        });
+        return;
+      }
+
+      // 이미 연결된 분은 담백한 완료 화면만 잠깐 보여주고 저절로 돌아간다.
+      // 다른 단지가 주 소속인 사람이 새 단지에서 처음 체크인한 경우(prompt_gym_switch)
+      // 는 여기서 안내하지 않는다 — 그 화면은 이사 대응 UX 를 다듬는 단계에서 만든다.
+      setResult(checkIn);
+      resetTimer.current = setTimeout(reset, RESULT_DISPLAY_MS);
     } catch (error) {
-      setErrorMessage(error instanceof AuthError ? error.message : '잠시 후 다시 시도해 주세요.');
+      setErrorMessage(error instanceof CheckInError ? error.message : '잠시 후 다시 시도해 주세요.');
     } finally {
       setIsSubmitting(false);
     }
-  }, [digits, router, signIn, touch]);
+  }, [digits, reset, router]);
 
-  // 훅 호출 뒤에 리다이렉트를 판단한다.
-  if (!isRoleLoading && role === null) {
+  useEffect(() => reset, [reset]);
+
+  if (!isRoleLoading && role !== 'kiosk') {
     return <Redirect href="/device-setup" />;
   }
-  if (!isRoleLoading && role === 'kiosk') {
-    return <Redirect href="/kiosk/checkin" />;
-  }
-  if (!isRestoring && user) {
-    return <Redirect href={user.profile_data?.onboarded_at ? '/home' : '/onboarding'} />;
+
+  if (result) {
+    return (
+      <View style={styles.screen}>
+        <View style={[styles.resultContent, { paddingTop: insets.top }]}>
+          <Text style={styles.resultTitle} maxFontSizeMultiplier={1.2}>
+            체크인 완료
+          </Text>
+          <Text style={styles.resultSub} maxFontSizeMultiplier={1.3}>
+            {result.visit_count}번째 방문이시네요
+          </Text>
+        </View>
+      </View>
+    );
   }
 
   const isWide = width >= WIDE_LAYOUT_MIN_WIDTH;
@@ -112,7 +134,7 @@ export default function PhoneAuthScreen() {
         style={[styles.helper, errorMessage ? styles.helperError : null]}
         maxFontSizeMultiplier={1.3}
         accessibilityLiveRegion="polite">
-        {errorMessage ?? '처음 오셨나요? 번호만 누르면 바로 등록됩니다.'}
+        {errorMessage ?? '번호를 누르면 출석이 기록됩니다.'}
       </Text>
     </View>
   );
@@ -148,11 +170,10 @@ export default function PhoneAuthScreen() {
         )}
       </ScrollView>
 
-      {/* 주 버튼은 항상 화면 아래 같은 자리에 있다. 스크롤과 무관하게 손이 기억한다. */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
         <PrimaryButton
-          label="시작하기"
-          onPress={handleSubmit}
+          label="체크인"
+          onPress={() => void handleSubmit()}
           disabled={!isValidPhoneNumber(digits)}
           loading={isSubmitting}
         />
@@ -200,7 +221,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: LetterSpacing.title,
     color: Colors.text,
-    // 자리수가 바뀔 때 숫자 폭이 흔들리지 않게 고정폭 숫자를 쓴다.
     fontVariant: ['tabular-nums'],
   },
   displayRest: {
@@ -223,5 +243,24 @@ const styles = StyleSheet.create({
     maxWidth: 1000,
     width: '100%',
     alignSelf: 'center',
+  },
+  resultContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+  },
+  resultTitle: {
+    fontSize: FontSize.title,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.title,
+    color: Colors.primary,
+  },
+  resultSub: {
+    fontSize: FontSize.subtitle,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.subtitle,
+    color: Colors.textSecondary,
   },
 });
