@@ -24,6 +24,43 @@
   - `profile_data` 는 GIN 인덱스(`jsonb_path_ops`)를 걸어 `@>` 포함 질의가 인덱스를 타게 했다.
   - `daily_routines (user_id, equip_id, routine_date)` 유니크 — AI 루틴 생성이 중복 실행돼도 행이 안 불어난다.
 - `20260812000002_rls_and_auth.sql` — RLS 정책과 인증 RPC
+- `20260812000003_routine_templates.sql` — 루틴 템플릿 조합 + 아픈 곳 규칙
+- `20260812000004_generate_daily_routine.sql` — 루틴 생성/조회 RPC
+
+### 루틴 생성: 런타임 AI 호출 없음
+
+**모든 경우의 수를 미리 조합해 둔다.** 시니어 대상이라 매번 다른 결과가 나오면 안전
+검수가 불가능하고, 태블릿 앞에서 AI 응답을 기다리는 시간이 그대로 줄이 된다. API 키
+노출·지연·건당 비용도 전부 없어진다.
+
+커버리지는 **성별 2 × 연령대 4 × 목적 조합 15 × 아픈 곳 조합 64 = 7,680 가지**다.
+저장은 앞의 셋만 조합한 **120개 템플릿**으로 두고, 아픈 곳은 조합이 아니라 후처리
+규칙으로 적용한다. 커버리지는 같으면서 사람이 검수할 수 있는 분량이 된다 — 트레이너가
+120개는 볼 수 있어도 7,680개는 못 본다.
+
+```
+goal_blocks     목적별 기본 처방 (부위·세트·횟수·무게비율)
+age_modifiers   연령대 보정 (70대는 무게 0.65배, 세트 -1)
+gender_modifiers 성별 보정
+      ↓ rebuild_routine_templates()
+routine_templates + routine_template_items   ← 120개 조합 (504개 항목)
+      ↓ generate_daily_routine(user_id)
+pain_area_rules 적용 → 단지 보유 기구로 치환 → daily_routines
+```
+
+규칙 테이블만 고치고 `rebuild_routine_templates()` 를 다시 돌리면 120개가 재생성된다.
+
+**안전 장치**
+
+- 무게는 기구 조절 단위로 **내림**한다. 반올림하면 의도보다 무거워지는데, 시니어에게는
+  가벼운 쪽이 틀리는 방향으로 안전하다
+- 프로필이 비어 있으면 가장 보수적인 값(여성·70대·건강유지)으로 떨어진다
+- 아픈 곳은 `exclude`(운동 자체를 뺌) / `derate`(무게만 낮춤) 두 가지로 적용한다
+- 아픈 곳이 3군데 이상이거나 남는 운동이 없으면 `needs_trainer_review` 를 세워 사람에게 넘긴다
+- 1세트짜리 처방이 나오지 않도록 최소 2세트를 보장한다
+
+> ⚠️ 여기 담긴 무게·세트·횟수는 **의료 조언이 아니다.** 실서비스 전에 트레이너 또는
+> 물리치료사 검수를 반드시 거쳐야 한다. 특히 `pain_area_rules` 가 안전 장치다.
 
 ### RLS 방침
 
@@ -36,6 +73,8 @@ deny-by-default** 로 막고, 접근은 `security definer` 함수(RPC)로만 열
 | --- | --- |
 | `sign_in_with_phone(p_apt_id, p_phone_number)` | 번호 정규화·검증 → find-or-create → 하루 1회 출석 기록 |
 | `update_profile_data(p_user_id, p_patch)` | `profile_data` 를 덮어쓰지 않고 `||` 로 병합 |
+| `generate_daily_routine(p_user_id, p_date)` | 템플릿 + 아픈 곳 규칙 + 단지 기구로 하루 루틴 생성 |
+| `get_daily_routine(p_user_id, p_date)` | 해당 날짜 루틴을 기구 정보와 함께 조회 |
 
 > ⚠️ **보안 메모**: 지금 인증은 "전화번호만 알면 로그인"이다. 남의 번호를 눌러 넣으면
 > 그 사람 계정으로 들어가진다. 실서비스 전에 생년(4자리) 확인 같은 2차 확인을 하나 더
@@ -77,12 +116,16 @@ src/
 
 ### 기기 역할 분담
 
-**입구 태블릿 1대 + 각자 폰으로 기구 QR 스캔** 구조를 전제로 만들었다.
+**입구 태블릿 1대 + 각자 폰 앱** 구조다.
 
 | | 태블릿 (공용, 입구) | 폰 앱 (개인) |
 | --- | --- | --- |
-| 하는 일 | 번호 인증, 출석, 온보딩 설문 | 기구 QR 스캔, 영상, 기록·포인트 조회 |
+| 하는 일 | 번호 인증, 출석, 온보딩 설문, 오늘 루틴 요약 | 루틴 상세, 기구 QR 스캔, 영상, 걷기 랭킹, 포인트 |
 | 설계 제약 | 뒤에 줄이 선다 / 이웃이 화면을 본다 | 개인 기기라 제약 없음 |
+
+웹 링크가 아니라 **앱 설치를 유도한다.** 설치 마찰은 감수하고, 단지 걷기 랭킹·상품권 같은
+훅으로 넘긴다. 걷기 집계는 폰 센서가 필요해서 웹으로는 만들 수 없으니, 앱이 존재해야 할
+이유가 그 기능 자체에서 나온다.
 
 ### 온보딩 설문 (4문항 + 최종 확인)
 
@@ -128,10 +171,29 @@ src/
 - 앱이 죽었다 살아나면 5분 이내에 한해 세션 복원 (운동 중 강제 로그아웃 방지)
 - 스택 뒤로가기 제스처 차단 (앞사람 화면으로 못 돌아가게)
 
-## 4. 다음 단계
+## 4. 로컬에서 DB 테스트하기
 
-1. AI 루틴 생성 (`profile_data` 기반) → `daily_routines` 적재
-2. 오늘의 루틴 화면 (태블릿에서 확인 → 폰으로 이어보기)
-3. 폰 앱: QR 스캔 → `equipments.qr_code_val` 조회 → 시범 영상 재생
+Supabase 프로젝트 없이도 마이그레이션과 RPC 를 검증할 수 있다.
+
+```bash
+initdb -D ~/pgdata -U postgres --auth=trust
+pg_ctl -D ~/pgdata -o "-p 5433 -k /tmp" start
+psql -h /tmp -p 5433 -U postgres -c "create database fitroutine"
+psql -h /tmp -p 5433 -U postgres -d fitroutine -c "create role anon; create role authenticated;"
+for f in supabase/migrations/*.sql; do
+  psql -h /tmp -p 5433 -U postgres -d fitroutine -v ON_ERROR_STOP=1 -f "$f"
+done
+psql -h /tmp -p 5433 -U postgres -d fitroutine -f supabase/seed.sql
+```
+
+`anon` / `authenticated` 는 Supabase 가 만들어 주는 역할이라 로컬에서는 직접 만들어야 한다.
+
+## 5. 다음 단계
+
+1. **오늘의 루틴 화면** — 태블릿 체크인 직후 요약, 앱에서 상세
+2. **앱 설치 유도 훅** — 단지 걷기 랭킹 / 상품권·쿠폰. 걷기는 폰 센서가 필요해서
+   웹으로는 못 만든다. 앱이 존재해야 할 실질적인 이유가 여기서 나온다
+3. QR 스캔 → 기구 목표 + 시범 영상
 4. 운동 완료 처리 → 포인트 적립
 5. 키·몸무게를 운동 종료 화면에서 한 문항씩 받기 (점진적 프로필링)
+6. 트레이너 검수 후 `goal_blocks` / `pain_area_rules` 수치 조정
