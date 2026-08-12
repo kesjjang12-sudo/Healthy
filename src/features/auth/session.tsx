@@ -26,6 +26,8 @@ type SessionContextValue = {
   isRestoring: boolean;
   signIn: (phoneNumber: string) => Promise<SignInResult>;
   signOut: () => void;
+  /** 서버에서 갱신된 유저 정보(프로필, 포인트 등)를 세션에 반영한다. */
+  setUser: (user: User) => void;
   /** 사용자가 화면을 만졌음을 알려 자동 로그아웃 타이머를 미룬다. */
   touch: () => void;
 };
@@ -84,6 +86,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     lastActiveAt.current = Date.now();
   }, []);
 
+  const setCurrentUser = useCallback(
+    (next: User) => {
+      lastActiveAt.current = Date.now();
+      setUser(next);
+      persist(next);
+    },
+    [persist],
+  );
+
   const signIn = useCallback(
     async (phoneNumber: string) => {
       const result = await signInWithPhone(phoneNumber);
@@ -106,8 +117,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [user, signOut]);
 
   const value = useMemo<SessionContextValue>(
-    () => ({ user, isRestoring, signIn, signOut, touch }),
-    [user, isRestoring, signIn, signOut, touch],
+    () => ({ user, isRestoring, signIn, signOut, setUser: setCurrentUser, touch }),
+    [user, isRestoring, signIn, signOut, setCurrentUser, touch],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

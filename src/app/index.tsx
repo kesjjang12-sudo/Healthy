@@ -60,8 +60,9 @@ export default function PhoneAuthScreen() {
     try {
       const result = await signIn(digits);
       setDigits('');
-      // 신규 회원은 프로필 설문(성별/연령대/운동목적)부터 받아야 AI 루틴을 만들 수 있다.
-      router.replace(result.is_new_user ? '/onboarding' : '/home');
+      // 설문을 끝내야 AI 루틴을 만들 수 있다. is_new_user 가 아니라 onboarded_at 으로
+      // 판단해야 지난번에 설문 도중 나간 사람도 남은 문항부터 이어서 받는다.
+      router.replace(result.user.profile_data?.onboarded_at ? '/home' : '/onboarding');
     } catch (error) {
       setErrorMessage(
         error instanceof AuthError ? error.message : '잠시 후 다시 시도해 주세요.',
@@ -72,7 +73,9 @@ export default function PhoneAuthScreen() {
   }, [digits, router, signIn, touch]);
 
   // 훅 호출 뒤에 리다이렉트를 판단한다.
-  if (!isRestoring && user) return <Redirect href="/home" />;
+  if (!isRestoring && user) {
+    return <Redirect href={user.profile_data?.onboarded_at ? '/home' : '/onboarding'} />;
+  }
 
   const isWide = width >= WIDE_LAYOUT_MIN_WIDTH;
   const canSubmit = isValidPhoneNumber(digits);

@@ -66,13 +66,37 @@ src/
 ├── app/
 │   ├── _layout.tsx        SessionProvider + Stack (뒤로가기 제스처 차단)
 │   ├── index.tsx          번호 입력(인증) 화면
-│   ├── onboarding.tsx     신규 회원 프로필 설문 (자리만 잡아둠)
+│   ├── onboarding.tsx     신규 회원 프로필 설문 3문항
 │   └── home.tsx           로그인 직후 화면 (자리만 잡아둠)
-├── components/            keypad, primary-button
+├── components/            keypad, primary-button, choice-button
 ├── constants/theme.ts     시니어용 디자인 토큰
 ├── features/auth/         phone(포맷·검증), api(RPC 호출), session(컨텍스트)
-└── lib/                   supabase 클라이언트, DB 타입, env
+├── features/onboarding/   questions(문항 정의), api(profile_data 병합 저장)
+└── lib/                   supabase 클라이언트, DB 타입, env, RPC 에러 처리
 ```
+
+### 기기 역할 분담
+
+**입구 태블릿 1대 + 각자 폰으로 기구 QR 스캔** 구조를 전제로 만들었다.
+
+| | 태블릿 (공용, 입구) | 폰 앱 (개인) |
+| --- | --- | --- |
+| 하는 일 | 번호 인증, 출석, 온보딩 설문 | 기구 QR 스캔, 영상, 기록·포인트 조회 |
+| 설계 제약 | 뒤에 줄이 선다 / 이웃이 화면을 본다 | 개인 기기라 제약 없음 |
+
+### 온보딩이 3문항인 이유
+
+태블릿이 입구에 한 대뿐이라 신규 회원 설문이 길면 그대로 줄이 된다. 그래서 AI 루틴
+생성에 **반드시 필요한 값만** 태블릿에서 받는다 — 성별 / 연령대 / 운동 목적. 전부 큰
+버튼 선택이고 자판 입력이 없어서 탭 3번이면 끝난다.
+
+키·몸무게·부상 부위는 태블릿에서 **묻지 않는다.** 시간 문제도 있지만, 아파트 헬스장은
+이웃이 뒤에서 화면을 보는 곳이라 몸무게를 공용 화면에 띄우면 안 된다. 이 값들은 폰 앱이나
+운동 종료 화면에서 한 문항씩 받는다(점진적 프로필링).
+
+- 선택하면 바로 다음 문항으로 넘어간다 ("다음" 버튼을 없애 탭 수를 절반으로)
+- 중간 답도 그때그때 저장한다. 도중에 나가도 다음 방문 때 **남은 문항부터** 이어서 묻는다
+- 설문 완료 여부는 `profile_data.onboarded_at` 으로 판단한다 (`is_new_user` 가 아니라)
 
 ### 번호 입력 화면 설계 기준
 
@@ -94,7 +118,8 @@ src/
 
 ## 4. 다음 단계
 
-1. 온보딩 설문 (성별 / 연령대 / 운동 목적) → `update_profile_data` 로 `profile_data` 채우기
-2. QR 스캔 → `equipments.qr_code_val` 조회 → 시범 영상 재생
-3. AI 루틴 생성 (`profile_data` 기반) → `daily_routines` 적재
+1. AI 루틴 생성 (`profile_data` 기반) → `daily_routines` 적재
+2. 오늘의 루틴 화면 (태블릿에서 확인 → 폰으로 이어보기)
+3. 폰 앱: QR 스캔 → `equipments.qr_code_val` 조회 → 시범 영상 재생
 4. 운동 완료 처리 → 포인트 적립
+5. 키·몸무게·부상 부위를 운동 종료 화면에서 한 문항씩 받기
