@@ -10,6 +10,7 @@ import { CheckInError, kioskCheckIn } from '@/features/auth/kiosk-api';
 import { formatPhoneNumber, isValidPhoneNumber, PHONE_MAX_DIGITS } from '@/features/auth/phone';
 import { useDeviceRole } from '@/features/device-role/context';
 import type { KioskCheckInResult } from '@/lib/database.types';
+import { APT_ID } from '@/lib/env';
 
 /** 가로가 이만큼 넓으면 태블릿 가로 모드로 보고 2단 배치로 바꾼다. */
 const WIDE_LAYOUT_MIN_WIDTH = 900;
@@ -76,6 +77,8 @@ export default function KioskCheckinScreen() {
 
       if (checkIn.needs_pairing && checkIn.pairing_code) {
         // 처음 오신 분(또는 아직 폰 앱과 연결 안 된 분)은 바로 QR 화면으로.
+        // 이 경우엔 주 소속 전환 프롬프트를 띄우지 않는다 — 한 번에 물어볼 건
+        // 하나씩만. 나중에 프로필 탭에서도 바꿀 수 있다.
         router.push({
           pathname: '/kiosk/pairing',
           params: { code: checkIn.pairing_code },
@@ -83,9 +86,17 @@ export default function KioskCheckinScreen() {
         return;
       }
 
-      // 이미 연결된 분은 담백한 완료 화면만 잠깐 보여주고 저절로 돌아간다.
-      // 다른 단지가 주 소속인 사람이 새 단지에서 처음 체크인한 경우(prompt_gym_switch)
-      // 는 여기서 안내하지 않는다 — 그 화면은 이사 대응 UX 를 다듬는 단계에서 만든다.
+      if (checkIn.prompt_gym_switch) {
+        // 이미 폰 앱과 연결된 분이 다른 단지가 주 소속인 채로 여기 처음 왔다.
+        // "이 헬스장으로 옮기셨나요?" 를 바로 물어본다 — 미루면 다음에 안 물어보게 된다.
+        router.push({
+          pathname: '/kiosk/membership-prompt',
+          params: { userId: checkIn.user_id, aptId: APT_ID },
+        });
+        return;
+      }
+
+      // 이미 연결되어 있고 소속 전환도 필요 없는 분. 담백한 완료 화면만 잠깐 보여주고 저절로 돌아간다.
       setResult(checkIn);
       resetTimer.current = setTimeout(reset, RESULT_DISPLAY_MS);
     } catch (error) {
