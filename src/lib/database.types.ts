@@ -156,13 +156,6 @@ export type GenerateRoutineResult = {
   routines: RoutineItem[];
 };
 
-/** sign_in_with_phone RPC 응답. 폐기 대상 — kiosk_check_in 으로 대체됐다. */
-export type SignInResult = {
-  user: User;
-  is_new_user: boolean;
-  attendance_logged: boolean;
-};
-
 /**
  * kiosk_check_in RPC 응답.
  * 개인정보(이름/포인트/루틴)는 절대 담지 않는다 — 태블릿 공용 화면에 뜨는 값이라서다.
@@ -276,11 +269,6 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
-      /** @deprecated kiosk_check_in 으로 대체됐다. 클라이언트 호출부는 전부 제거됨(Phase 8 정리 대상). */
-      sign_in_with_phone: {
-        Args: { p_apt_id: string; p_phone_number: string; p_profile_data?: ProfileData };
-        Returns: SignInResult;
-      };
       update_profile_data: {
         Args: { p_user_id: string; p_patch: Partial<ProfileData> };
         Returns: User;
