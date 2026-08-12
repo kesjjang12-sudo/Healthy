@@ -92,6 +92,8 @@ export type Equipment = {
   apt_id: string | null;
   qr_code_val: string;
   name: string;
+  /** 시니어가 이해하기 쉬운 한 줄 설명. 비어 있으면 화면에서 부위명으로 대체한다. */
+  description: string | null;
   target_muscle: string | null;
   video_url: string;
   /** 표준 성인 남성 시작 무게. null 이면 무게 없이 맨몸으로 안내한다 */
@@ -133,6 +135,7 @@ export type RoutineItem = {
   routine_id: string;
   equip_id: string;
   name: string;
+  description: string | null;
   target_muscle: string | null;
   video_url: string;
   qr_code_val: string;
@@ -198,6 +201,9 @@ export type LeaderboardRow = {
   rank: number;
   /** 닉네임이 없으면 "회원xxxx" 형태로 대체된다. 전화번호 등 PII 는 절대 노출하지 않는다. */
   nickname: string;
+  /** 랭킹 정렬 기준. 포인트는 자기신고라 검증이 안 돼서 순위는 이걸로만 매긴다. */
+  attendance_count: number;
+  /** 참고용으로만 같이 내려온다. 정렬에는 안 쓰인다. */
   total_points: number;
   is_me: boolean;
 };

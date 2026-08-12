@@ -1942,6 +1942,141 @@ grant execute on function public.get_apartment_leaderboard(uuid, integer) to aut
 drop function if exists public.sign_in_with_phone(uuid, text, jsonb);
 
 -- ═══════════════════════════════════════════════════════════
+-- 20260812000018_ranking_by_attendance.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 랭킹 기준을 포인트에서 출석 횟수로 바꾼다.
+--
+-- 포인트는 완료 버튼을 누르기만 하면 쌓인다 — 실제로 그 무게를 들었는지,
+-- 자세가 맞았는지 검증할 방법이 없다. 반면 출석은 키오스크 체크인이 있어야만
+-- 기록되므로(kiosk_check_in), 최소한 "그 헬스장에 실제로 왔다"는 사실은
+-- 조작하기 어렵다. 랭킹처럼 다른 사람과 비교하는 기능은 검증 가능한 지표를
+-- 써야 공정하다.
+--
+-- 이 단지에서 출석한 날 수(distinct day)로 순위를 매긴다. 포인트는 응답에
+-- 계속 넣어 두되(운동 탭 등 다른 곳에서 여전히 쓰이므로) 정렬 기준에서는 뺀다.
+
+create or replace function public.get_apartment_leaderboard(p_apt_id uuid, p_limit integer default 50)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_me uuid;
+begin
+    if auth.uid() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+
+    select id into v_me from public.users where auth_user_id = auth.uid();
+
+    return coalesce(
+        jsonb_agg(
+            jsonb_build_object(
+                'rank', lb.rnk,
+                'nickname', coalesce(lb.profile_data->>'nickname', '회원' || right(lb.id::text, 4)),
+                'attendance_count', lb.attendance_count,
+                'total_points', lb.total_points,
+                'is_me', lb.id = v_me
+            )
+            order by lb.rnk
+        ),
+        '[]'::jsonb
+    )
+    from (
+        select
+            u.id,
+            u.profile_data,
+            u.total_points,
+            count(distinct (l.attended_at at time zone 'Asia/Seoul')::date) as attendance_count,
+            row_number() over (
+                order by count(distinct (l.attended_at at time zone 'Asia/Seoul')::date) desc,
+                         u.created_at asc
+            ) as rnk
+        from public.users u
+        join public.user_gym_memberships m on m.user_id = u.id and m.apt_id = p_apt_id
+        left join public.attendance_logs l on l.user_id = u.id and l.apt_id = p_apt_id
+        group by u.id, u.profile_data, u.total_points, u.created_at
+    ) lb
+    -- 상위 p_limit 명 + 그 밖이어도 내 순위는 항상 포함(고정 행으로 보여주기 위해)
+    where lb.rnk <= p_limit or lb.id = v_me;
+end;
+$$;
+
+comment on function public.get_apartment_leaderboard(uuid, integer) is
+    '같은 단지 출석 랭킹(포인트 아님 — 자기신고라 검증 불가). 닉네임/출석횟수/포인트만 노출, PII 없음.';
+
+revoke all on function public.get_apartment_leaderboard(uuid, integer) from public;
+grant execute on function public.get_apartment_leaderboard(uuid, integer) to authenticated;
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260812000019_equipment_description.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 기구 이름만으로는 시니어에게 무슨 운동인지 안 와닿는다("체스트 프레스"가
+-- 뭔지 모르는 분이 많다). 트레이너/관리자가 쉬운 말로 채울 수 있는 설명 칸을
+-- 추가한다. 채워지면 화면에서 이름 아래에 그대로 보여준다.
+--
+-- 자동 생성하지 않는다 — 기구 이름만 보고 동작을 지어내면 틀린 자세를
+-- 안내하게 된다(실제 이 앱의 하는 방법 안내 원칙과 같다: 확실한 것만 말한다).
+
+alter table public.equipments
+    add column if not exists description text;
+
+comment on column public.equipments.description is
+    '시니어가 이해하기 쉬운 한 줄 설명. 예: "앉아서 다리를 앞으로 미는 동작으로 허벅지를 강화합니다." 비어 있으면 화면에서 부위명으로 대체.';
+
+create or replace function public.get_daily_routine(
+    p_user_id uuid,
+    p_date    date default current_date
+)
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+    select coalesce(jsonb_agg(row order by sort_order, name), '[]'::jsonb)
+    from (
+        select d.sort_order, e.name, jsonb_build_object(
+            'routine_id', d.id,
+            'equip_id', e.id,
+            'name', e.name,
+            'description', e.description,
+            'target_muscle', e.target_muscle,
+            'video_url', e.video_url,
+            'qr_code_val', e.qr_code_val,
+            'target_weight', d.target_weight,
+            'target_sets', d.target_sets,
+            'target_reps', d.target_reps,
+            'is_completed', d.is_completed
+        ) as row
+        from public.daily_routines d
+        join public.equipments e on e.id = d.equip_id
+        where d.user_id = p_user_id and d.routine_date = p_date
+    ) rows;
+$$;
+
+comment on function public.get_daily_routine(uuid, date) is
+    '해당 날짜의 루틴을 기구 정보(쉬운 설명 포함)와 함께 돌려준다.';
+
+revoke all on function public.get_daily_routine(uuid, date) from public;
+grant execute on function public.get_daily_routine(uuid, date) to anon, authenticated;
+
+
+-- 시범단지 기구 5대에 예시 설명을 채운다.
+update public.equipments set description = '의자에 앉아 손잡이를 앞으로 밀어내는 동작입니다. 가슴 근육을 키웁니다.'
+    where qr_code_val = 'FIT-DEMO-CHEST-01';
+update public.equipments set description = '위에서 손잡이를 아래로 당기는 동작입니다. 등 근육을 키워 굽은 등을 펴는 데 도움됩니다.'
+    where qr_code_val = 'FIT-DEMO-LAT-01';
+update public.equipments set description = '의자에 앉아 발판을 다리로 밀어내는 동작입니다. 허벅지와 엉덩이 근육을 키웁니다.'
+    where qr_code_val = 'FIT-DEMO-LEG-01';
+update public.equipments set description = '의자에 앉아 손잡이를 머리 위로 밀어올리는 동작입니다. 어깨 근육을 키웁니다.'
+    where qr_code_val = 'FIT-DEMO-SHLD-01';
+update public.equipments set description = '등받이에 기대 앉아 상체를 앞으로 숙이는 동작입니다. 뱃살 관리와 허리 힘에 도움됩니다.'
+    where qr_code_val = 'FIT-DEMO-ABD-01';
+
+-- ═══════════════════════════════════════════════════════════
 -- seed.sql — 시범단지 + 기구 5대 (테스트용)
 -- ═══════════════════════════════════════════════════════════
 
@@ -1958,12 +2093,13 @@ on conflict (id) do nothing;
 
 -- base_weight_kg 는 "표준 성인 남성 시작 무게" 기준이다. 여기에 연령대·성별·목적·
 -- 아픈 곳 배율이 곱해져 개인별 무게가 나오므로, 단지마다 기구 사양에 맞춰 조정한다.
+-- description 은 기구 이름만으로는 이해하기 어려운 시니어를 위한 쉬운 설명이다.
 insert into public.equipments
-    (apt_id, qr_code_val, name, target_muscle, video_url, base_weight_kg, weight_step_kg)
+    (apt_id, qr_code_val, name, description, target_muscle, video_url, base_weight_kg, weight_step_kg)
 values
-    ('11111111-1111-4111-8111-111111111111', 'FIT-DEMO-CHEST-01', '체스트 프레스', '가슴',   'https://example.com/videos/chest-press.mp4',    20,  5),
-    ('11111111-1111-4111-8111-111111111111', 'FIT-DEMO-LAT-01',   '랫 풀다운',     '등',     'https://example.com/videos/lat-pulldown.mp4',   25,  5),
-    ('11111111-1111-4111-8111-111111111111', 'FIT-DEMO-LEG-01',   '레그 프레스',   '하체',   'https://example.com/videos/leg-press.mp4',      40, 10),
-    ('11111111-1111-4111-8111-111111111111', 'FIT-DEMO-SHLD-01',  '숄더 프레스',   '어깨',   'https://example.com/videos/shoulder-press.mp4', 15,  5),
-    ('11111111-1111-4111-8111-111111111111', 'FIT-DEMO-ABD-01',   '복부 크런치',   '복부',   'https://example.com/videos/ab-crunch.mp4',      10,  5)
+    ('11111111-1111-4111-8111-111111111111', 'FIT-DEMO-CHEST-01', '체스트 프레스', '의자에 앉아 손잡이를 앞으로 밀어내는 동작입니다. 가슴 근육을 키웁니다.', '가슴', 'https://example.com/videos/chest-press.mp4', 20, 5),
+    ('11111111-1111-4111-8111-111111111111', 'FIT-DEMO-LAT-01',   '랫 풀다운',     '위에서 손잡이를 아래로 당기는 동작입니다. 등 근육을 키워 굽은 등을 펴는 데 도움됩니다.', '등', 'https://example.com/videos/lat-pulldown.mp4', 25, 5),
+    ('11111111-1111-4111-8111-111111111111', 'FIT-DEMO-LEG-01',   '레그 프레스',   '의자에 앉아 발판을 다리로 밀어내는 동작입니다. 허벅지와 엉덩이 근육을 키웁니다.', '하체', 'https://example.com/videos/leg-press.mp4', 40, 10),
+    ('11111111-1111-4111-8111-111111111111', 'FIT-DEMO-SHLD-01',  '숄더 프레스',   '의자에 앉아 손잡이를 머리 위로 밀어올리는 동작입니다. 어깨 근육을 키웁니다.', '어깨', 'https://example.com/videos/shoulder-press.mp4', 15, 5),
+    ('11111111-1111-4111-8111-111111111111', 'FIT-DEMO-ABD-01',   '복부 크런치',   '등받이에 기대 앉아 상체를 앞으로 숙이는 동작입니다. 뱃살 관리와 허리 힘에 도움됩니다.', '복부', 'https://example.com/videos/ab-crunch.mp4', 10, 5)
 on conflict (qr_code_val) do nothing;

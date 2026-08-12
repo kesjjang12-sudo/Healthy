@@ -10,6 +10,10 @@ import type { LeaderboardRow } from '@/lib/database.types';
 /**
  * 랭킹 탭. 같은 아파트 단지 안에서만 비교한다(요구사항 확정 — 전체 통합 랭킹
  * 아님). 순위는 users.apt_id(주 소속) 기준으로 본다.
+ *
+ * 포인트가 아니라 출석 횟수로 줄을 세운다 — 포인트는 완료 버튼만 누르면
+ * 쌓이는 자기신고값이라 실제로 그 운동을 했는지 검증할 수 없다. 출석은
+ * 키오스크 체크인이 있어야만 기록되므로 조작하기 어렵다.
  */
 export default function RankingTab() {
   const insets = useSafeAreaInsets();
@@ -45,7 +49,7 @@ export default function RankingTab() {
           우리 단지 랭킹
         </Text>
         <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          같은 헬스장을 쓰는 이웃끼리만 비교됩니다.
+          같은 헬스장을 쓰는 이웃끼리, 출석한 날 수로 비교됩니다.
         </Text>
       </View>
 
@@ -78,7 +82,7 @@ export default function RankingTab() {
               <Text
                 style={[styles.points, row.is_me && styles.pointsMe]}
                 maxFontSizeMultiplier={1.2}>
-                {row.total_points.toLocaleString('ko-KR')}점
+                {row.attendance_count}일 출석
               </Text>
             </View>
           ))}

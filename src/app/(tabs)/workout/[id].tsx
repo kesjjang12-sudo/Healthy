@@ -198,6 +198,13 @@ function ReadyView({ item }: { item: RoutineItem }) {
         <Text style={styles.title} maxFontSizeMultiplier={1.2}>
           {item.name}
         </Text>
+        {/* 기구 이름만으로는 뭘 하는 기구인지 안 와닿는 분이 많다. 설명이
+            채워져 있으면 그대로 보여준다 — 없으면 억지로 지어내지 않는다. */}
+        {item.description ? (
+          <Text style={styles.description} maxFontSizeMultiplier={1.3}>
+            {item.description}
+          </Text>
+        ) : null}
       </View>
 
       {volume ? (
@@ -440,6 +447,13 @@ const styles = StyleSheet.create({
     lineHeight: FontSize.title * 1.3,
     letterSpacing: LetterSpacing.title,
     color: Colors.text,
+  },
+  description: {
+    fontSize: FontSize.body,
+    fontWeight: '500',
+    lineHeight: FontSize.body * 1.5,
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
   },
   name: {
     fontSize: FontSize.subtitle,
