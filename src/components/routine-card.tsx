@@ -12,8 +12,11 @@ type Props = {
   onPress?: () => void;
 };
 
-/** 목표를 한 줄로 읽히게 만든다: "30kg · 3세트 · 10회" */
+/** 목표를 한 줄로 읽히게 만든다: "30kg · 3세트 · 10회", 유산소는 "15분" */
 function formatTarget(item: RoutineItem): string {
+  // 유산소는 세트/횟수 개념이 없다 — "1세트"라고 뜨면 오히려 헷갈린다.
+  if (item.target_duration_minutes !== null) return `${item.target_duration_minutes}분`;
+
   const parts: string[] = [];
 
   // 무게가 없는 기구(맨몸 운동)는 무게 칸을 아예 빼야 "0kg" 으로 오해하지 않는다.

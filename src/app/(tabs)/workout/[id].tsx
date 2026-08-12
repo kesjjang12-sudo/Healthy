@@ -8,9 +8,11 @@ import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
 import {
+  CARDIO_HOW_TO_STEPS,
   FIRST_TIME_RULE,
   formatVolume,
   HOW_TO_STEPS,
+  isCardioItem,
   WEIGHT_RULE,
   weightHint,
 } from '@/features/routine/guidance';
@@ -85,8 +87,10 @@ export default function RoutineDetailScreen() {
 
 function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => void }) {
   const insets = useSafeAreaInsets();
+  const isCardio = isCardioItem(item);
 
-  // 세트 수가 안 정해진 기구는 한 세트짜리로 본다.
+  // 세트 수가 안 정해진 기구는 한 세트짜리로 본다. 유산소도 항상 1세트다
+  // (쉬지 않고 이어서 하는 시간이라 "세트"라는 단위 자체가 없다).
   const totalSets = item.target_sets ?? 1;
   const session = useWorkoutSession(totalSets);
 
@@ -136,13 +140,17 @@ function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => voi
     <LoggingView item={item} pin={pin} />
   );
 
+  // 유산소는 핀 칸이 없으니 물어볼 게 없다 — 기록 화면에서 키패드를 안 띄우고
+  // 바로 "기록하고 마치기"를 누를 수 있게 한다.
+  const showKeypad = session.phase === 'logging' && !isFinished && !isCardio;
+
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xl }]}>
         {body}
       </ScrollView>
 
-      {session.phase === 'logging' && !isFinished ? (
+      {showKeypad ? (
         <View style={styles.keypadWrap}>
           <Keypad
             onDigit={handleDigit}
@@ -157,7 +165,7 @@ function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => voi
           <PrimaryButton label="목록으로" onPress={onExit} />
         ) : session.phase === 'ready' ? (
           <>
-            <PrimaryButton label="운동 시작" onPress={() => session.start()} />
+            <PrimaryButton label={isCardio ? '시작' : '운동 시작'} onPress={() => session.start()} />
             {item.video_url ? (
               <PrimaryButton label="영상으로 보기" variant="secondary" onPress={openVideo} />
             ) : null}
@@ -165,7 +173,7 @@ function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => voi
           </>
         ) : session.phase === 'working' ? (
           <PrimaryButton
-            label={`${session.currentSet}세트 완료`}
+            label={isCardio ? '다 했어요' : `${session.currentSet}세트 완료`}
             onPress={() => session.finishSet()}
           />
         ) : session.phase === 'resting' ? (
@@ -173,7 +181,7 @@ function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => voi
         ) : (
           <PrimaryButton
             label="기록하고 마치기"
-            disabled={pin.length === 0}
+            disabled={!isCardio && pin.length === 0}
             loading={isSaving}
             onPress={() => void finishAndSave()}
           />
@@ -186,6 +194,7 @@ function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => voi
 /** 시작 전: 무엇을 어떻게 하는 운동인지 */
 function ReadyView({ item }: { item: RoutineItem }) {
   const volume = formatVolume(item);
+  const isCardio = isCardioItem(item);
 
   return (
     <>
@@ -223,7 +232,7 @@ function ReadyView({ item }: { item: RoutineItem }) {
           하는 방법
         </Text>
         <View style={styles.steps}>
-          {HOW_TO_STEPS.map((step, index) => (
+          {(isCardio ? CARDIO_HOW_TO_STEPS : HOW_TO_STEPS).map((step, index) => (
             <View key={step} style={styles.step}>
               <View style={styles.stepBadge}>
                 <Text style={styles.stepNumber} maxFontSizeMultiplier={1.2}>
@@ -238,7 +247,9 @@ function ReadyView({ item }: { item: RoutineItem }) {
         </View>
       </View>
 
-      <WeightGuide item={item} />
+      {/* 유산소는 무게 개념이 없다 — "하는 방법"에 이미 속도 조절 안내가
+          들어 있으니 무게 안내는 생략한다. */}
+      {isCardio ? null : <WeightGuide item={item} />}
 
       <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
         아프거나 어지러우면 바로 멈추고 관리사무소에 알려주세요.
@@ -247,7 +258,7 @@ function ReadyView({ item }: { item: RoutineItem }) {
   );
 }
 
-/** 세트 진행 중: 지금 몇 세트인지만 크게 */
+/** 세트 진행 중: 지금 몇 세트인지만 크게. 유산소는 세트 대신 목표 시간을 크게 */
 function WorkingView({
   item,
   currentSet,
@@ -257,6 +268,29 @@ function WorkingView({
   currentSet: number;
   totalSets: number;
 }) {
+  if (isCardioItem(item)) {
+    return (
+      <>
+        <Text style={styles.name} maxFontSizeMultiplier={1.2}>
+          {item.name}
+        </Text>
+
+        <View style={styles.hero}>
+          <Text style={styles.heroLabel} maxFontSizeMultiplier={1.2}>
+            목표 시간
+          </Text>
+          <Text style={styles.heroValue} maxFontSizeMultiplier={1.2}>
+            {item.target_duration_minutes}
+            <Text style={styles.heroUnit}>분</Text>
+          </Text>
+          <Text style={styles.heroSub} maxFontSizeMultiplier={1.2}>
+            다 하셨으면 아래 버튼을 눌러주세요
+          </Text>
+        </View>
+      </>
+    );
+  }
+
   return (
     <>
       <Text style={styles.name} maxFontSizeMultiplier={1.2}>
@@ -318,8 +352,21 @@ function RestingView({
   );
 }
 
-/** 마지막: 오늘 꽂은 핀을 남긴다 */
+/** 마지막: 근력은 오늘 꽂은 핀을 남기고, 유산소는 물어볼 게 없으니 확인만 */
 function LoggingView({ item, pin }: { item: RoutineItem; pin: string }) {
+  if (isCardioItem(item)) {
+    return (
+      <View style={styles.headings}>
+        <Text style={styles.title} maxFontSizeMultiplier={1.2}>
+          수고하셨습니다
+        </Text>
+        <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+          아래 버튼을 누르면 오늘 유산소가 기록됩니다.
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <>
       <View style={styles.headings}>
@@ -359,7 +406,9 @@ function FinishedView({
         수고하셨습니다
       </Text>
       <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-        {item.name} {item.target_sets ?? 1}세트를 {pin}칸으로 마치셨습니다.
+        {isCardioItem(item)
+          ? `${item.name} ${item.target_duration_minutes}분을 마치셨습니다.`
+          : `${item.name} ${item.target_sets ?? 1}세트를 ${pin}칸으로 마치셨습니다.`}
       </Text>
       {pointsAwarded ? (
         <Text style={styles.pointsEarned} maxFontSizeMultiplier={1.3}>

@@ -142,6 +142,8 @@ export type RoutineItem = {
   target_weight: number | null;
   target_sets: number | null;
   target_reps: number | null;
+  /** 유산소 처방 시간(분). 근력 운동이면 null — target_reps 와 동시에 채워지지 않는다. */
+  target_duration_minutes: number | null;
   is_completed: boolean;
 };
 

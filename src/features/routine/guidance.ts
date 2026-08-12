@@ -3,10 +3,10 @@ import type { RoutineItem } from '@/lib/database.types';
 /**
  * 기구 앞에서 읽는 안내 문구.
  *
- * 기구별 개별 설명은 아직 DB에 없다(equipments 에 name / target_muscle / video_url 뿐).
- * 그래서 여기 있는 건 웨이트 기구에 공통으로 맞는 순서다. 억지로 기구 이름을 넣어
- * 그럴듯한 문장을 지어내면 틀린 자세를 알려주게 되므로, 맞는 말만 적었다.
- * 기구마다 다른 설명은 equipments 에 칸을 만들고 트레이너가 채우는 게 맞다.
+ * 기구별 개별 설명은 equipments.description 에 채울 수 있지만(트레이너가
+ * 직접 쓰는 것), 세트 사이 호흡·자세 같은 공통 순서는 여기 고정 문구로
+ * 둔다. 억지로 기구 이름을 넣어 그럴듯한 문장을 지어내면 틀린 자세를
+ * 알려주게 되므로, 기구에 상관없이 맞는 말만 적었다.
  */
 export const HOW_TO_STEPS: readonly string[] = [
   '자리에 앉아 등과 허리를 등받이에 붙입니다.',
@@ -16,10 +16,28 @@ export const HOW_TO_STEPS: readonly string[] = [
   '한 세트가 끝나면 1분쯤 쉬었다가 다음 세트를 합니다.',
 ];
 
-/** "3세트 × 12회" 처럼 오늘 할 양을 한 줄로. 값이 없으면 null. */
+/**
+ * 유산소 기구(트레드밀 등) 앞에서 읽는 순서. 근력 기구용 HOW_TO_STEPS 와
+ * 다르게 "세트 사이 쉼"이 아니라 "쉬지 않고 이어서 하는 시간"이 핵심이라
+ * 따로 둔다.
+ */
+export const CARDIO_HOW_TO_STEPS: readonly string[] = [
+  '아주 천천히 시작해서 몸을 3분쯤 덥힙니다.',
+  '옆 사람과 말은 할 수 있지만 노래는 못 부를 정도의 속도를 유지합니다.',
+  '숨이 너무 차거나 어지러우면 속도를 낮추거나 잠시 멈춥니다.',
+  '끝나기 전 2~3분은 다시 천천히 속도를 줄여 마무리합니다.',
+];
+
+/** 근력: "3세트 × 12회", 유산소: "15분" 처럼 오늘 할 양을 한 줄로. 값이 없으면 null. */
 export function formatVolume(item: RoutineItem): string | null {
+  if (item.target_duration_minutes !== null) return `${item.target_duration_minutes}분`;
   if (item.target_sets === null || item.target_reps === null) return null;
   return `${item.target_sets}세트 × ${item.target_reps}회`;
+}
+
+/** 처방 단위가 시간(분)인 유산소 항목인지. */
+export function isCardioItem(item: RoutineItem): boolean {
+  return item.target_duration_minutes !== null;
 }
 
 /**
