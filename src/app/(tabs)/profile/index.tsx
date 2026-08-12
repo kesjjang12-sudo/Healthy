@@ -1,50 +1,247 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ChoiceButton } from '@/components/choice-button';
 import { PrimaryButton } from '@/components/primary-button';
-import { Colors, FontSize, LetterSpacing, Spacing } from '@/constants/theme';
+import { TextField } from '@/components/text-field';
+import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
+import { GymMembershipError, listMyGymMemberships, makeGymPrimary } from '@/features/gym-membership/api';
+import { updateProfileData } from '@/features/onboarding/api';
+import { PROFILE_QUESTIONS } from '@/features/onboarding/questions';
+import type { GymMembershipSummary } from '@/lib/database.types';
+import { supabase } from '@/lib/supabase';
+
+const GENDER_QUESTION = PROFILE_QUESTIONS.find((q) => q.key === 'gender')!;
+const AGE_QUESTION = PROFILE_QUESTIONS.find((q) => q.key === 'age_group')!;
+
+const PROVIDER_LABELS: Record<string, string> = {
+  kakao: '카카오',
+  google: '구글',
+};
 
 /**
- * 닉네임·성별·연령대 편집, 연결된 로그인 수단, 내 헬스장 목록/주 소속 전환은
- * 다음 단계에서 채운다. 로그아웃만은 지금 있어야 한다 — 이게 없으면 다른
- * 계정으로 다시 로그인해 보는 것 자체가 불가능하다.
+ * 프로필 탭. 닉네임/성별/연령대 수정, 연결된 로그인 수단, 내 헬스장 목록과
+ * 주 소속 전환, 로그아웃까지 여기 다 모았다.
  */
 export default function ProfileTab() {
   const insets = useSafeAreaInsets();
-  const { user, signOut } = useAuthSession();
+  const { user, setUser, signOut } = useAuthSession();
 
-  const name = user?.profile_data?.nickname ?? '회원';
+  const [nickname, setNickname] = useState(user?.profile_data?.nickname ?? '');
+  const [isSavingNickname, setIsSavingNickname] = useState(false);
+  const [providerLabel, setProviderLabel] = useState<string | null>(null);
+  const [memberships, setMemberships] = useState<GymMembershipSummary[] | null>(null);
+  const [membershipError, setMembershipError] = useState<string | null>(null);
+  const [switchingAptId, setSwitchingAptId] = useState<string | null>(null);
+
+  useEffect(() => {
+    void supabase.auth.getSession().then(({ data }) => {
+      const authUser = data.session?.user;
+      if (!authUser) return;
+      setProviderLabel(
+        authUser.is_anonymous
+          ? '전화번호'
+          : (PROVIDER_LABELS[authUser.app_metadata?.provider ?? ''] ?? '알 수 없음'),
+      );
+    });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    listMyGymMemberships(user!.id)
+      .then((result) => {
+        if (!cancelled) setMemberships(result);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setMembershipError(error instanceof GymMembershipError ? error.message : '불러오지 못했습니다.');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const saveNickname = useCallback(async () => {
+    setIsSavingNickname(true);
+    try {
+      const updated = await updateProfileData(user!.id, { nickname: nickname.trim() });
+      setUser(updated);
+    } catch {
+      // 저장 실패는 조용히 넘어간다 — 닉네임 하나 때문에 화면을 막을 정도는 아니다.
+    } finally {
+      setIsSavingNickname(false);
+    }
+  }, [nickname, user, setUser]);
+
+  const selectGender = useCallback(
+    async (value: string | number) => {
+      const updated = await updateProfileData(user!.id, { gender: value as 'male' | 'female' }).catch(
+        () => null,
+      );
+      if (updated) setUser(updated);
+    },
+    [user, setUser],
+  );
+
+  const selectAgeGroup = useCallback(
+    async (value: string | number) => {
+      const updated = await updateProfileData(user!.id, {
+        age_group: value as typeof AGE_QUESTION.options[number]['value'],
+      }).catch(() => null);
+      if (updated) setUser(updated);
+    },
+    [user, setUser],
+  );
+
+  const switchPrimary = useCallback(
+    async (aptId: string) => {
+      setSwitchingAptId(aptId);
+      try {
+        await makeGymPrimary(user!.id, aptId);
+        setUser({ ...user!, apt_id: aptId });
+        setMemberships(
+          (current) => current?.map((m) => ({ ...m, is_primary: m.apt_id === aptId })) ?? current,
+        );
+      } catch (error) {
+        setMembershipError(error instanceof GymMembershipError ? error.message : '바꾸지 못했습니다.');
+      } finally {
+        setSwitchingAptId(null);
+      }
+    },
+    [user, setUser],
+  );
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top + Spacing.xxl }]}>
-      <View style={styles.headings}>
-        <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-          {name} 님
-        </Text>
-        <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          닉네임·연령대 수정, 내 헬스장 관리는 곧 추가됩니다.
-        </Text>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xxl }]}>
+      <Text style={styles.title} maxFontSizeMultiplier={1.2}>
+        내 정보
+      </Text>
+
+      <View style={styles.section}>
+        <TextField
+          label="닉네임"
+          value={nickname}
+          onChangeText={setNickname}
+          placeholder="다른 회원에게 보일 이름"
+          maxLength={12}
+          returnKeyType="done"
+          onSubmitEditing={() => void saveNickname()}
+        />
+        <PrimaryButton
+          label="닉네임 저장"
+          variant="secondary"
+          size="compact"
+          loading={isSavingNickname}
+          disabled={nickname.trim() === (user?.profile_data?.nickname ?? '')}
+          onPress={() => void saveNickname()}
+        />
       </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
+          성별
+        </Text>
+        <View style={styles.choiceRow}>
+          {GENDER_QUESTION.options.map((option) => (
+            <ChoiceButton
+              key={String(option.value)}
+              label={option.label}
+              selected={user?.profile_data?.gender === option.value}
+              onPress={() => void selectGender(option.value)}
+              style={styles.choiceHalf}
+            />
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
+          연령대
+        </Text>
+        <View style={styles.choiceRow}>
+          {AGE_QUESTION.options.map((option) => (
+            <ChoiceButton
+              key={String(option.value)}
+              label={option.label}
+              selected={user?.profile_data?.age_group === option.value}
+              onPress={() => void selectAgeGroup(option.value)}
+              style={styles.choiceThird}
+            />
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
+          내 헬스장
+        </Text>
+
+        {membershipError ? (
+          <Text style={styles.errorText} maxFontSizeMultiplier={1.3}>
+            {membershipError}
+          </Text>
+        ) : memberships === null ? null : memberships.length === 0 ? (
+          <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+            아직 체크인한 헬스장이 없습니다.
+          </Text>
+        ) : (
+          <View style={styles.gymList}>
+            {memberships.map((m) => (
+              <View key={m.apt_id} style={styles.gymRow}>
+                <View style={styles.gymTexts}>
+                  <Text style={styles.gymName} maxFontSizeMultiplier={1.3}>
+                    {m.apt_name}
+                  </Text>
+                  <Text style={styles.gymMeta} maxFontSizeMultiplier={1.3}>
+                    {m.is_primary ? '주 소속' : `방문 ${m.visit_count}회`}
+                  </Text>
+                </View>
+                {!m.is_primary ? (
+                  <PrimaryButton
+                    label="주 소속으로"
+                    variant="quiet"
+                    size="compact"
+                    loading={switchingAptId === m.apt_id}
+                    onPress={() => void switchPrimary(m.apt_id)}
+                  />
+                ) : null}
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+
+      {providerLabel ? (
+        <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+          {providerLabel}로 로그인되어 있습니다.
+        </Text>
+      ) : null}
 
       <View style={styles.footer}>
         <PrimaryButton label="로그아웃" variant="secondary" onPress={() => void signOut()} />
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    justifyContent: 'space-between',
-    gap: Spacing.xl,
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing.xl,
     backgroundColor: Colors.background,
   },
-  headings: {
-    gap: Spacing.sm,
+  content: {
+    flexGrow: 1,
+    gap: Spacing.xxl,
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.xl,
+    maxWidth: 700,
+    width: '100%',
+    alignSelf: 'center',
   },
   title: {
     fontSize: FontSize.title,
@@ -52,10 +249,64 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.title,
     color: Colors.text,
   },
-  helper: {
+  section: {
+    gap: Spacing.md,
+  },
+  sectionTitle: {
     fontSize: FontSize.body,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.subtitle,
+    color: Colors.text,
+  },
+  choiceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  choiceHalf: {
+    flexGrow: 1,
+    flexBasis: '46%',
+  },
+  choiceThird: {
+    flexGrow: 1,
+    flexBasis: '30%',
+  },
+  helper: {
+    fontSize: FontSize.caption,
     fontWeight: '500',
     letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+  },
+  errorText: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.danger,
+  },
+  gymList: {
+    gap: Spacing.sm,
+  },
+  gymRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surface,
+  },
+  gymTexts: {
+    flex: 1,
+    gap: 2,
+  },
+  gymName: {
+    fontSize: FontSize.body,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  gymMeta: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
     color: Colors.textSecondary,
   },
   footer: {
