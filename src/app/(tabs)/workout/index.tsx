@@ -99,15 +99,24 @@ export default function WorkoutTab() {
               ))}
             </View>
 
-            <PrimaryButton
-              label="기구 QR 찍기"
-              variant="secondary"
-              onPress={() => router.push('/workout/scan')}
-            />
+            <View style={styles.buttonRow}>
+              <PrimaryButton
+                label="기구 QR 찍기"
+                variant="secondary"
+                style={styles.buttonHalf}
+                onPress={() => router.push('/workout/scan')}
+              />
+              <PrimaryButton
+                label="스트레칭 보기"
+                variant="secondary"
+                style={styles.buttonHalf}
+                onPress={() => router.push('/workout/stretching')}
+              />
+            </View>
 
             <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
               운동을 누르면 하는 방법이 나옵니다. 오늘 목록에 없는 기구도 앞에 붙은 QR 을
-              찍으면 설명과 영상을 볼 수 있어요.
+              찍으면 설명과 영상을 볼 수 있어요. 운동 전후로 스트레칭도 잊지 마세요.
             </Text>
           </>
         )}
@@ -178,6 +187,13 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: Spacing.sm,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  buttonHalf: {
+    flex: 1,
   },
   notice: {
     padding: Spacing.lg,
