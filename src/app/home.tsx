@@ -30,7 +30,10 @@ function TodayRoutine({ user }: { user: User }) {
   const { signOut, touch } = useSession();
   const { result, isLoading, errorMessage, retry } = useDailyRoutine(user.id);
 
-  const name = user.profile_data?.nickname ?? maskPhoneNumber(user.phone_number);
+  // phone_number 는 카카오/구글로 먼저 가입하면 페어링 전까지 비어 있을 수 있다
+  // (이 화면은 아직 키오스크 전용 흐름이라 지금은 항상 채워져 있지만, 타입은 이제 nullable이다).
+  const name =
+    user.profile_data?.nickname ?? (user.phone_number ? maskPhoneNumber(user.phone_number) : '회원');
 
   return (
     <View style={styles.screen}>

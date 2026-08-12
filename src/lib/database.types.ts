@@ -45,16 +45,45 @@ export type Apartment = {
   id: string;
   name: string;
   address: string | null;
+  /** crypt() 로 해시된 키오스크 설정 PIN. 클라이언트는 절대 이 값을 직접 읽지 않는다(RPC로만 검증). */
+  kiosk_pin_hash: string | null;
   created_at: string | null;
 };
 
 export type User = {
   id: string;
   apt_id: string | null;
-  phone_number: string;
+  /** 카카오/구글로 먼저 가입하면 QR 페어링 전까지 null. */
+  phone_number: string | null;
+  /** Supabase Auth(카카오/구글/익명) 신원과의 연결. 키오스크로만 생긴 계정은 아직 null. */
+  auth_user_id: string | null;
   total_points: number | null;
   role: UserRole | null;
   profile_data: ProfileData;
+  created_at: string | null;
+};
+
+/** 유저-헬스장 방문 이력. is_primary 인 행이 지금의 "주 소속"이다. */
+export type UserGymMembership = {
+  id: string;
+  user_id: string;
+  apt_id: string;
+  is_primary: boolean;
+  visit_count: number;
+  first_checked_in_at: string;
+  last_checked_in_at: string;
+  created_at: string | null;
+};
+
+/** 키오스크 체크인 후 발급되는 1회성 QR 페어링 코드. */
+export type DevicePairing = {
+  id: string;
+  pairing_code: string;
+  candidate_user_id: string;
+  apt_id: string;
+  expires_at: string;
+  consumed_at: string | null;
+  consumed_by_auth_user_id: string | null;
   created_at: string | null;
 };
 
@@ -89,6 +118,8 @@ export type DailyRoutine = {
 export type AttendanceLog = {
   id: string;
   user_id: string | null;
+  /** 그날 체크인한 헬스장. 주 소속이 아닌 곳에서도 체크인할 수 있어 users.apt_id 와 다를 수 있다. */
+  apt_id: string | null;
   attended_at: string | null;
 };
 
@@ -147,9 +178,28 @@ export type Database = {
       };
       users: {
         Row: User;
-        Insert: Partial<User> & Pick<User, 'phone_number'>;
+        // phone_number 는 이제 필수가 아니다 — 카카오/구글로 먼저 가입하면 QR 페어링 전까지 비어 있다.
+        Insert: Partial<User>;
         Update: Partial<User>;
         Relationships: [Relationship<'users_apt_id_fkey', 'apt_id', 'apartments'>];
+      };
+      user_gym_memberships: {
+        Row: UserGymMembership;
+        Insert: Partial<UserGymMembership> & Pick<UserGymMembership, 'user_id' | 'apt_id'>;
+        Update: Partial<UserGymMembership>;
+        Relationships: [
+          Relationship<'user_gym_memberships_user_id_fkey', 'user_id', 'users'>,
+          Relationship<'user_gym_memberships_apt_id_fkey', 'apt_id', 'apartments'>,
+        ];
+      };
+      device_pairings: {
+        Row: DevicePairing;
+        Insert: Partial<DevicePairing> & Pick<DevicePairing, 'pairing_code' | 'candidate_user_id' | 'apt_id' | 'expires_at'>;
+        Update: Partial<DevicePairing>;
+        Relationships: [
+          Relationship<'device_pairings_candidate_user_id_fkey', 'candidate_user_id', 'users'>,
+          Relationship<'device_pairings_apt_id_fkey', 'apt_id', 'apartments'>,
+        ];
       };
       equipments: {
         Row: Equipment;
@@ -190,6 +240,10 @@ export type Database = {
       get_daily_routine: {
         Args: { p_user_id: string; p_date?: string };
         Returns: RoutineItem[];
+      };
+      verify_kiosk_pin: {
+        Args: { p_apt_id: string; p_pin: string };
+        Returns: boolean;
       };
     };
     Enums: Record<string, never>;

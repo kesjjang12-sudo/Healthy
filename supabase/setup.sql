@@ -750,6 +750,191 @@ grant execute on function public.generate_daily_routine(uuid, date) to anon, aut
 grant execute on function public.get_daily_routine(uuid, date) to anon, authenticated;
 
 -- ═══════════════════════════════════════════════════════════
+-- 20260812000006_link_auth_identity.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- Kakao/Google OAuth 로그인을 위한 Supabase Auth 연결
+--
+-- 배경: 지금까지 public.users 는 전화번호가 곧 계정이었다(auth.users 미사용,
+-- RPC 는 전부 anon 키로 호출됨). 개인 폰 앱에 카카오/구글 로그인을 붙이면서,
+-- 그 신원(auth.users)과 기존 프로필 테이블(public.users)을 연결할 다리가
+-- 필요하다.
+--
+-- 카카오/구글로 먼저 가입하면 아직 전화번호가 없는 상태로 시작한다(QR 페어링
+-- 전까지). 그래서 phone_number 를 필수에서 선택으로 낮춘다. unique 제약은
+-- 그대로 둬도 된다 — Postgres 의 UNIQUE 는 NULL 여러 개를 서로 다른 값으로
+-- 취급해 충돌하지 않는다.
+
+alter table public.users
+    add column if not exists auth_user_id uuid unique references auth.users(id) on delete set null;
+
+create index if not exists users_auth_user_id_idx on public.users (auth_user_id);
+
+alter table public.users
+    alter column phone_number drop not null;
+
+comment on column public.users.auth_user_id is
+    'Supabase Auth(카카오/구글/익명) 신원과의 연결. 키오스크로만 생긴 계정은 아직 null.';
+comment on column public.users.phone_number is
+    '카카오/구글로 먼저 가입하면 QR 페어링 전까지 null. 키오스크로 먼저 생기면 처음부터 채워진다.';
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260812000007_gym_memberships.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 이사(헬스장 변경) 대응: 유저 1명이 여러 헬스장을 오갈 수 있게 한다.
+--
+-- 지금까지 users.apt_id 는 "이 사람이 다니는 헬스장" 하나만 가리켰다. 이사를
+-- 가면 새 헬스장에서 체크인해도 이 컬럼 하나로는 어디가 "진짜 소속"인지,
+-- 예전 헬스장은 몇 번 갔었는지 알 길이 없었다.
+--
+-- users.apt_id 는 지우지 않고 "주 소속 캐시"로 남긴다 — generate_daily_routine
+-- 등 기존 함수들이 그대로 동작하고, 마이그레이션 반경이 작아진다. 진짜 이력은
+-- 이 테이블이 갖고, users.apt_id 는 confirm_gym_membership RPC(다음 마이그레이션
+-- 들에서 추가)가 명시적으로 갱신한다.
+
+create table if not exists public.user_gym_memberships (
+    id                   uuid primary key default uuid_generate_v4(),
+    user_id              uuid not null references public.users(id) on delete cascade,
+    apt_id               uuid not null references public.apartments(id) on delete cascade,
+    is_primary           boolean not null default false,
+    visit_count          integer not null default 0,
+    first_checked_in_at  timestamptz not null default now(),
+    last_checked_in_at   timestamptz not null default now(),
+    created_at           timestamptz default now(),
+    unique (user_id, apt_id)
+);
+
+-- 한 유저의 주 소속은 항상 하나뿐이어야 한다.
+create unique index if not exists user_gym_memberships_one_primary_idx
+    on public.user_gym_memberships (user_id) where is_primary;
+
+create index if not exists user_gym_memberships_apt_id_idx
+    on public.user_gym_memberships (apt_id);
+
+comment on table public.user_gym_memberships is
+    '유저-헬스장 방문 이력. is_primary 인 행이 지금의 "주 소속"이고 users.apt_id 에 캐시된다.';
+
+alter table public.user_gym_memberships enable row level security;
+-- 다른 테이블과 같은 원칙: anon/authenticated 정책 없음, RPC로만 접근한다.
+
+-- 출석 기록에도 "그날 어느 헬스장이었는지"를 남긴다. 주 소속이 아닌 헬스장에서도
+-- 체크인할 수 있으므로(이사 직후 방문 등), users.apt_id 하나로는 그날의 기구
+-- 목록을 정확히 못 고른다.
+alter table public.attendance_logs
+    add column if not exists apt_id uuid references public.apartments(id);
+
+create index if not exists attendance_logs_apt_id_idx on public.attendance_logs (apt_id);
+
+-- ─────────────────────────────────────────────────────────────
+-- 기존 데이터 백필
+-- ─────────────────────────────────────────────────────────────
+
+-- 지금까지 생긴 유저는 전부 users.apt_id 가 곧 주 소속이었다. 그 값 그대로
+-- 첫 멤버십 행을 만들고, 지금까지의 출석 횟수/최초·최근 출석일을 채워 넣는다.
+insert into public.user_gym_memberships
+    (user_id, apt_id, is_primary, visit_count, first_checked_in_at, last_checked_in_at)
+select
+    u.id,
+    u.apt_id,
+    true,
+    (select count(*) from public.attendance_logs l where l.user_id = u.id),
+    coalesce((select min(l.attended_at) from public.attendance_logs l where l.user_id = u.id), u.created_at),
+    coalesce((select max(l.attended_at) from public.attendance_logs l where l.user_id = u.id), u.created_at)
+from public.users u
+where u.apt_id is not null
+on conflict (user_id, apt_id) do nothing;
+
+-- 기존 출석 기록에도 유저의 소속 apt_id 를 채워 넣는다. 지금까지는 유저당
+-- 헬스장이 하나뿐이었으니 소급 적용해도 틀릴 수가 없다.
+update public.attendance_logs l
+set apt_id = u.apt_id
+from public.users u
+where u.id = l.user_id
+  and l.apt_id is null;
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260812000008_device_pairings.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- QR 페어링: 키오스크에서 체크인한 번호를 폰 앱의 로그인 세션과 연결한다.
+--
+-- 카카오/구글 로그인은 전화번호를 안 준다(카카오는 사업자등록+심사 전엔 아예
+-- 못 받는다). 그래서 키오스크가 번호로 만든 "그림자 계정"과, 폰 앱에서 로그인한
+-- 진짜 사람을 이어줄 다리가 필요하다. 그 다리가 이 표다 — 키오스크가 임시 코드를
+-- 발급하고, 폰 앱이 그 코드를 스캔해서 완료(complete_pairing, 다음 마이그레이션
+-- 들에서 추가)하면 소모된다.
+
+create table if not exists public.device_pairings (
+    id                        uuid primary key default uuid_generate_v4(),
+    pairing_code              text not null unique,
+    candidate_user_id         uuid not null references public.users(id) on delete cascade,
+    apt_id                    uuid not null references public.apartments(id) on delete cascade,
+    expires_at                timestamptz not null,
+    consumed_at               timestamptz,
+    consumed_by_auth_user_id  uuid references auth.users(id),
+    created_at                timestamptz default now()
+);
+
+create index if not exists device_pairings_code_idx on public.device_pairings (pairing_code);
+create index if not exists device_pairings_expires_idx on public.device_pairings (expires_at);
+
+comment on table public.device_pairings is
+    '키오스크 체크인 후 발급되는 1회성 페어링 코드. 3분 내 폰 앱이 스캔해 완료하지 않으면 만료된다.';
+
+alter table public.device_pairings enable row level security;
+-- 다른 테이블과 같은 원칙: anon/authenticated 정책 없음, RPC로만 접근한다.
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260812000009_kiosk_pin.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 기기를 "키오스크"로 설정할 때 아무나 못 누르게 막는 PIN.
+--
+-- 이 앱은 하나의 코드베이스가 태블릿(키오스크)과 개인 폰 양쪽에 깔린다. 최초
+-- 실행 시 "이 기기는 무엇인가요?" 를 묻는데, 키오스크를 고르는 순간 그 태블릿은
+-- 전용 체크인 화면으로 고정된다. 개인 폰이 실수로(혹은 장난으로) 키오스크
+-- 모드가 돼버리면 안 되므로, 단지 관리자가 정한 PIN을 확인한다.
+--
+-- PIN 을 정하는 RPC/화면은 지금은 만들지 않는다 — 단지 개설 시 관리자가
+-- SQL Editor 에서 한 번 넣는 드문 작업이라 UI를 만들 정도는 아니다.
+-- 예: update apartments set kiosk_pin_hash = crypt('1234', gen_salt('bf')) where id = '...';
+
+create extension if not exists pgcrypto;
+
+alter table public.apartments
+    add column if not exists kiosk_pin_hash text;
+
+comment on column public.apartments.kiosk_pin_hash is
+    'crypt() 로 해시된 키오스크 설정 PIN. 관리자가 태블릿 최초 설정 시에만 입력한다.';
+
+create or replace function public.verify_kiosk_pin(p_apt_id uuid, p_pin text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_hash text;
+begin
+    select kiosk_pin_hash into v_hash from public.apartments where id = p_apt_id;
+
+    if v_hash is null then
+        -- PIN 을 아직 안 정한 단지는(시범 단계) 항상 통과시킨다.
+        return true;
+    end if;
+
+    return v_hash = crypt(coalesce(p_pin, ''), v_hash);
+end;
+$$;
+
+comment on function public.verify_kiosk_pin(uuid, text) is
+    '태블릿을 키오스크 모드로 설정할 때 PIN을 확인한다. PIN 미설정 단지는 항상 통과.';
+
+revoke all on function public.verify_kiosk_pin(uuid, text) from public;
+grant execute on function public.verify_kiosk_pin(uuid, text) to anon, authenticated;
+
+-- ═══════════════════════════════════════════════════════════
 -- seed.sql — 시범단지 + 기구 5대 (테스트용)
 -- ═══════════════════════════════════════════════════════════
 
