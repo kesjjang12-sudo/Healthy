@@ -5,7 +5,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SetupRequired } from '@/components/setup-required';
 import { Colors } from '@/constants/theme';
 import { AuthSessionProvider } from '@/features/auth/auth-session';
-import { SessionProvider } from '@/features/auth/session';
 import { DeviceRoleProvider, useDeviceRole } from '@/features/device-role/context';
 import { MISSING_ENV } from '@/lib/env';
 
@@ -31,12 +30,10 @@ export default function RootLayout() {
 }
 
 /**
- * 기기 역할에 따라 세션 공급자가 달라진다.
+ * 기기 역할에 따라 필요한 게 다르다.
  *
- * - 역할 미정: 아직 아무 세션도 필요 없다. device-setup 화면이 알아서 뜬다
- *   (index.tsx 와 각 화면의 역할 체크가 그리로 보낸다).
- * - 키오스크: 예전부터 있던 kiosk-session(5분 idle 로그아웃)을 그대로 쓴다 —
- *   출입 체크인 자체엔 Supabase Auth 세션이 필요 없다(anon RPC 호출뿐).
+ * - 역할 미정/키오스크: 세션이 아예 필요 없다. 키오스크는 kiosk_check_in 을
+ *   anon 키로 호출할 뿐, 어떤 개인의 로그인 상태도 기기에 들고 있지 않는다.
  * - 개인: 진짜 Supabase Auth 세션(카카오/구글/익명)을 따라가는 auth-session.
  *   앱을 껐다 켜도 로그인이 유지돼야 하니 idle 타임아웃이 없다.
  */
@@ -60,11 +57,5 @@ function RoleAwareStack() {
     />
   );
 
-  if (role === 'personal') {
-    return <AuthSessionProvider>{stack}</AuthSessionProvider>;
-  }
-
-  // role === 'kiosk' | null. 역할 미정 상태에서도 index.tsx 가 곧장
-  // device-setup 으로 보내므로, 이 컨텍스트가 잠깐 없어도 문제없다.
-  return <SessionProvider>{stack}</SessionProvider>;
+  return role === 'personal' ? <AuthSessionProvider>{stack}</AuthSessionProvider> : stack;
 }

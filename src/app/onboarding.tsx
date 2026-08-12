@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChoiceButton } from '@/components/choice-button';
 import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
-import { useSession } from '@/features/auth/session';
+import { useAuthSession } from '@/features/auth/auth-session';
 import { updateProfileData } from '@/features/onboarding/api';
 import {
   CONFIRM_STEP_INDEX,
@@ -43,11 +43,11 @@ function selectedValues(
  * 여기서 걸러내지 않으면 항상 1번 문항부터 다시 묻게 된다.
  */
 export default function OnboardingScreen() {
-  const { user, isRestoring } = useSession();
+  const { user, isRestoring } = useAuthSession();
 
   if (isRestoring) return null;
-  if (!user) return <Redirect href="/" />;
-  if (user.profile_data?.onboarded_at) return <Redirect href="/home" />;
+  if (!user) return <Redirect href="/login" />;
+  if (user.profile_data?.onboarded_at) return <Redirect href="/workout" />;
 
   return <OnboardingFlow user={user} />;
 }
@@ -64,7 +64,7 @@ function OnboardingFlow({ user }: { user: User }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { setUser, touch } = useSession();
+  const { setUser } = useAuthSession();
 
   // 지난번에 중간에 나갔다면 남은 문항부터 이어서 묻는다.
   const [stepIndex, setStepIndex] = useState(() => findFirstUnansweredIndex(user.profile_data));
@@ -83,52 +83,46 @@ function OnboardingFlow({ user }: { user: User }) {
   // 값은 문항 정의에서 키와 짝지어 오므로 여기서는 원시값으로만 받는다.
   const handleSingleSelect = useCallback(
     (key: 'gender' | 'age_group', value: string | number) => {
-      touch();
       setAnswers((current) => ({ ...current, [key]: value }));
       saveInBackground({ [key]: value });
       setStepIndex((current) => current + 1);
     },
-    [saveInBackground, touch],
+    [saveInBackground],
   );
 
   const handleMultiToggle = useCallback(
     (question: ProfileQuestion, value: string) => {
-      touch();
       setAnswers((current) => {
         const list = selectedValues(question, current) ?? [];
         const next = list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
         return { ...current, [question.key]: next };
       });
     },
-    [touch],
+    [],
   );
 
   /** "없습니다" 는 다른 선택지와 같이 고를 수 없다. 빈 배열로 저장한다. */
   const handleSelectNone = useCallback(
     (question: ProfileQuestion) => {
-      touch();
       setAnswers((current) => ({ ...current, [question.key]: [] }));
     },
-    [touch],
+    [],
   );
 
   const handleNext = useCallback(
     (question: ProfileQuestion) => {
-      touch();
       saveInBackground({ [question.key]: answers[question.key] });
       setStepIndex((current) => current + 1);
     },
-    [answers, saveInBackground, touch],
+    [answers, saveInBackground],
   );
 
   const handleBack = useCallback(() => {
-    touch();
     setErrorMessage(null);
     setStepIndex((current) => Math.max(0, current - 1));
-  }, [touch]);
+  }, []);
 
   const handleConfirm = useCallback(async () => {
-    touch();
     setIsSubmitting(true);
     setErrorMessage(null);
 
@@ -138,13 +132,13 @@ function OnboardingFlow({ user }: { user: User }) {
         onboarded_at: new Date().toISOString(),
       });
       setUser(updated);
-      router.replace('/home');
+      router.replace('/workout');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '잠시 후 다시 시도해 주세요.');
     } finally {
       setIsSubmitting(false);
     }
-  }, [answers, router, setUser, touch, user.id]);
+  }, [answers, router, setUser, user.id]);
 
   const isWide = width >= WIDE_LAYOUT_MIN_WIDTH;
   const isConfirmStep = stepIndex >= CONFIRM_STEP_INDEX;
@@ -214,7 +208,6 @@ function OnboardingFlow({ user }: { user: User }) {
                   variant="quiet"
                   size="compact"
                   onPress={() => {
-                    touch();
                     setErrorMessage(null);
                     setStepIndex(index);
                   }}

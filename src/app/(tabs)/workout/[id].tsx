@@ -1,4 +1,4 @@
-import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Keypad } from '@/components/keypad';
 import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
-import { useSession } from '@/features/auth/session';
+import { useAuthSession } from '@/features/auth/auth-session';
 import {
   FIRST_TIME_RULE,
   formatVolume,
@@ -14,9 +14,10 @@ import {
   WEIGHT_RULE,
   weightHint,
 } from '@/features/routine/guidance';
+import { RoutineError, completeRoutine } from '@/features/routine/api';
 import { useDailyRoutine } from '@/features/routine/use-daily-routine';
 import { formatRest, useWorkoutSession } from '@/features/routine/use-workout-session';
-import type { RoutineItem, User } from '@/lib/database.types';
+import type { RoutineItem } from '@/lib/database.types';
 
 /** 핀 칸은 두 자리를 넘지 않는다. 세 자리를 받으면 kg 과 헷갈린다. */
 const PIN_MAX_DIGITS = 2;
@@ -26,33 +27,26 @@ const PIN_MAX_DIGITS = 2;
  *
  * 목록에서 운동을 누르거나, 기구 앞 QR 을 찍으면 여기로 온다.
  * 설명만 띄우고 마는 게 아니라 세트를 하나씩 세어 주고 쉬는 시간까지 잰다.
+ *
+ * user 존재/온보딩 여부는 (tabs)/_layout.tsx 가 이미 확인했다. 개인 폰이라
+ * 5분 idle 로그아웃(touch()) 개념도 없다 — 예전 키오스크 버전에 있던 그
+ * 호출들은 여기선 전부 뺐다.
  */
 export default function RoutineDetailScreen() {
-  const { user, isRestoring } = useSession();
-
-  if (isRestoring) return null;
-  if (!user) return <Redirect href="/" />;
-  if (!user.profile_data?.onboarded_at) return <Redirect href="/onboarding" />;
-
-  return <RoutineDetail user={user} />;
-}
-
-function RoutineDetail({ user }: { user: User }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { touch } = useSession();
+  const { user } = useAuthSession();
   const { id } = useLocalSearchParams<{ id: string }>();
 
   // 목록과 같은 호출이다. 서버에서 이미 만든 루틴은 다시 만들지 않고 그대로 준다.
-  const { result, isLoading, errorMessage, retry } = useDailyRoutine(user.id);
+  const { result, isLoading, errorMessage, retry } = useDailyRoutine(user!.id);
   const item = result?.routines.find((routine) => routine.routine_id === id) ?? null;
 
-  const goHome = useCallback(() => {
-    touch();
+  const goBack = useCallback(() => {
     // QR 로 이 화면에 바로 들어오면 돌아갈 데가 없다. 그때는 목록으로 보낸다.
     if (router.canGoBack()) router.back();
-    else router.replace('/home');
-  }, [router, touch]);
+    else router.replace('/workout');
+  }, [router]);
 
   if (isLoading) {
     return (
@@ -80,18 +74,17 @@ function RoutineDetail({ user }: { user: User }) {
         </ScrollView>
 
         <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-          <PrimaryButton label="목록으로" variant="secondary" onPress={goHome} />
+          <PrimaryButton label="목록으로" variant="secondary" onPress={goBack} />
         </View>
       </View>
     );
   }
 
-  return <WorkoutSession item={item} onExit={goHome} />;
+  return <WorkoutSession item={item} onExit={goBack} />;
 }
 
 function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => void }) {
   const insets = useSafeAreaInsets();
-  const { touch } = useSession();
 
   // 세트 수가 안 정해진 기구는 한 세트짜리로 본다.
   const totalSets = item.target_sets ?? 1;
@@ -99,22 +92,40 @@ function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => voi
 
   const [pin, setPin] = useState('');
   const [isFinished, setIsFinished] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [pointsAwarded, setPointsAwarded] = useState<number | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const handleDigit = useCallback(
-    (digit: string) => {
-      touch();
-      setPin((current) => (current.length >= PIN_MAX_DIGITS ? current : `${current}${digit}`));
-    },
-    [touch],
-  );
+  const handleDigit = useCallback((digit: string) => {
+    setPin((current) => (current.length >= PIN_MAX_DIGITS ? current : `${current}${digit}`));
+  }, []);
 
   const openVideo = useCallback(() => {
-    touch();
     void Linking.openURL(item.video_url).catch(() => {});
-  }, [item.video_url, touch]);
+  }, [item.video_url]);
+
+  const finishAndSave = useCallback(async () => {
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      // "핀"은 기구마다 실제 kg 이 다른 상대값이라 정확한 kg 은 아니지만,
+      // 지금 저장할 수 있는 건 이것뿐이다 — 없는 것보다는 다음 방문 때 참고할
+      // 시작점이 있는 편이 낫다. 실제 횟수를 따로 받지 않으므로 처방 횟수를
+      // 그대로 "실제 수행"으로 기록한다(완료 버튼을 눌렀다는 건 다 했다는 뜻).
+      const pinValue = pin === '' ? null : Number(pin);
+      const { pointsAwarded: awarded } = await completeRoutine(item.routine_id, pinValue, item.target_reps);
+      setPointsAwarded(awarded);
+    } catch (error) {
+      setSaveError(error instanceof RoutineError ? error.message : '기록을 저장하지 못했습니다.');
+    } finally {
+      setIsSaving(false);
+      setIsFinished(true);
+    }
+  }, [item, pin]);
 
   const body = isFinished ? (
-    <FinishedView item={item} pin={pin} />
+    <FinishedView item={item} pin={pin} pointsAwarded={pointsAwarded} saveError={saveError} />
   ) : session.phase === 'ready' ? (
     <ReadyView item={item} />
   ) : session.phase === 'working' ? (
@@ -127,9 +138,7 @@ function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => voi
 
   return (
     <View style={styles.screen}>
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xl }]}
-        onScrollBeginDrag={touch}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xl }]}>
         {body}
       </ScrollView>
 
@@ -137,14 +146,8 @@ function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => voi
         <View style={styles.keypadWrap}>
           <Keypad
             onDigit={handleDigit}
-            onClear={() => {
-              touch();
-              setPin('');
-            }}
-            onBackspace={() => {
-              touch();
-              setPin((current) => current.slice(0, -1));
-            }}
+            onClear={() => setPin('')}
+            onBackspace={() => setPin((current) => current.slice(0, -1))}
           />
         </View>
       ) : null}
@@ -154,13 +157,7 @@ function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => voi
           <PrimaryButton label="목록으로" onPress={onExit} />
         ) : session.phase === 'ready' ? (
           <>
-            <PrimaryButton
-              label="운동 시작"
-              onPress={() => {
-                touch();
-                session.start();
-              }}
-            />
+            <PrimaryButton label="운동 시작" onPress={() => session.start()} />
             {item.video_url ? (
               <PrimaryButton label="영상으로 보기" variant="secondary" onPress={openVideo} />
             ) : null}
@@ -169,28 +166,16 @@ function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => voi
         ) : session.phase === 'working' ? (
           <PrimaryButton
             label={`${session.currentSet}세트 완료`}
-            onPress={() => {
-              touch();
-              session.finishSet();
-            }}
+            onPress={() => session.finishSet()}
           />
         ) : session.phase === 'resting' ? (
-          <PrimaryButton
-            label="바로 다음 세트"
-            variant="secondary"
-            onPress={() => {
-              touch();
-              session.skipRest();
-            }}
-          />
+          <PrimaryButton label="바로 다음 세트" variant="secondary" onPress={() => session.skipRest()} />
         ) : (
           <PrimaryButton
             label="기록하고 마치기"
             disabled={pin.length === 0}
-            onPress={() => {
-              touch();
-              setIsFinished(true);
-            }}
+            loading={isSaving}
+            onPress={() => void finishAndSave()}
           />
         )}
       </View>
@@ -350,7 +335,17 @@ function LoggingView({ item, pin }: { item: RoutineItem; pin: string }) {
 }
 
 /** 다 끝난 뒤 */
-function FinishedView({ item, pin }: { item: RoutineItem; pin: string }) {
+function FinishedView({
+  item,
+  pin,
+  pointsAwarded,
+  saveError,
+}: {
+  item: RoutineItem;
+  pin: string;
+  pointsAwarded: number | null;
+  saveError: string | null;
+}) {
   return (
     <View style={styles.centeredBlock}>
       <Text style={styles.title} maxFontSizeMultiplier={1.2}>
@@ -359,6 +354,15 @@ function FinishedView({ item, pin }: { item: RoutineItem; pin: string }) {
       <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
         {item.name} {item.target_sets ?? 1}세트를 {pin}칸으로 마치셨습니다.
       </Text>
+      {pointsAwarded ? (
+        <Text style={styles.pointsEarned} maxFontSizeMultiplier={1.3}>
+          +{pointsAwarded}점 적립
+        </Text>
+      ) : saveError ? (
+        <Text style={styles.saveErrorText} maxFontSizeMultiplier={1.3}>
+          {saveError}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -449,6 +453,19 @@ const styles = StyleSheet.create({
     lineHeight: FontSize.body * 1.5,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
+    textAlign: 'center',
+  },
+  pointsEarned: {
+    fontSize: FontSize.subtitle,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.subtitle,
+    color: Colors.primary,
+  },
+  saveErrorText: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.danger,
     textAlign: 'center',
   },
   hero: {

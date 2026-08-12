@@ -103,4 +103,6 @@ export const TouchTarget = {
   min: 88,
   /** 하단 고정 주 버튼 */
   cta: 68,
+  /** 폰 하단 탭. 88pt 는 태블릿 기준이라 폰 탭바엔 과하다 — iOS HIG 44pt보다는 넉넉하게. */
+  tab: 64,
 } as const;

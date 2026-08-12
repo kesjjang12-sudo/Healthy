@@ -1,46 +1,45 @@
-import { Redirect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { useMemo } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/primary-button';
 import { RoutineCard } from '@/components/routine-card';
+import { StrengthHookBanner } from '@/components/strength-hook-banner';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
-import { maskPhoneNumber } from '@/features/auth/phone';
-import { useSession } from '@/features/auth/session';
+import { useAuthSession } from '@/features/auth/auth-session';
+import { pickHookMessage } from '@/features/content/hooking-copy';
 import { useDailyRoutine } from '@/features/routine/use-daily-routine';
-import type { User } from '@/lib/database.types';
+import { useVisitStats } from '@/features/routine/use-visit-stats';
 
 /**
- * 체크인 직후 태블릿에 뜨는 화면. 오늘 할 운동을 순서대로 보여준다.
- * 기구별 상세(영상, 완료 처리)는 폰 앱에서 QR 을 찍었을 때 이어진다.
+ * 운동 탭. 예전엔 태블릿 체크인 직후 뜨던 화면이었지만, 이제 키오스크는
+ * 체크인만 하고 이 화면은 개인 폰 로그인 뒤에만 보인다.
+ *
+ * user/onboarded 체크는 (tabs)/_layout.tsx 가 이미 끝냈으므로 여기서 다시
+ * 하지 않는다. "운동 마치기"(로그아웃) 버튼도 없앴다 — 공용 태블릿 시절엔
+ * 다음 사람을 위해 반드시 로그아웃해야 했지만, 개인 폰은 그럴 이유가 없다.
+ * 로그아웃은 프로필 탭에 있다.
  */
-export default function HomeScreen() {
-  const { user, isRestoring } = useSession();
-
-  if (isRestoring) return null;
-  if (!user) return <Redirect href="/" />;
-  if (!user.profile_data?.onboarded_at) return <Redirect href="/onboarding" />;
-
-  return <TodayRoutine user={user} />;
-}
-
-function TodayRoutine({ user }: { user: User }) {
+export default function WorkoutTab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { signOut, touch } = useSession();
-  const { result, isLoading, errorMessage, retry } = useDailyRoutine(user.id);
+  const { user } = useAuthSession();
+  const { result, isLoading, errorMessage, retry } = useDailyRoutine(user!.id);
+  const visitStats = useVisitStats(user!.id);
+  const hookMessage = useMemo(() => pickHookMessage(), []);
 
-  // phone_number 는 카카오/구글로 먼저 가입하면 페어링 전까지 비어 있을 수 있다
-  // (이 화면은 아직 키오스크 전용 흐름이라 지금은 항상 채워져 있지만, 타입은 이제 nullable이다).
-  const name =
-    user.profile_data?.nickname ?? (user.phone_number ? maskPhoneNumber(user.phone_number) : '회원');
+  const name = user!.profile_data?.nickname ?? '회원';
 
   return (
     <View style={styles.screen}>
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xxl }]}
-        onScrollBeginDrag={touch}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xxl }]}>
         <View style={styles.headings}>
+          {visitStats ? (
+            <Text style={styles.dayBadge} maxFontSizeMultiplier={1.2}>
+              DAY {visitStats.total_days}
+            </Text>
+          ) : null}
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
             {name} 님{'\n'}오늘도 나오셨네요
           </Text>
@@ -51,9 +50,11 @@ function TodayRoutine({ user }: { user: User }) {
             내 포인트
           </Text>
           <Text style={styles.pointsValue} maxFontSizeMultiplier={1.2}>
-            {(user.total_points ?? 0).toLocaleString('ko-KR')}점
+            {(user!.total_points ?? 0).toLocaleString('ko-KR')}점
           </Text>
         </View>
+
+        <StrengthHookBanner message={hookMessage} size="compact" />
 
         {isLoading ? (
           <View style={styles.centered}>
@@ -93,10 +94,7 @@ function TodayRoutine({ user }: { user: User }) {
                   key={item.routine_id}
                   item={item}
                   order={index + 1}
-                  onPress={() => {
-                    touch();
-                    router.push(`/routine/${item.routine_id}`);
-                  }}
+                  onPress={() => router.push(`/workout/${item.routine_id}`)}
                 />
               ))}
             </View>
@@ -107,10 +105,6 @@ function TodayRoutine({ user }: { user: User }) {
           </>
         )}
       </ScrollView>
-
-      <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-        <PrimaryButton label="운동 마치기" variant="secondary" onPress={signOut} />
-      </View>
     </View>
   );
 }
@@ -131,6 +125,12 @@ const styles = StyleSheet.create({
   },
   headings: {
     gap: Spacing.sm,
+  },
+  dayBadge: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.primary,
   },
   title: {
     fontSize: FontSize.title,
@@ -215,13 +215,5 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
     textAlign: 'center',
-  },
-  footer: {
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.md,
-    backgroundColor: Colors.background,
-    maxWidth: 900,
-    width: '100%',
-    alignSelf: 'center',
   },
 });

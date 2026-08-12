@@ -1,17 +1,29 @@
-import type { GenerateRoutineResult } from '@/lib/database.types';
+import type { DailyRoutine, GenerateRoutineResult, VisitStats } from '@/lib/database.types';
 import {
   GENERIC_ERROR_MESSAGE,
   NETWORK_ERROR_MESSAGE,
   isNetworkError,
   matchErrorCode,
+  type RpcError,
 } from '@/lib/rpc-error';
 import { supabase } from '@/lib/supabase';
 
-const RPC_ERROR_CODES = ['USER_NOT_FOUND', 'ROUTINE_TEMPLATE_NOT_FOUND'] as const;
+const RPC_ERROR_CODES = [
+  'USER_NOT_FOUND',
+  'ROUTINE_TEMPLATE_NOT_FOUND',
+  'AUTH_REQUIRED',
+  'FORBIDDEN',
+  'ROUTINE_NOT_FOUND',
+] as const;
 
-const MESSAGES: Record<(typeof RPC_ERROR_CODES)[number], string> = {
-  USER_NOT_FOUND: '회원 정보를 찾지 못했습니다. 번호부터 다시 눌러주세요.',
+type RpcErrorCode = (typeof RPC_ERROR_CODES)[number];
+
+const MESSAGES: Record<RpcErrorCode, string> = {
+  USER_NOT_FOUND: '회원 정보를 찾지 못했습니다. 다시 로그인해 주세요.',
   ROUTINE_TEMPLATE_NOT_FOUND: '운동을 준비하지 못했습니다. 관리사무소에 알려주세요.',
+  AUTH_REQUIRED: '로그인 후 다시 시도해 주세요.',
+  FORBIDDEN: '이 정보를 볼 수 없습니다.',
+  ROUTINE_NOT_FOUND: '운동을 찾지 못했습니다.',
 };
 
 export class RoutineError extends Error {
@@ -22,24 +34,59 @@ export class RoutineError extends Error {
   }
 }
 
+function toRoutineError(error: RpcError): RoutineError {
+  const code = matchErrorCode(error, RPC_ERROR_CODES);
+  if (code) return new RoutineError(MESSAGES[code], error);
+  return new RoutineError(isNetworkError(error) ? NETWORK_ERROR_MESSAGE : GENERIC_ERROR_MESSAGE, error);
+}
+
 /**
  * 오늘의 루틴을 가져온다. 아직 없으면 만들고, 이미 있으면 그대로 돌려준다
  * (서버에서 no-op 이라 몇 번 불러도 안전하다).
  *
- * 미리 조합해 둔 템플릿에서 고르는 방식이라 AI 응답을 기다리지 않는다.
+ * 이사 대응: 오늘 체크인한 헬스장이 있으면 그곳 기구로, 없으면 주 소속으로
+ * 루틴을 만든다 — get_todays_checkin 이 그 판단을 대신 해 준다.
  */
 export async function loadDailyRoutine(userId: string): Promise<GenerateRoutineResult> {
-  const { data, error } = await supabase.rpc('generate_daily_routine', { p_user_id: userId });
+  const { data: checkin, error: checkinError } = await supabase.rpc('get_todays_checkin', {
+    p_user_id: userId,
+  });
+  if (checkinError) throw toRoutineError(checkinError);
 
-  if (error) {
-    const code = matchErrorCode(error, RPC_ERROR_CODES);
-    if (code) throw new RoutineError(MESSAGES[code], error);
-    throw new RoutineError(
-      isNetworkError(error) ? NETWORK_ERROR_MESSAGE : GENERIC_ERROR_MESSAGE,
-      error,
-    );
-  }
+  const { data, error } = await supabase.rpc('generate_daily_routine', {
+    p_user_id: userId,
+    p_apt_id: checkin?.apt_id ?? undefined,
+  });
 
+  if (error) throw toRoutineError(error);
+  if (!data) throw new RoutineError(GENERIC_ERROR_MESSAGE);
+
+  return data;
+}
+
+/** 세트를 다 마친 뒤 실제 기록을 저장하고 포인트를 받는다. */
+export async function completeRoutine(
+  routineId: string,
+  actualWeightKg: number | null,
+  actualReps: number | null,
+): Promise<{ routine: DailyRoutine; pointsAwarded: number }> {
+  const { data, error } = await supabase.rpc('complete_routine', {
+    p_routine_id: routineId,
+    p_actual_weight_kg: actualWeightKg ?? undefined,
+    p_actual_reps: actualReps ?? undefined,
+  });
+
+  if (error) throw toRoutineError(error);
+  if (!data) throw new RoutineError(GENERIC_ERROR_MESSAGE);
+
+  return { routine: data.routine, pointsAwarded: data.points_awarded };
+}
+
+/** 운동 탭 상단 "DAY_N" 배지용. */
+export async function getVisitStats(userId: string): Promise<VisitStats> {
+  const { data, error } = await supabase.rpc('get_visit_stats', { p_user_id: userId });
+
+  if (error) throw toRoutineError(error);
   if (!data) throw new RoutineError(GENERIC_ERROR_MESSAGE);
 
   return data;
