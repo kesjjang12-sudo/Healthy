@@ -9,7 +9,8 @@
     },
     "updates": {
       "fallbackToCacheTimeout": 0,
-      "checkAutomatically": "ON_LOAD"
+      "checkAutomatically": "ON_LOAD",
+      "url": "https://u.expo.dev/a4d7f146-ab6e-4dac-8873-c2bdcd43563d"
     },
     "orientation": "default",
     "icon": "./assets/images/icon.png",
@@ -46,6 +47,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a4d7f146-ab6e-4dac-8873-c2bdcd43563d"
+      }
+    },
+    "owner": "kesjjang4545"
   }
 }

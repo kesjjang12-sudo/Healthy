@@ -11,7 +11,8 @@
         "EXPO_PUBLIC_SUPABASE_URL": "https://hhjmhdxcxjuhhhgjsilu.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhoam1oZHhjeGp1aGhoZ2pzaWx1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1MDQ2MTUsImV4cCI6MjEwMjA4MDYxNX0.0ypZLRSxjlu_UqJ7v37YxQjqYqM-i3h83Qwo8RBZWUA",
         "EXPO_PUBLIC_FITROUTINE_APT_ID": "11111111-1111-4111-8111-111111111111"
-      }
+      },
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
