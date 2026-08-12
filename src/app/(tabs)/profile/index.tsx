@@ -8,6 +8,7 @@ import { TextField } from '@/components/text-field';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { GymMembershipError, listMyGymMemberships, makeGymPrimary } from '@/features/gym-membership/api';
+import { getHealthConnectionStatus } from '@/features/health/provider';
 import { updateProfileData } from '@/features/onboarding/api';
 import { PROFILE_QUESTIONS } from '@/features/onboarding/questions';
 import type { GymMembershipSummary } from '@/lib/database.types';
@@ -216,6 +217,22 @@ export default function ProfileTab() {
         )}
       </View>
 
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
+          건강 앱 연동
+        </Text>
+        {/* getHealthConnectionStatus() 는 지금 항상 'unavailable' 이다(features/health/provider.ts 참고) —
+            네이티브 모듈 없이는 실제 연동을 할 수 없어 "준비 중"만 정직하게 보여준다. */}
+        {getHealthConnectionStatus() === 'unavailable' ? (
+          <View style={styles.comingSoonBox}>
+            <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+              애플 헬스 · Google Health Connect 연동을 준비하고 있습니다. 연결되면 걸음 수와 활동
+              시간을 자동으로 불러옵니다.
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
       {providerLabel ? (
         <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
           {providerLabel}로 로그인되어 있습니다.
@@ -308,6 +325,11 @@ const styles = StyleSheet.create({
     fontSize: FontSize.caption,
     fontWeight: '500',
     color: Colors.textSecondary,
+  },
+  comingSoonBox: {
+    padding: Spacing.lg,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surface,
   },
   footer: {
     gap: Spacing.sm,
