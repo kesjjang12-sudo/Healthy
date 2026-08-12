@@ -8,6 +8,13 @@
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
+export type Gender = 'male' | 'female';
+/** 10년 단위. 70 은 "70대 이상"을 뜻한다. */
+export type AgeGroup = 40 | 50 | 60 | 70;
+export type Goal = 'diet' | 'muscle' | 'health' | 'rehab';
+/** 루틴 생성 시 무게·동작을 낮춰야 하는 부위 */
+export type PainArea = 'knee' | 'lower_back' | 'shoulder' | 'neck' | 'wrist' | 'ankle';
+
 /**
  * users.profile_data 의 기대 형태.
  *
@@ -17,17 +24,16 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type ProfileData = {
   /** 표시용 이름 */
   nickname?: string;
-  gender?: 'male' | 'female' | 'other';
-  /** 40, 50, 60 ... 10년 단위 */
-  age_group?: number;
+  gender?: Gender;
+  age_group?: AgeGroup;
   height_cm?: number;
   weight_kg?: number;
-  /** 운동 목적 */
-  goal?: 'diet' | 'muscle' | 'health' | 'rehab';
+  /** 운동 목적. 여러 개 고를 수 있다 */
+  goals?: Goal[];
   /** 주당 운동 목표 횟수 */
   weekly_target?: number;
-  /** 무릎, 허리 등 주의 부위 */
-  injuries?: string[];
+  /** 아픈 부위. 빈 배열은 "아픈 곳 없음"을 답했다는 뜻이고, undefined 는 아직 안 물어본 것이다. */
+  pain_areas?: PainArea[];
   /** 온보딩 설문 완료 여부 */
   onboarded_at?: string;
   [key: string]: Json | undefined;

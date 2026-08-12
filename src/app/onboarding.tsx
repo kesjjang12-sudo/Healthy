@@ -1,5 +1,5 @@
 import { Redirect, useRouter } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -15,81 +15,112 @@ import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, Radius, Spacing } from '@/constants/theme';
 import { useSession } from '@/features/auth/session';
 import { updateProfileData } from '@/features/onboarding/api';
-import { findFirstUnansweredIndex, PROFILE_QUESTIONS } from '@/features/onboarding/questions';
-import type { ProfileData } from '@/lib/database.types';
+import {
+  CONFIRM_STEP_INDEX,
+  findFirstUnansweredIndex,
+  formatAnswer,
+  isAnswered,
+  PROFILE_QUESTIONS,
+  type ProfileQuestion,
+} from '@/features/onboarding/questions';
+import type { ProfileData, User } from '@/lib/database.types';
 
 /** 가로가 이만큼 넓으면 선택지를 2열로 편다. */
 const WIDE_LAYOUT_MIN_WIDTH = 900;
 
+/** 다중 선택 문항의 현재 값 (아직 안 고른 상태는 undefined) */
+function selectedValues(
+  question: ProfileQuestion,
+  values: Partial<ProfileData>,
+): readonly string[] | undefined {
+  const value = values[question.key];
+  return Array.isArray(value) ? (value as readonly string[]) : undefined;
+}
+
 /**
- * 신규 회원 프로필 설문. 성별 / 연령대 / 운동목적 3문항이고,
- * 여기서 모은 값이 AI 루틴 생성의 입력이 된다.
- *
- * 선택하면 바로 다음 문항으로 넘어간다. "다음" 버튼을 한 번 더 누르게 하면
- * 탭 수가 두 배가 되는데, 입구 태블릿 한 대에 줄이 서는 구조라 그만큼이 아깝다.
+ * 세션 복원이 끝나기 전에는 설문 본체를 띄우지 않는다.
+ * 저장된 답변으로 시작 문항을 정해야 하는데, 복원 전에는 user 가 아직 null 이라
+ * 여기서 걸러내지 않으면 항상 1번 문항부터 다시 묻게 된다.
  */
 export default function OnboardingScreen() {
+  const { user, isRestoring } = useSession();
+
+  if (isRestoring) return null;
+  if (!user) return <Redirect href="/" />;
+  if (user.profile_data?.onboarded_at) return <Redirect href="/home" />;
+
+  return <OnboardingFlow user={user} />;
+}
+
+/**
+ * 신규 회원 프로필 설문. 성별 / 연령대 / 운동목적 / 아픈 곳 4문항에
+ * 최종 확인 화면이 붙는다. 여기서 모은 값이 AI 루틴 생성의 입력이 된다.
+ *
+ * 단일 선택 문항은 고르면 바로 넘어간다. 입구 태블릿 한 대에 줄이 서는 구조라
+ * "다음"을 한 번 더 누르게 하면 탭 수가 두 배가 된다. 대신 잘못 눌러도 마지막
+ * 확인 화면에서 되돌릴 수 있게 했다.
+ */
+function OnboardingFlow({ user }: { user: User }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { user, isRestoring, setUser, touch } = useSession();
+  const { setUser, touch } = useSession();
 
   // 지난번에 중간에 나갔다면 남은 문항부터 이어서 묻는다.
-  const [stepIndex, setStepIndex] = useState(() => findFirstUnansweredIndex(user?.profile_data));
-  const [answers, setAnswers] = useState<Partial<ProfileData>>(() => ({ ...user?.profile_data }));
+  const [stepIndex, setStepIndex] = useState(() => findFirstUnansweredIndex(user.profile_data));
+  const [answers, setAnswers] = useState<Partial<ProfileData>>(() => ({ ...user.profile_data }));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const pendingAnswers = useRef<Partial<ProfileData>>({});
 
-  const submit = useCallback(
-    async (patch: Partial<ProfileData>) => {
-      if (!user) return;
-
-      setIsSubmitting(true);
-      setErrorMessage(null);
-
-      try {
-        const updated = await updateProfileData(user.id, {
-          ...patch,
-          onboarded_at: new Date().toISOString(),
-        });
-        setUser(updated);
-        router.replace('/home');
-      } catch (error) {
-        setErrorMessage(
-          error instanceof Error ? error.message : '잠시 후 다시 시도해 주세요.',
-        );
-      } finally {
-        setIsSubmitting(false);
-      }
+  /** 화면을 막지 않으려고 응답은 기다리지 않는다. 실패해도 최종 저장이 전체 값을 다시 보낸다. */
+  const saveInBackground = useCallback(
+    (patch: Partial<ProfileData>) => {
+      void updateProfileData(user.id, patch).catch(() => {});
     },
-    [router, setUser, user],
+    [user.id],
   );
 
-  const handleSelect = useCallback(
-    (key: keyof ProfileData, value: ProfileData[keyof ProfileData]) => {
+  // 값은 문항 정의에서 키와 짝지어 오므로 여기서는 원시값으로만 받는다.
+  const handleSingleSelect = useCallback(
+    (key: 'gender' | 'age_group', value: string | number) => {
       touch();
-
-      const nextAnswers = { ...answers, [key]: value };
-      setAnswers(nextAnswers);
-      pendingAnswers.current = nextAnswers;
-
-      const isLastStep = stepIndex === PROFILE_QUESTIONS.length - 1;
-
-      if (isLastStep) {
-        void submit(nextAnswers);
-        return;
-      }
-
-      // 중간 답도 바로 저장해 둔다. 화면을 막지 않으려고 응답은 기다리지 않는다 —
-      // 실패해도 마지막 저장이 전체 값을 다시 보내므로 손실되지 않는다.
-      if (user) {
-        void updateProfileData(user.id, { [key]: value }).catch(() => {});
-      }
-
+      setAnswers((current) => ({ ...current, [key]: value }));
+      saveInBackground({ [key]: value });
       setStepIndex((current) => current + 1);
     },
-    [answers, stepIndex, submit, touch, user],
+    [saveInBackground, touch],
+  );
+
+  const handleMultiToggle = useCallback(
+    (question: ProfileQuestion, value: string) => {
+      touch();
+      setAnswers((current) => {
+        const list = selectedValues(question, current) ?? [];
+        const next = list.includes(value)
+          ? list.filter((item) => item !== value)
+          : [...list, value];
+        return { ...current, [question.key]: next };
+      });
+    },
+    [touch],
+  );
+
+  /** "없습니다" 는 다른 선택지와 같이 고를 수 없다. 빈 배열로 저장한다. */
+  const handleSelectNone = useCallback(
+    (question: ProfileQuestion) => {
+      touch();
+      setAnswers((current) => ({ ...current, [question.key]: [] }));
+    },
+    [touch],
+  );
+
+  const handleNext = useCallback(
+    (question: ProfileQuestion) => {
+      touch();
+      saveInBackground({ [question.key]: answers[question.key] });
+      setStepIndex((current) => current + 1);
+    },
+    [answers, saveInBackground, touch],
   );
 
   const handleBack = useCallback(() => {
@@ -98,13 +129,27 @@ export default function OnboardingScreen() {
     setStepIndex((current) => Math.max(0, current - 1));
   }, [touch]);
 
-  // 훅 호출 뒤에 리다이렉트를 판단한다.
-  if (isRestoring) return null;
-  if (!user) return <Redirect href="/" />;
-  if (user.profile_data?.onboarded_at) return <Redirect href="/home" />;
+  const handleConfirm = useCallback(async () => {
+    touch();
+    setIsSubmitting(true);
+    setErrorMessage(null);
 
-  const question = PROFILE_QUESTIONS[stepIndex];
+    try {
+      const updated = await updateProfileData(user.id, {
+        ...answers,
+        onboarded_at: new Date().toISOString(),
+      });
+      setUser(updated);
+      router.replace('/home');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '잠시 후 다시 시도해 주세요.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [answers, router, setUser, touch, user.id]);
+
   const isWide = width >= WIDE_LAYOUT_MIN_WIDTH;
+  const isConfirmStep = stepIndex >= CONFIRM_STEP_INDEX;
 
   if (isSubmitting) {
     return (
@@ -117,6 +162,82 @@ export default function OnboardingScreen() {
     );
   }
 
+  const progress = (
+    <View
+      style={styles.progress}
+      accessibilityLabel={`전체 ${CONFIRM_STEP_INDEX + 1}단계 중 ${Math.min(stepIndex, CONFIRM_STEP_INDEX) + 1}번째`}>
+      {[...PROFILE_QUESTIONS, null].map((item, index) => (
+        <View
+          key={item?.key ?? 'confirm'}
+          style={[styles.progressSegment, index <= stepIndex && styles.progressSegmentActive]}
+        />
+      ))}
+    </View>
+  );
+
+  const errorBox = errorMessage ? (
+    <View style={styles.errorBox}>
+      <Text style={styles.errorText} maxFontSizeMultiplier={1.3} accessibilityLiveRegion="polite">
+        {errorMessage}
+      </Text>
+      <PrimaryButton label="다시 시도" onPress={() => void handleConfirm()} />
+    </View>
+  ) : null;
+
+  if (isConfirmStep) {
+    return (
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl },
+        ]}>
+        {progress}
+
+        <Text style={styles.title} maxFontSizeMultiplier={1.2}>
+          이대로 시작할까요?
+        </Text>
+        <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+          잘못 누르신 곳이 있으면 "고치기"를 눌러주세요.
+        </Text>
+
+        <View style={styles.summary}>
+          {PROFILE_QUESTIONS.map((question, index) => (
+            <View key={question.key} style={styles.summaryRow}>
+              <View style={styles.summaryTexts}>
+                <Text style={styles.summaryLabel} maxFontSizeMultiplier={1.3}>
+                  {question.summaryLabel}
+                </Text>
+                <Text style={styles.summaryValue} maxFontSizeMultiplier={1.3}>
+                  {formatAnswer(question, answers)}
+                </Text>
+              </View>
+              <PrimaryButton
+                label="고치기"
+                accessibilityLabel={`${question.summaryLabel} 고치기`}
+                variant="ghost"
+                onPress={() => {
+                  touch();
+                  setErrorMessage(null);
+                  setStepIndex(index);
+                }}
+                style={styles.editButton}
+              />
+            </View>
+          ))}
+        </View>
+
+        {errorBox}
+
+        <PrimaryButton label="네, 시작할게요" onPress={() => void handleConfirm()} />
+      </ScrollView>
+    );
+  }
+
+  const question = PROFILE_QUESTIONS[stepIndex];
+  const multiValues = question.mode === 'multi' ? selectedValues(question, answers) : undefined;
+  const isNoneSelected = multiValues?.length === 0;
+
   return (
     <ScrollView
       style={styles.screen}
@@ -124,18 +245,11 @@ export default function OnboardingScreen() {
         styles.content,
         { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl },
       ]}>
-      <View style={styles.progress} accessibilityLabel={`전체 ${PROFILE_QUESTIONS.length}문항 중 ${stepIndex + 1}번째`}>
-        {PROFILE_QUESTIONS.map((item, index) => (
-          <View
-            key={item.key}
-            style={[styles.progressSegment, index <= stepIndex && styles.progressSegmentActive]}
-          />
-        ))}
-      </View>
+      {progress}
 
       {stepIndex === 0 ? (
-        <Text style={styles.intro} maxFontSizeMultiplier={1.3}>
-          등록이 끝났습니다! 딱 세 가지만 여쭐게요.
+        <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+          등록이 끝났습니다! 몇 가지만 여쭐게요.
         </Text>
       ) : null}
 
@@ -143,26 +257,50 @@ export default function OnboardingScreen() {
         {question.title}
       </Text>
 
+      {question.mode === 'multi' ? (
+        <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+          {question.helper}
+        </Text>
+      ) : null}
+
       <View style={styles.options} accessibilityRole="radiogroup">
+        {question.mode === 'multi' && question.noneLabel ? (
+          <ChoiceButton
+            label={question.noneLabel}
+            role="checkbox"
+            selected={isNoneSelected}
+            onPress={() => handleSelectNone(question)}
+            style={styles.optionFull}
+          />
+        ) : null}
+
         {question.options.map((option) => (
           <ChoiceButton
             key={String(option.value)}
             label={option.label}
             caption={option.caption}
-            selected={answers[question.key] === option.value}
-            onPress={() => handleSelect(question.key, option.value)}
-            style={isWide ? styles.optionWide : styles.optionNarrow}
+            role={question.mode === 'multi' ? 'checkbox' : 'radio'}
+            selected={
+              question.mode === 'single'
+                ? answers[question.key] === option.value
+                : (multiValues?.includes(String(option.value)) ?? false)
+            }
+            onPress={() =>
+              question.mode === 'single'
+                ? handleSingleSelect(question.key, option.value)
+                : handleMultiToggle(question, String(option.value))
+            }
+            style={isWide ? styles.optionWide : styles.optionFull}
           />
         ))}
       </View>
 
-      {errorMessage ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText} maxFontSizeMultiplier={1.3} accessibilityLiveRegion="polite">
-            {errorMessage}
-          </Text>
-          <PrimaryButton label="다시 시도" onPress={() => void submit(pendingAnswers.current)} />
-        </View>
+      {question.mode === 'multi' ? (
+        <PrimaryButton
+          label="다음"
+          onPress={() => handleNext(question)}
+          disabled={!isAnswered(question, answers)}
+        />
       ) : null}
 
       {stepIndex > 0 ? (
@@ -211,28 +349,58 @@ const styles = StyleSheet.create({
   progressSegmentActive: {
     backgroundColor: Colors.primary,
   },
-  intro: {
-    fontSize: FontSize.body,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
   title: {
     fontSize: FontSize.title,
     fontWeight: '800',
     color: Colors.text,
+  },
+  helper: {
+    fontSize: FontSize.body,
+    fontWeight: '600',
+    color: Colors.textSecondary,
   },
   options: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.md,
   },
-  optionNarrow: {
+  optionFull: {
     flexGrow: 1,
     flexBasis: '100%',
   },
   optionWide: {
     flexGrow: 1,
     flexBasis: '45%',
+  },
+  summary: {
+    gap: Spacing.md,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.surface,
+  },
+  summaryTexts: {
+    flex: 1,
+    gap: Spacing.xs,
+  },
+  summaryLabel: {
+    fontSize: FontSize.body,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  summaryValue: {
+    fontSize: FontSize.label,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  editButton: {
+    minHeight: 72,
+    paddingHorizontal: Spacing.lg,
+    backgroundColor: Colors.background,
   },
   errorBox: {
     gap: Spacing.md,

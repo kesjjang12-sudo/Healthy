@@ -5,6 +5,8 @@ import { Colors, FontSize, Radius, Spacing, TouchTarget } from '@/constants/them
 
 type Props = {
   label: string;
+  /** 화면에 같은 라벨이 여러 번 나올 때 구분해 읽히도록 따로 지정한다. */
+  accessibilityLabel?: string;
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
@@ -14,6 +16,7 @@ type Props = {
 
 export function PrimaryButton({
   label,
+  accessibilityLabel,
   onPress,
   disabled = false,
   loading = false,
@@ -28,7 +31,7 @@ export function PrimaryButton({
       onPress={onPress}
       disabled={isInactive}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: isInactive, busy: loading }}
       style={({ pressed }) => [
         styles.button,
