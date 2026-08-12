@@ -9,8 +9,8 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Gender = 'male' | 'female';
-/** 10년 단위. 70 은 "70대 이상"을 뜻한다. */
-export type AgeGroup = 40 | 50 | 60 | 70;
+/** 10년 단위. 10 은 "10대", 70 은 "70대 이상"을 뜻한다. */
+export type AgeGroup = 10 | 20 | 30 | 40 | 50 | 60 | 70;
 export type Goal = 'diet' | 'muscle' | 'health' | 'rehab';
 /** 루틴 생성 시 무게·동작을 낮춰야 하는 부위 */
 export type PainArea = 'knee' | 'lower_back' | 'shoulder' | 'neck' | 'wrist' | 'ankle';
