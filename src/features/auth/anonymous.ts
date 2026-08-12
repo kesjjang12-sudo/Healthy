@@ -21,3 +21,20 @@ export async function ensureSessionForPairing(): Promise<void> {
     throw new Error('연결을 시작하지 못했습니다. 다시 시도해 주세요.');
   }
 }
+
+/**
+ * 로그인 화면의 "테스트 계정으로 시작하기" 버튼용.
+ *
+ * 카카오/구글은 Supabase 대시보드에 OAuth 앱을 등록해야 뜨고(README 참고),
+ * 전화번호 로그인은 옆에 페어링해 줄 키오스크가 있어야 한다 — 둘 다 없으면
+ * 개인 앱을 테스트할 방법이 아예 없다. ensureSessionForPairing 과 구현은
+ * 같다(익명 세션만 만든다) — bootstrap_oauth_profile 은 auth.uid() 만
+ * 있으면 익명이든 카카오든 구분 없이 프로필을 만들어 주므로, 세션만
+ * 생기면 auth-session.tsx 가 알아서 프로필을 불러와 온보딩으로 보낸다.
+ *
+ * ⚠️ 실제 출시 전에는 로그인 화면에서 이 버튼을 빼야 한다 — 지금은 다른
+ * 로그인 수단이 다 막혀 있어 개발 중 테스트용으로 급하게 열어 둔 경로다.
+ */
+export async function signInAsTestUser(): Promise<void> {
+  return ensureSessionForPairing();
+}
