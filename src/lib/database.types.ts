@@ -65,6 +65,10 @@ export type Equipment = {
   name: string;
   target_muscle: string | null;
   video_url: string;
+  /** 표준 성인 남성 시작 무게. null 이면 무게 없이 맨몸으로 안내한다 */
+  base_weight_kg: number | null;
+  /** 이 기구에서 조절 가능한 최소 단위(kg) */
+  weight_step_kg: number;
   created_at: string | null;
 };
 
@@ -77,6 +81,8 @@ export type DailyRoutine = {
   target_sets: number | null;
   target_reps: number | null;
   is_completed: boolean | null;
+  /** 루틴 내 운동 순서. 작을수록 먼저 한다 */
+  sort_order: number;
   created_at: string | null;
 };
 
@@ -84,6 +90,34 @@ export type AttendanceLog = {
   id: string;
   user_id: string | null;
   attended_at: string | null;
+};
+
+/** get_daily_routine 이 돌려주는 한 줄. 루틴 + 기구 정보를 합쳐 놓은 형태다. */
+export type RoutineItem = {
+  routine_id: string;
+  equip_id: string;
+  name: string;
+  target_muscle: string | null;
+  video_url: string;
+  qr_code_val: string;
+  target_weight: number | null;
+  target_sets: number | null;
+  target_reps: number | null;
+  is_completed: boolean;
+};
+
+/** generate_daily_routine RPC 응답 */
+export type GenerateRoutineResult = {
+  routine_date: string;
+  template: { gender: string; age_group: number; goals_key: string };
+  /** 이번 호출로 새로 만들어진 운동 수. 이미 있으면 0 (재호출은 no-op) */
+  created: number;
+  excluded_by_pain: number;
+  /** 이 단지에 해당 기구가 없어서 넣지 못한 운동 수 */
+  missing_equipment: number;
+  /** 아픈 곳이 많아 규칙만으로 처방하기 어려운 경우. 사람이 봐야 한다 */
+  needs_trainer_review: boolean;
+  routines: RoutineItem[];
 };
 
 /** sign_in_with_phone RPC 응답 */
@@ -148,6 +182,14 @@ export type Database = {
       update_profile_data: {
         Args: { p_user_id: string; p_patch: Partial<ProfileData> };
         Returns: User;
+      };
+      generate_daily_routine: {
+        Args: { p_user_id: string; p_date?: string };
+        Returns: GenerateRoutineResult;
+      };
+      get_daily_routine: {
+        Args: { p_user_id: string; p_date?: string };
+        Returns: RoutineItem[];
       };
     };
     Enums: Record<string, never>;

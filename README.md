@@ -80,23 +80,54 @@ deny-by-default** 로 막고, 접근은 `security definer` 함수(RPC)로만 열
 > 그 사람 계정으로 들어가진다. 실서비스 전에 생년(4자리) 확인 같은 2차 확인을 하나 더
 > 붙이는 걸 권한다. RPC 시그니처만 늘리면 되도록 설계해 뒀다.
 
-### 적용 방법
+## 2. 실기기(태블릿 + 휴대폰)로 테스트하기
+
+### 1) Supabase 프로젝트 준비
 
 ```bash
-supabase link --project-ref <your-project-ref>
-supabase db push          # migrations 적용
-psql "$DATABASE_URL" -f supabase/seed.sql   # 개발용 시드(선택)
+npx supabase link --project-ref <your-project-ref>
+npx supabase db push                        # migrations 적용
+psql "$DATABASE_URL" -f supabase/seed.sql   # 시범단지 + 기구 5대
 ```
 
-## 2. 앱 실행
+CLI 없이 하려면 Supabase 대시보드 **SQL Editor** 에 `supabase/migrations/` 안의 파일을
+번호 순서대로 붙여넣고 실행한 뒤 `supabase/seed.sql` 을 실행해도 된다.
+
+### 2) `.env` 작성
 
 ```bash
 npm install
-cp .env.example .env      # Supabase URL / anon key / 단지 id 입력
-npm start                 # 태블릿에서 Expo Go 로 접속
+cp .env.example .env
 ```
 
+`Project Settings → API` 에서 **Project URL** 과 **anon public** 키를 복사해 넣는다.
+`EXPO_PUBLIC_FITROUTINE_APT_ID` 는 `select id from apartments;` 로 확인한다 (시드를 그대로
+썼다면 `.env.example` 의 값이 맞다).
+
 `.env` 값은 `EXPO_PUBLIC_` 접두사라 번들에 그대로 박힌다. **service_role key 는 절대 넣지 말 것.**
+값이 비어 있으면 앱이 빨간 에러 대신 "설정이 필요합니다" 안내 화면을 띄운다.
+
+### 3) 기기에서 실행
+
+```bash
+npx expo start -c          # -c 는 캐시 초기화. .env 를 바꾼 뒤에는 꼭 필요하다
+```
+
+태블릿과 휴대폰에 **Expo Go** 를 설치하고 터미널의 QR 을 찍는다.
+
+- 기기와 PC 가 **같은 Wi-Fi** 여야 한다. 회사망처럼 기기 간 통신이 막힌 곳이면
+  `npx expo start --tunnel` 로 우회한다
+- Expo SDK 57 이라 Expo Go 도 최신 버전이어야 한다
+- 태블릿은 가로로 두고 보면 번호 입력 화면이 2단으로 펴진다
+
+### 4) 확인할 흐름
+
+1. 번호 입력 → 신규 번호면 바로 등록 (`010`으로 시작하는 아무 번호)
+2. 설문 4문항 + 최종 확인
+3. **오늘의 운동** 목록 — 아픈 곳을 무릎으로 고르면 레그 프레스가 빠지는 게 보인다
+4. 5분간 두면 자동 로그아웃되어 번호 입력 화면으로 돌아간다
+
+휴대폰에서도 같은 앱이 뜬다. 기구 QR 스캔은 아직 없어서 다음 단계다.
 
 ## 3. 지금까지 만든 것
 
@@ -106,11 +137,12 @@ src/
 │   ├── _layout.tsx        SessionProvider + Stack (뒤로가기 제스처 차단)
 │   ├── index.tsx          번호 입력(인증) 화면
 │   ├── onboarding.tsx     신규 회원 프로필 설문 4문항 + 최종 확인
-│   └── home.tsx           로그인 직후 화면 (자리만 잡아둠)
-├── components/            keypad, primary-button, choice-button(라디오/체크박스)
+│   └── home.tsx           오늘의 운동 목록
+├── components/            keypad, primary-button, choice-button, routine-card
 ├── constants/theme.ts     시니어용 디자인 토큰
 ├── features/auth/         phone(포맷·검증), api(RPC 호출), session(컨텍스트)
 ├── features/onboarding/   questions(문항 정의), api(profile_data 병합 저장)
+├── features/routine/      api(루틴 생성/조회), use-daily-routine(훅)
 └── lib/                   supabase 클라이언트, DB 타입, env, RPC 에러 처리
 ```
 
@@ -190,10 +222,9 @@ psql -h /tmp -p 5433 -U postgres -d fitroutine -f supabase/seed.sql
 
 ## 5. 다음 단계
 
-1. **오늘의 루틴 화면** — 태블릿 체크인 직후 요약, 앱에서 상세
+1. **QR 스캔 → 기구 목표 + 시범 영상** — 기구 앞에서 폰으로 찍는 화면
 2. **앱 설치 유도 훅** — 단지 걷기 랭킹 / 상품권·쿠폰. 걷기는 폰 센서가 필요해서
    웹으로는 못 만든다. 앱이 존재해야 할 실질적인 이유가 여기서 나온다
-3. QR 스캔 → 기구 목표 + 시범 영상
-4. 운동 완료 처리 → 포인트 적립
+3. 운동 완료 처리 → 포인트 적립
 5. 키·몸무게를 운동 종료 화면에서 한 문항씩 받기 (점진적 프로필링)
 6. 트레이너 검수 후 `goal_blocks` / `pain_area_rules` 수치 조정
