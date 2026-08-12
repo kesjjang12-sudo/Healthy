@@ -5,13 +5,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Keypad } from '@/components/keypad';
 import { PrimaryButton } from '@/components/primary-button';
-import { Colors, FontSize, Radius, Spacing } from '@/constants/theme';
+import { Colors, FontSize, LetterSpacing, Spacing } from '@/constants/theme';
 import { AuthError } from '@/features/auth/api';
 import { formatPhoneNumber, isValidPhoneNumber, PHONE_MAX_DIGITS } from '@/features/auth/phone';
 import { useSession } from '@/features/auth/session';
 
 /** 가로가 이만큼 넓으면 태블릿 가로 모드로 보고 2단 배치로 바꾼다. */
 const WIDE_LAYOUT_MIN_WIDTH = 900;
+
+/** 아직 안 누른 자리를 옅게 깔아 둔다. 누를수록 회색이 줄어드는 게 보인다. */
+const DIGIT_MASK = '010-0000-0000';
 
 export default function PhoneAuthScreen() {
   const router = useRouter();
@@ -27,9 +30,7 @@ export default function PhoneAuthScreen() {
     (digit: string) => {
       touch();
       setErrorMessage(null);
-      setDigits((current) =>
-        current.length >= PHONE_MAX_DIGITS ? current : `${current}${digit}`,
-      );
+      setDigits((current) => (current.length >= PHONE_MAX_DIGITS ? current : `${current}${digit}`));
     },
     [touch],
   );
@@ -64,9 +65,7 @@ export default function PhoneAuthScreen() {
       // 판단해야 지난번에 설문 도중 나간 사람도 남은 문항부터 이어서 받는다.
       router.replace(result.user.profile_data?.onboarded_at ? '/home' : '/onboarding');
     } catch (error) {
-      setErrorMessage(
-        error instanceof AuthError ? error.message : '잠시 후 다시 시도해 주세요.',
-      );
+      setErrorMessage(error instanceof AuthError ? error.message : '잠시 후 다시 시도해 주세요.');
     } finally {
       setIsSubmitting(false);
     }
@@ -78,26 +77,18 @@ export default function PhoneAuthScreen() {
   }
 
   const isWide = width >= WIDE_LAYOUT_MIN_WIDTH;
-  const canSubmit = isValidPhoneNumber(digits);
+  const typed = formatPhoneNumber(digits);
 
   const prompt = (
     <View style={styles.promptBlock}>
       <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-        안녕하세요!
-      </Text>
-      <Text style={styles.subtitle} maxFontSizeMultiplier={1.3}>
-        전화번호를 눌러주세요
+        안녕하세요{'\n'}전화번호를 눌러주세요
       </Text>
 
-      <View style={[styles.display, errorMessage ? styles.displayError : null]}>
-        <Text
-          style={[styles.displayText, digits.length === 0 && styles.displayPlaceholder]}
-          maxFontSizeMultiplier={1.2}
-          numberOfLines={1}
-          adjustsFontSizeToFit>
-          {digits.length === 0 ? '010-0000-0000' : formatPhoneNumber(digits)}
-        </Text>
-      </View>
+      <Text style={styles.display} maxFontSizeMultiplier={1.2} numberOfLines={1} adjustsFontSizeToFit>
+        {typed}
+        <Text style={styles.displayRest}>{DIGIT_MASK.slice(typed.length)}</Text>
+      </Text>
 
       <Text
         style={[styles.helper, errorMessage ? styles.helperError : null]}
@@ -108,39 +99,47 @@ export default function PhoneAuthScreen() {
     </View>
   );
 
-  const inputBlock = (
-    <View style={styles.inputBlock}>
-      <Keypad
-        onDigit={handleDigit}
-        onClear={handleClear}
-        onBackspace={handleBackspace}
-        disabled={isSubmitting}
-      />
-      <PrimaryButton
-        label="시작하기"
-        onPress={handleSubmit}
-        disabled={!canSubmit}
-        loading={isSubmitting}
-        style={styles.submitButton}
-      />
-    </View>
+  const keypad = (
+    <Keypad
+      onDigit={handleDigit}
+      onClear={handleClear}
+      onBackspace={handleBackspace}
+      disabled={isSubmitting}
+    />
   );
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={[
-        styles.content,
-        isWide && styles.contentWide,
-        {
-          paddingTop: insets.top + Spacing.lg,
-          paddingBottom: insets.bottom + Spacing.lg,
-        },
-      ]}
-      keyboardShouldPersistTaps="handled">
-      <View style={isWide ? styles.column : undefined}>{prompt}</View>
-      <View style={isWide ? styles.column : undefined}>{inputBlock}</View>
-    </ScrollView>
+    <View style={styles.screen}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          isWide && styles.contentWide,
+          { paddingTop: insets.top + Spacing.xxl },
+        ]}
+        keyboardShouldPersistTaps="handled">
+        {isWide ? (
+          <>
+            <View style={styles.column}>{prompt}</View>
+            <View style={styles.column}>{keypad}</View>
+          </>
+        ) : (
+          <>
+            {prompt}
+            {keypad}
+          </>
+        )}
+      </ScrollView>
+
+      {/* 주 버튼은 항상 화면 아래 같은 자리에 있다. 스크롤과 무관하게 손이 기억한다. */}
+      <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
+        <PrimaryButton
+          label="시작하기"
+          onPress={handleSubmit}
+          disabled={!isValidPhoneNumber(digits)}
+          loading={isSubmitting}
+        />
+      </View>
+    </View>
   );
 }
 
@@ -151,73 +150,60 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
+    justifyContent: 'center',
+    gap: Spacing.xxl,
     paddingHorizontal: Spacing.xl,
-    gap: Spacing.xl,
-    maxWidth: 1100,
+    paddingBottom: Spacing.xl,
+    maxWidth: 1000,
     width: '100%',
     alignSelf: 'center',
   },
   contentWide: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xxl,
+    gap: Spacing.xxxl,
   },
   column: {
     flex: 1,
     justifyContent: 'center',
   },
   promptBlock: {
-    gap: Spacing.md,
-    justifyContent: 'center',
+    gap: Spacing.xl,
   },
   title: {
     fontSize: FontSize.title,
-    fontWeight: '800',
+    fontWeight: '700',
+    lineHeight: FontSize.title * 1.35,
+    letterSpacing: LetterSpacing.title,
     color: Colors.text,
-  },
-  subtitle: {
-    fontSize: FontSize.body,
-    fontWeight: '600',
-    color: Colors.textSecondary,
   },
   display: {
-    marginTop: Spacing.sm,
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-    borderRadius: Radius.lg,
-    borderWidth: 3,
-    borderColor: Colors.primary,
-    backgroundColor: Colors.primaryFaint,
-  },
-  displayError: {
-    borderColor: Colors.danger,
-    backgroundColor: Colors.dangerFaint,
-  },
-  displayText: {
     fontSize: FontSize.display,
-    fontWeight: '800',
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.title,
     color: Colors.text,
-    textAlign: 'center',
     // 자리수가 바뀔 때 숫자 폭이 흔들리지 않게 고정폭 숫자를 쓴다.
     fontVariant: ['tabular-nums'],
   },
-  displayPlaceholder: {
+  displayRest: {
     color: Colors.textDisabled,
   },
   helper: {
-    fontSize: FontSize.body,
-    fontWeight: '600',
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
-    textAlign: 'center',
   },
   helperError: {
     color: Colors.danger,
+    fontWeight: '600',
   },
-  inputBlock: {
-    gap: Spacing.lg,
-    justifyContent: 'center',
-  },
-  submitButton: {
-    minHeight: 96,
+  footer: {
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.md,
+    backgroundColor: Colors.background,
+    maxWidth: 1000,
+    width: '100%',
+    alignSelf: 'center',
   },
 });

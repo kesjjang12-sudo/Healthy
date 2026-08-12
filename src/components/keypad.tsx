@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Colors, FontSize, Radius, Spacing, TouchTarget } from '@/constants/theme';
+import { Colors, FontSize, LetterSpacing, Radius, Spacing, TouchTarget } from '@/constants/theme';
 
 type KeypadKey = { type: 'digit'; value: string } | { type: 'clear' } | { type: 'backspace' };
 
@@ -40,9 +40,9 @@ function KeypadComponent({ onDigit, onClear, onBackspace, disabled = false }: Pr
             disabled={disabled}
             accessibilityRole="button"
             accessibilityLabel={accessibilityLabel}
+            // 테두리 없이 흰 바탕에 숫자만 두고, 누를 때만 회색 면이 올라온다.
             style={({ pressed }) => [
               styles.key,
-              isAction && styles.actionKey,
               pressed && styles.keyPressed,
               disabled && styles.keyDisabled,
             ]}>
@@ -69,39 +69,34 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.md,
+    rowGap: Spacing.xs,
   },
   key: {
-    // 3열 격자: basis 30% 세 개(90%)에 gap 두 칸을 더하면 100% 를 넘기 직전이라
-    // 한 줄에 정확히 3개만 들어가고, flexGrow 가 남는 폭을 나눠 가진다.
-    flexGrow: 1,
-    flexBasis: '30%',
+    // 3열 격자. gap 대신 각 칸이 폭의 1/3 을 차지하게 두어 눌리는 면을 넓게 잡는다.
+    width: '33.333%',
     minHeight: TouchTarget.min,
-    aspectRatio: 1.6,
+    aspectRatio: 1.9,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: Radius.lg,
-    borderWidth: 2,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
-  },
-  actionKey: {
+    borderRadius: Radius.md,
     backgroundColor: Colors.background,
   },
   keyPressed: {
-    backgroundColor: Colors.surfacePressed,
-    borderColor: Colors.primary,
+    backgroundColor: Colors.surface,
   },
   keyDisabled: {
-    opacity: 0.4,
+    opacity: 0.35,
   },
   keyLabel: {
     fontSize: FontSize.keypad,
-    fontWeight: '700',
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.title,
     color: Colors.text,
   },
   actionKeyLabel: {
-    fontSize: FontSize.label,
+    fontSize: FontSize.body,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },
   keyLabelDisabled: {

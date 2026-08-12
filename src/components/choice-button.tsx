@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 
-import { Colors, FontSize, Radius, Spacing } from '@/constants/theme';
+import { CheckMark } from '@/components/check-mark';
+import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 
 type Props = {
   label: string;
@@ -14,7 +15,10 @@ type Props = {
   style?: StyleProp<ViewStyle>;
 };
 
-/** 설문 선택지용 큰 버튼. 손가락으로 눌러야 하므로 최소 높이를 크게 잡는다. */
+/**
+ * 설문 선택지용 큰 버튼.
+ * 평소엔 회색 면, 고르면 옅은 파란 면 + 파란 글자로 바뀐다. 테두리는 쓰지 않는다.
+ */
 export function ChoiceButton({
   label,
   caption,
@@ -38,13 +42,13 @@ export function ChoiceButton({
         styles.button,
         isCheckbox && styles.checkboxButton,
         selected && styles.selected,
-        pressed && !disabled && styles.pressed,
+        pressed && !disabled && !selected && styles.pressed,
         disabled && styles.disabled,
         style,
       ]}>
       {isCheckbox ? (
-        <View style={[styles.checkbox, selected && styles.checkboxChecked]}>
-          {selected ? <Text style={styles.checkmark}>✓</Text> : null}
+        <View style={[styles.box, selected && styles.boxChecked]}>
+          {selected ? <CheckMark size={22} thickness={2.5} /> : null}
         </View>
       ) : null}
 
@@ -56,7 +60,11 @@ export function ChoiceButton({
         </Text>
         {caption ? (
           <Text
-            style={[styles.caption, isCheckbox && styles.leftAligned]}
+            style={[
+              styles.caption,
+              isCheckbox && styles.leftAligned,
+              selected && styles.selectedCaption,
+            ]}
             maxFontSizeMultiplier={1.3}>
             {caption}
           </Text>
@@ -68,52 +76,41 @@ export function ChoiceButton({
 
 const styles = StyleSheet.create({
   button: {
-    minHeight: 112,
-    paddingHorizontal: Spacing.lg,
+    minHeight: 92,
+    paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.lg,
     gap: Spacing.xs,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: Radius.lg,
-    borderWidth: 2,
-    borderColor: Colors.border,
     backgroundColor: Colors.surface,
   },
   checkboxButton: {
     flexDirection: 'row',
-    gap: Spacing.md,
+    gap: Spacing.lg,
     justifyContent: 'flex-start',
   },
   selected: {
-    borderColor: Colors.primary,
     backgroundColor: Colors.primaryFaint,
   },
   pressed: {
     backgroundColor: Colors.surfacePressed,
-    borderColor: Colors.primary,
   },
   disabled: {
     opacity: 0.4,
   },
-  checkbox: {
-    width: 40,
-    height: 40,
+  box: {
+    // flex: 0 은 flexBasis 까지 0 으로 만들어 칸이 접힌다. 줄어들지만 않게 한다.
+    flexShrink: 0,
+    width: 34,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: Radius.md,
-    borderWidth: 2,
-    borderColor: Colors.border,
+    borderRadius: Radius.sm,
     backgroundColor: Colors.background,
   },
-  checkboxChecked: {
-    borderColor: Colors.primary,
+  boxChecked: {
     backgroundColor: Colors.primary,
-  },
-  checkmark: {
-    fontSize: FontSize.label,
-    fontWeight: '800',
-    lineHeight: FontSize.label + 4,
-    color: Colors.textOnPrimary,
   },
   centeredText: {
     alignItems: 'center',
@@ -121,7 +118,7 @@ const styles = StyleSheet.create({
   },
   checkboxText: {
     flex: 1,
-    gap: Spacing.xs,
+    gap: 2,
   },
   leftAligned: {
     textAlign: 'left',
@@ -129,6 +126,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: FontSize.label,
     fontWeight: '700',
+    letterSpacing: LetterSpacing.subtitle,
     color: Colors.text,
     textAlign: 'center',
   },
@@ -136,9 +134,14 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   caption: {
-    fontSize: FontSize.body,
-    fontWeight: '600',
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
     textAlign: 'center',
+  },
+  selectedCaption: {
+    color: Colors.primary,
+    opacity: 0.75,
   },
 });

@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChoiceButton } from '@/components/choice-button';
 import { PrimaryButton } from '@/components/primary-button';
-import { Colors, FontSize, Radius, Spacing } from '@/constants/theme';
+import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useSession } from '@/features/auth/session';
 import { updateProfileData } from '@/features/onboarding/api';
 import {
@@ -96,9 +96,7 @@ function OnboardingFlow({ user }: { user: User }) {
       touch();
       setAnswers((current) => {
         const list = selectedValues(question, current) ?? [];
-        const next = list.includes(value)
-          ? list.filter((item) => item !== value)
-          : [...list, value];
+        const next = list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
         return { ...current, [question.key]: next };
       });
     },
@@ -180,57 +178,58 @@ function OnboardingFlow({ user }: { user: User }) {
       <Text style={styles.errorText} maxFontSizeMultiplier={1.3} accessibilityLiveRegion="polite">
         {errorMessage}
       </Text>
-      <PrimaryButton label="다시 시도" onPress={() => void handleConfirm()} />
     </View>
   ) : null;
 
   if (isConfirmStep) {
     return (
-      <ScrollView
-        style={styles.screen}
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl },
-        ]}>
-        {progress}
+      <View style={styles.screen}>
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xl }]}>
+          {progress}
 
-        <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-          이대로 시작할까요?
-        </Text>
-        <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          잘못 누르신 곳이 있으면 "고치기"를 눌러주세요.
-        </Text>
+          <View style={styles.headings}>
+            <Text style={styles.title} maxFontSizeMultiplier={1.2}>
+              이대로 시작할까요?
+            </Text>
+            <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+              잘못 누르신 곳이 있으면 고치기를 눌러주세요.
+            </Text>
+          </View>
 
-        <View style={styles.summary}>
-          {PROFILE_QUESTIONS.map((question, index) => (
-            <View key={question.key} style={styles.summaryRow}>
-              <View style={styles.summaryTexts}>
-                <Text style={styles.summaryLabel} maxFontSizeMultiplier={1.3}>
-                  {question.summaryLabel}
-                </Text>
-                <Text style={styles.summaryValue} maxFontSizeMultiplier={1.3}>
-                  {formatAnswer(question, answers)}
-                </Text>
+          <View style={styles.summary}>
+            {PROFILE_QUESTIONS.map((question, index) => (
+              <View key={question.key} style={styles.summaryRow}>
+                <View style={styles.summaryTexts}>
+                  <Text style={styles.summaryLabel} maxFontSizeMultiplier={1.3}>
+                    {question.summaryLabel}
+                  </Text>
+                  <Text style={styles.summaryValue} maxFontSizeMultiplier={1.3}>
+                    {formatAnswer(question, answers)}
+                  </Text>
+                </View>
+                <PrimaryButton
+                  label="고치기"
+                  accessibilityLabel={`${question.summaryLabel} 고치기`}
+                  variant="quiet"
+                  size="compact"
+                  onPress={() => {
+                    touch();
+                    setErrorMessage(null);
+                    setStepIndex(index);
+                  }}
+                />
               </View>
-              <PrimaryButton
-                label="고치기"
-                accessibilityLabel={`${question.summaryLabel} 고치기`}
-                variant="ghost"
-                onPress={() => {
-                  touch();
-                  setErrorMessage(null);
-                  setStepIndex(index);
-                }}
-                style={styles.editButton}
-              />
-            </View>
-          ))}
+            ))}
+          </View>
+
+          {errorBox}
+        </ScrollView>
+
+        <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
+          <PrimaryButton label="네, 시작할게요" onPress={() => void handleConfirm()} />
         </View>
-
-        {errorBox}
-
-        <PrimaryButton label="네, 시작할게요" onPress={() => void handleConfirm()} />
-      </ScrollView>
+      </View>
     );
   }
 
@@ -239,74 +238,78 @@ function OnboardingFlow({ user }: { user: User }) {
   const isNoneSelected = multiValues?.length === 0;
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={[
-        styles.content,
-        { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl },
-      ]}>
-      {progress}
+    <View style={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xl }]}>
+        {progress}
 
-      {stepIndex === 0 ? (
-        <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          등록이 끝났습니다! 몇 가지만 여쭐게요.
-        </Text>
-      ) : null}
+        <View style={styles.headings}>
+          {stepIndex === 0 ? (
+            <Text style={styles.eyebrow} maxFontSizeMultiplier={1.3}>
+              등록이 끝났습니다
+            </Text>
+          ) : null}
+          <Text style={styles.title} maxFontSizeMultiplier={1.2}>
+            {question.title}
+          </Text>
+          {question.mode === 'multi' ? (
+            <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+              {question.helper}
+            </Text>
+          ) : null}
+        </View>
 
-      <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-        {question.title}
-      </Text>
+        <View style={styles.options} accessibilityRole="radiogroup">
+          {question.mode === 'multi' && question.noneLabel ? (
+            <ChoiceButton
+              label={question.noneLabel}
+              role="checkbox"
+              selected={isNoneSelected}
+              onPress={() => handleSelectNone(question)}
+              style={styles.optionFull}
+            />
+          ) : null}
 
-      {question.mode === 'multi' ? (
-        <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          {question.helper}
-        </Text>
-      ) : null}
+          {question.options.map((option) => (
+            <ChoiceButton
+              key={String(option.value)}
+              label={option.label}
+              caption={option.caption}
+              role={question.mode === 'multi' ? 'checkbox' : 'radio'}
+              selected={
+                question.mode === 'single'
+                  ? answers[question.key] === option.value
+                  : (multiValues?.includes(String(option.value)) ?? false)
+              }
+              onPress={() =>
+                question.mode === 'single'
+                  ? handleSingleSelect(question.key, option.value)
+                  : handleMultiToggle(question, String(option.value))
+              }
+              style={isWide ? styles.optionWide : styles.optionFull}
+            />
+          ))}
+        </View>
+      </ScrollView>
 
-      <View style={styles.options} accessibilityRole="radiogroup">
-        {question.mode === 'multi' && question.noneLabel ? (
-          <ChoiceButton
-            label={question.noneLabel}
-            role="checkbox"
-            selected={isNoneSelected}
-            onPress={() => handleSelectNone(question)}
-            style={styles.optionFull}
+      <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
+        {question.mode === 'multi' ? (
+          <PrimaryButton
+            label="다음"
+            onPress={() => handleNext(question)}
+            disabled={!isAnswered(question, answers)}
           />
         ) : null}
-
-        {question.options.map((option) => (
-          <ChoiceButton
-            key={String(option.value)}
-            label={option.label}
-            caption={option.caption}
-            role={question.mode === 'multi' ? 'checkbox' : 'radio'}
-            selected={
-              question.mode === 'single'
-                ? answers[question.key] === option.value
-                : (multiValues?.includes(String(option.value)) ?? false)
-            }
-            onPress={() =>
-              question.mode === 'single'
-                ? handleSingleSelect(question.key, option.value)
-                : handleMultiToggle(question, String(option.value))
-            }
-            style={isWide ? styles.optionWide : styles.optionFull}
+        {stepIndex > 0 ? (
+          <PrimaryButton
+            label="이전"
+            variant="quiet"
+            size="compact"
+            onPress={handleBack}
+            style={styles.backButton}
           />
-        ))}
+        ) : null}
       </View>
-
-      {question.mode === 'multi' ? (
-        <PrimaryButton
-          label="다음"
-          onPress={() => handleNext(question)}
-          disabled={!isAnswered(question, answers)}
-        />
-      ) : null}
-
-      {stepIndex > 0 ? (
-        <PrimaryButton label="이전" variant="ghost" onPress={handleBack} style={styles.backButton} />
-      ) : null}
-    </ScrollView>
+    </View>
   );
 }
 
@@ -317,9 +320,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    justifyContent: 'center',
-    gap: Spacing.lg,
+    gap: Spacing.xl,
     paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.xl,
     maxWidth: 900,
     width: '100%',
     alignSelf: 'center',
@@ -332,31 +335,44 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   loadingText: {
-    fontSize: FontSize.label,
-    fontWeight: '700',
+    fontSize: FontSize.body,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },
   progress: {
     flexDirection: 'row',
-    gap: Spacing.sm,
+    gap: Spacing.xs,
   },
   progressSegment: {
     flex: 1,
-    height: 10,
+    height: 6,
     borderRadius: Radius.full,
-    backgroundColor: Colors.surfacePressed,
+    backgroundColor: Colors.surface,
   },
   progressSegmentActive: {
     backgroundColor: Colors.primary,
   },
+  headings: {
+    gap: Spacing.sm,
+  },
+  eyebrow: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.primary,
+  },
   title: {
     fontSize: FontSize.title,
-    fontWeight: '800',
+    fontWeight: '700',
+    lineHeight: FontSize.title * 1.3,
+    letterSpacing: LetterSpacing.title,
     color: Colors.text,
   },
   helper: {
-    fontSize: FontSize.body,
-    fontWeight: '600',
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },
   options: {
@@ -370,7 +386,7 @@ const styles = StyleSheet.create({
   },
   optionWide: {
     flexGrow: 1,
-    flexBasis: '45%',
+    flexBasis: '46%',
   },
   summary: {
     gap: Spacing.md,
@@ -379,43 +395,49 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    padding: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
     borderRadius: Radius.lg,
     backgroundColor: Colors.surface,
   },
   summaryTexts: {
     flex: 1,
-    gap: Spacing.xs,
+    gap: 2,
   },
   summaryLabel: {
-    fontSize: FontSize.body,
-    fontWeight: '600',
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },
   summaryValue: {
-    fontSize: FontSize.label,
-    fontWeight: '800',
+    fontSize: FontSize.subtitle,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.subtitle,
     color: Colors.text,
   },
-  editButton: {
-    minHeight: 72,
-    paddingHorizontal: Spacing.lg,
-    backgroundColor: Colors.background,
-  },
   errorBox: {
-    gap: Spacing.md,
     padding: Spacing.lg,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.md,
     backgroundColor: Colors.dangerFaint,
   },
   errorText: {
-    fontSize: FontSize.body,
-    fontWeight: '700',
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
     color: Colors.danger,
     textAlign: 'center',
   },
+  footer: {
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.md,
+    backgroundColor: Colors.background,
+    maxWidth: 900,
+    width: '100%',
+    alignSelf: 'center',
+  },
   backButton: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: Spacing.xxl,
+    alignSelf: 'center',
   },
 });

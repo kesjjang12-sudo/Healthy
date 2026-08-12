@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Colors, FontSize, Radius, Spacing } from '@/constants/theme';
+import { CheckMark } from '@/components/check-mark';
+import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import type { RoutineItem } from '@/lib/database.types';
 
 type Props = {
@@ -22,54 +23,48 @@ function formatTarget(item: RoutineItem): string {
 }
 
 export function RoutineCard({ item, order }: Props) {
+  const done = Boolean(item.is_completed);
+
   return (
     <View
-      style={[styles.card, item.is_completed && styles.cardDone]}
-      accessibilityLabel={`${order}번째 운동, ${item.name}, ${formatTarget(item)}`}>
-      <View style={[styles.badge, item.is_completed && styles.badgeDone]}>
-        <Text style={styles.badgeText} maxFontSizeMultiplier={1.2}>
-          {item.is_completed ? '✓' : order}
-        </Text>
+      style={styles.row}
+      accessibilityLabel={`${order}번째 운동, ${item.name}, ${formatTarget(item)}${done ? ', 완료' : ''}`}>
+      <View style={[styles.badge, done && styles.badgeDone]}>
+        {done ? (
+          <CheckMark size={26} thickness={3} />
+        ) : (
+          <Text style={styles.badgeText} maxFontSizeMultiplier={1.2}>
+            {order}
+          </Text>
+        )}
       </View>
 
       <View style={styles.texts}>
-        <Text style={styles.name} maxFontSizeMultiplier={1.3}>
+        <Text style={[styles.name, done && styles.nameDone]} maxFontSizeMultiplier={1.3}>
           {item.name}
         </Text>
         <Text style={styles.target} maxFontSizeMultiplier={1.3}>
           {formatTarget(item)}
+          {item.target_muscle ? `  ·  ${item.target_muscle}` : ''}
         </Text>
       </View>
-
-      {item.target_muscle ? (
-        <View style={styles.muscle}>
-          <Text style={styles.muscleText} maxFontSizeMultiplier={1.2}>
-            {item.target_muscle}
-          </Text>
-        </View>
-      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
-    padding: Spacing.lg,
+    gap: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
     borderRadius: Radius.lg,
-    borderWidth: 2,
-    borderColor: Colors.border,
     backgroundColor: Colors.surface,
   },
-  cardDone: {
-    borderColor: Colors.success,
-    backgroundColor: Colors.background,
-  },
   badge: {
-    width: 56,
-    height: 56,
+    width: 52,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: Radius.full,
@@ -79,33 +74,28 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success,
   },
   badgeText: {
-    fontSize: FontSize.label,
-    fontWeight: '800',
+    fontSize: FontSize.subtitle,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.subtitle,
     color: Colors.textOnPrimary,
   },
   texts: {
     flex: 1,
-    gap: Spacing.xs,
+    gap: 2,
   },
   name: {
-    fontSize: FontSize.label,
-    fontWeight: '800',
+    fontSize: FontSize.subtitle,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.subtitle,
     color: Colors.text,
   },
+  nameDone: {
+    color: Colors.textSecondary,
+  },
   target: {
-    fontSize: FontSize.body,
-    fontWeight: '700',
-    color: Colors.primary,
-  },
-  muscle: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.primaryFaint,
-  },
-  muscleText: {
-    fontSize: FontSize.body,
-    fontWeight: '700',
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },
 });

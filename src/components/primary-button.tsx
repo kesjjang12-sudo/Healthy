@@ -1,7 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 
-import { Colors, FontSize, Radius, Spacing, TouchTarget } from '@/constants/theme';
+import { Colors, FontSize, LetterSpacing, Radius, Spacing, TouchTarget } from '@/constants/theme';
 
 type Props = {
   label: string;
@@ -10,7 +10,9 @@ type Props = {
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
-  variant?: 'primary' | 'ghost';
+  /** primary = 파란 주 버튼, secondary = 회색 면, quiet = 배경 없는 보조 동작 */
+  variant?: 'primary' | 'secondary' | 'quiet';
+  size?: 'cta' | 'compact';
   style?: StyleProp<ViewStyle>;
 };
 
@@ -21,10 +23,10 @@ export function PrimaryButton({
   disabled = false,
   loading = false,
   variant = 'primary',
+  size = 'cta',
   style,
 }: Props) {
   const isInactive = disabled || loading;
-  const isGhost = variant === 'ghost';
 
   return (
     <Pressable
@@ -34,20 +36,26 @@ export function PrimaryButton({
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: isInactive, busy: loading }}
       style={({ pressed }) => [
-        styles.button,
-        isGhost && styles.ghost,
-        pressed && !isInactive && (isGhost ? styles.ghostPressed : styles.pressed),
-        isInactive && (isGhost ? styles.ghostInactive : styles.inactive),
+        styles.base,
+        size === 'compact' ? styles.compact : styles.cta,
+        variant === 'primary' && styles.primary,
+        variant === 'secondary' && styles.secondary,
+        pressed && !isInactive && pressedStyle[variant],
+        isInactive && (variant === 'primary' ? styles.primaryOff : styles.quietOff),
         style,
       ]}>
       {loading ? (
-        <ActivityIndicator color={isGhost ? Colors.primary : Colors.textOnPrimary} size="large" />
+        <ActivityIndicator
+          color={variant === 'primary' ? Colors.textOnPrimary : Colors.primary}
+          size="small"
+        />
       ) : (
         <Text
           style={[
             styles.label,
-            isGhost && styles.ghostLabel,
-            disabled && !isGhost && styles.inactiveLabel,
+            size === 'compact' && styles.compactLabel,
+            variant === 'primary' ? styles.labelOnPrimary : styles.labelOnSurface,
+            disabled && variant === 'primary' && styles.labelOff,
           ]}
           maxFontSizeMultiplier={1.3}
           numberOfLines={1}>
@@ -59,41 +67,56 @@ export function PrimaryButton({
 }
 
 const styles = StyleSheet.create({
-  button: {
-    minHeight: TouchTarget.min,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md,
+  base: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: Radius.lg,
+    borderRadius: Radius.md,
+  },
+  cta: {
+    minHeight: TouchTarget.cta,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+  },
+  compact: {
+    minHeight: 52,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.sm,
+  },
+  primary: {
     backgroundColor: Colors.primary,
   },
-  pressed: {
-    backgroundColor: Colors.primaryPressed,
-  },
-  inactive: {
-    backgroundColor: Colors.surfacePressed,
-  },
-  inactiveLabel: {
-    color: Colors.textDisabled,
-  },
-  ghostInactive: {
-    opacity: 0.4,
-  },
-  ghost: {
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: Colors.border,
-  },
-  ghostPressed: {
+  secondary: {
     backgroundColor: Colors.surface,
+  },
+  primaryOff: {
+    // 비활성은 회색 테두리가 아니라 옅은 면으로 표현한다.
+    backgroundColor: Colors.surface,
+  },
+  quietOff: {
+    opacity: 0.4,
   },
   label: {
     fontSize: FontSize.label,
     fontWeight: '700',
+    letterSpacing: LetterSpacing.subtitle,
+  },
+  compactLabel: {
+    fontSize: FontSize.caption,
+  },
+  labelOnPrimary: {
     color: Colors.textOnPrimary,
   },
-  ghostLabel: {
+  labelOnSurface: {
     color: Colors.textSecondary,
   },
+  labelOff: {
+    color: Colors.textDisabled,
+  },
+});
+
+const pressedStyle = StyleSheet.create({
+  primary: { backgroundColor: Colors.primaryPressed },
+  secondary: { backgroundColor: Colors.surfacePressed },
+  quiet: { backgroundColor: Colors.surface },
 });
