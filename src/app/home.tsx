@@ -1,4 +1,4 @@
-import { Redirect } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -25,6 +25,7 @@ export default function HomeScreen() {
 }
 
 function TodayRoutine({ user }: { user: User }) {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { signOut, touch } = useSession();
   const { result, isLoading, errorMessage, retry } = useDailyRoutine(user.id);
@@ -85,12 +86,20 @@ function TodayRoutine({ user }: { user: User }) {
 
             <View style={styles.list}>
               {result?.routines.map((item, index) => (
-                <RoutineCard key={item.routine_id} item={item} order={index + 1} />
+                <RoutineCard
+                  key={item.routine_id}
+                  item={item}
+                  order={index + 1}
+                  onPress={() => {
+                    touch();
+                    router.push(`/routine/${item.routine_id}`);
+                  }}
+                />
               ))}
             </View>
 
             <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-              기구 앞 QR 을 휴대폰으로 찍으면 하는 방법을 영상으로 보실 수 있어요.
+              운동을 누르면 하는 방법이 나옵니다. 기구 앞 QR 을 휴대폰으로 찍으셔도 됩니다.
             </Text>
           </>
         )}

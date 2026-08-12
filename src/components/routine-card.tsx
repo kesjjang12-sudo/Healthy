@@ -1,13 +1,15 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { CheckMark } from '@/components/check-mark';
-import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
+import { Colors, FontSize, LetterSpacing, Radius, Spacing, TouchTarget } from '@/constants/theme';
 import type { RoutineItem } from '@/lib/database.types';
 
 type Props = {
   item: RoutineItem;
   /** 화면에 보이는 순번 (1부터) */
   order: number;
+  /** 누르면 하는 방법 화면으로 넘어간다. 없으면 그냥 읽기만 하는 줄이 된다. */
+  onPress?: () => void;
 };
 
 /** 목표를 한 줄로 읽히게 만든다: "30kg · 3세트 · 10회" */
@@ -22,13 +24,12 @@ function formatTarget(item: RoutineItem): string {
   return parts.join(' · ');
 }
 
-export function RoutineCard({ item, order }: Props) {
+export function RoutineCard({ item, order, onPress }: Props) {
   const done = Boolean(item.is_completed);
+  const label = `${order}번째 운동, ${item.name}, ${formatTarget(item)}${done ? ', 완료' : ''}`;
 
-  return (
-    <View
-      style={styles.row}
-      accessibilityLabel={`${order}번째 운동, ${item.name}, ${formatTarget(item)}${done ? ', 완료' : ''}`}>
+  const body = (
+    <>
       <View style={[styles.badge, done && styles.badgeDone]}>
         {done ? (
           <CheckMark size={26} thickness={3} />
@@ -48,7 +49,25 @@ export function RoutineCard({ item, order }: Props) {
           {item.target_muscle ? `  ·  ${item.target_muscle}` : ''}
         </Text>
       </View>
-    </View>
+    </>
+  );
+
+  if (!onPress) {
+    return (
+      <View style={styles.row} accessibilityLabel={label}>
+        {body}
+      </View>
+    );
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}. 하는 방법 보기`}
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
+      {body}
+    </Pressable>
   );
 }
 
@@ -61,6 +80,11 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.lg,
     borderRadius: Radius.lg,
     backgroundColor: Colors.surface,
+    // 88pt 는 서서 조작하는 태블릿에서 손가락이 빗나가지 않는 최소 높이다.
+    minHeight: TouchTarget.min,
+  },
+  rowPressed: {
+    backgroundColor: Colors.surfacePressed,
   },
   badge: {
     width: 52,
