@@ -112,6 +112,11 @@ export type DailyRoutine = {
   is_completed: boolean | null;
   /** 루틴 내 운동 순서. 작을수록 먼저 한다 */
   sort_order: number;
+  /** 실제로 꽂은 무게(kg 환산). target_weight 는 처방값, 이건 실제 수행값. complete_routine 이 채운다. */
+  actual_weight_kg: number | null;
+  actual_reps: number | null;
+  completed_at: string | null;
+  points_awarded: number;
   created_at: string | null;
 };
 
@@ -151,11 +156,57 @@ export type GenerateRoutineResult = {
   routines: RoutineItem[];
 };
 
-/** sign_in_with_phone RPC 응답 */
+/** sign_in_with_phone RPC 응답. 폐기 대상 — kiosk_check_in 으로 대체됐다. */
 export type SignInResult = {
   user: User;
   is_new_user: boolean;
   attendance_logged: boolean;
+};
+
+/**
+ * kiosk_check_in RPC 응답.
+ * 개인정보(이름/포인트/루틴)는 절대 담지 않는다 — 태블릿 공용 화면에 뜨는 값이라서다.
+ */
+export type KioskCheckInResult = {
+  user_id: string;
+  needs_pairing: boolean;
+  /** needs_pairing 이 true 일 때만 존재 */
+  pairing_code?: string;
+  /** 이 헬스장에서의 방문 횟수(멤버십 기준, 오늘 재체크인해도 안 올라간다) */
+  visit_count: number;
+  /** 이미 다른 단지가 주 소속인 사람이 새 단지에서 처음 체크인한 경우 */
+  prompt_gym_switch: boolean;
+};
+
+export type PairingStatus = 'pending' | 'consumed' | 'expired' | 'not_found';
+
+export type GymMembershipSummary = {
+  apt_id: string;
+  apt_name: string;
+  is_primary: boolean;
+  visit_count: number;
+  first_checked_in_at: string;
+  last_checked_in_at: string;
+};
+
+export type WorkoutSummary = {
+  completed_count: number;
+  total_sets: number;
+  by_muscle: { target_muscle: string | null; completed_count: number; total_sets: number }[];
+};
+
+export type VisitStats = {
+  /** 평생 출석일 수(DAY_N 배지용). 헬스장 구분 없이 센다. */
+  total_days: number;
+  first_attended_at: string | null;
+};
+
+export type LeaderboardRow = {
+  rank: number;
+  /** 닉네임이 없으면 "회원xxxx" 형태로 대체된다. 전화번호 등 PII 는 절대 노출하지 않는다. */
+  nickname: string;
+  total_points: number;
+  is_me: boolean;
 };
 
 /** postgrest-js 가 임베디드 select 를 추론할 때 쓰는 외래키 정보 */
@@ -225,6 +276,7 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      /** @deprecated kiosk_check_in 으로 대체됐다. 클라이언트 호출부는 전부 제거됨(Phase 8 정리 대상). */
       sign_in_with_phone: {
         Args: { p_apt_id: string; p_phone_number: string; p_profile_data?: ProfileData };
         Returns: SignInResult;
@@ -234,7 +286,8 @@ export type Database = {
         Returns: User;
       };
       generate_daily_routine: {
-        Args: { p_user_id: string; p_date?: string };
+        // p_apt_id 를 안 주면 유저의 주 소속(users.apt_id)을 쓴다.
+        Args: { p_user_id: string; p_date?: string; p_apt_id?: string };
         Returns: GenerateRoutineResult;
       };
       get_daily_routine: {
@@ -244,6 +297,54 @@ export type Database = {
       verify_kiosk_pin: {
         Args: { p_apt_id: string; p_pin: string };
         Returns: boolean;
+      };
+      kiosk_check_in: {
+        Args: { p_apt_id: string; p_phone_number: string };
+        Returns: KioskCheckInResult;
+      };
+      confirm_gym_membership: {
+        Args: { p_user_id: string; p_apt_id: string; p_make_primary: boolean };
+        Returns: { user_id: string; apt_id: string; is_primary: boolean };
+      };
+      list_my_gym_memberships: {
+        Args: { p_user_id: string };
+        Returns: GymMembershipSummary[];
+      };
+      get_pairing_status: {
+        Args: { p_pairing_code: string };
+        Returns: { status: PairingStatus };
+      };
+      complete_pairing: {
+        Args: { p_pairing_code: string };
+        Returns: { user: User };
+      };
+      bootstrap_oauth_profile: {
+        Args: Record<string, never>;
+        Returns: { user: User };
+      };
+      complete_routine: {
+        Args: { p_routine_id: string; p_actual_weight_kg?: number; p_actual_reps?: number };
+        Returns: { routine: DailyRoutine; points_awarded: number };
+      };
+      get_todays_checkin: {
+        Args: { p_user_id: string };
+        Returns: { apt_id: string | null };
+      };
+      get_attendance_days: {
+        Args: { p_user_id: string; p_month: string };
+        Returns: string[];
+      };
+      get_workout_summary: {
+        Args: { p_user_id: string; p_from: string; p_to: string };
+        Returns: WorkoutSummary;
+      };
+      get_visit_stats: {
+        Args: { p_user_id: string };
+        Returns: VisitStats;
+      };
+      get_apartment_leaderboard: {
+        Args: { p_apt_id: string; p_limit?: number };
+        Returns: LeaderboardRow[];
       };
     };
     Enums: Record<string, never>;

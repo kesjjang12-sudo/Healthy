@@ -935,6 +935,998 @@ revoke all on function public.verify_kiosk_pin(uuid, text) from public;
 grant execute on function public.verify_kiosk_pin(uuid, text) to anon, authenticated;
 
 -- ═══════════════════════════════════════════════════════════
+-- 20260812000010_kiosk_checkin_rpc.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 키오스크 전용 체크인 RPC. sign_in_with_phone 을 대체한다.
+--
+-- 예전 sign_in_with_phone 은 "번호 입력 = 그 사람으로 로그인"이었고, 그 결과를
+-- 태블릿 화면에 그대로 띄웠다(개인 홈 화면). 이제 태블릿은 출입 체크인만 하고
+-- 개인 데이터는 절대 보여주지 않는다 — 그래서 이 함수는 이름·전화번호·포인트
+-- 같은 걸 하나도 돌려주지 않는다. 돌려주는 건 "몇 번째 방문인지" 숫자와,
+-- 폰 앱과 아직 연결이 안 됐으면 QR 페어링 코드뿐이다.
+--
+-- 예전과 또 다른 점: 번호가 "다른 단지에 등록돼 있으면 거부"하지 않는다. 이사
+-- 대응을 위해 한 사람이 여러 단지를 다닐 수 있게 됐기 때문이다. 대신 이미 다른
+-- 단지가 주 소속인 사람이 새 단지에서 처음 체크인하면 prompt_gym_switch 를
+-- true 로 돌려줘서, 태블릿이 "이 헬스장으로 바꾸시겠어요?"를 물어볼 수 있게 한다.
+
+create or replace function public.kiosk_check_in(
+    p_apt_id       uuid,
+    p_phone_number text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_phone                     text;
+    v_user                      public.users;
+    v_membership                public.user_gym_memberships;
+    v_is_new_membership         boolean := false;
+    v_has_existing_membership   boolean := false;
+    v_already_attended_today    boolean;
+    v_today                     date := (now() at time zone 'Asia/Seoul')::date;
+    v_pairing_code              text;
+    v_attempt                   integer;
+begin
+    v_phone := public.normalize_phone_number(p_phone_number);
+
+    if v_phone !~ '^01[016789][0-9]{7,8}$' then
+        raise exception 'INVALID_PHONE_NUMBER' using errcode = '22023';
+    end if;
+
+    if p_apt_id is null or not exists (
+        select 1 from public.apartments a where a.id = p_apt_id
+    ) then
+        raise exception 'APARTMENT_NOT_FOUND' using errcode = 'P0002';
+    end if;
+
+    select * into v_user from public.users u where u.phone_number = v_phone;
+
+    if not found then
+        insert into public.users (apt_id, phone_number) values (p_apt_id, v_phone)
+        returning * into v_user;
+    end if;
+
+    -- 이 단지 멤버십이 이미 있는지 (재방문인지 새 단지인지)
+    select * into v_membership
+    from public.user_gym_memberships m
+    where m.user_id = v_user.id and m.apt_id = p_apt_id;
+
+    if not found then
+        v_is_new_membership := true;
+        -- 불변식: 멤버십이 하나라도 있으면 그중 정확히 하나는 is_primary 다
+        -- (첫 멤버십은 항상 primary=true 로 생기기 때문). 그래서 "다른 멤버십이
+        -- 있는지"만 확인하면 "이미 주 소속이 있는지"를 알 수 있다.
+        v_has_existing_membership := exists (
+            select 1 from public.user_gym_memberships m where m.user_id = v_user.id
+        );
+
+        insert into public.user_gym_memberships (user_id, apt_id, is_primary, visit_count)
+        values (v_user.id, p_apt_id, not v_has_existing_membership, 1)
+        returning * into v_membership;
+
+        if not v_has_existing_membership then
+            update public.users set apt_id = p_apt_id where id = v_user.id;
+        end if;
+    end if;
+
+    -- 하루/한 헬스장당 출석은 1회만 인정. visit_count 도 이 기준을 따라야 한다 —
+    -- 안 그러면 같은 날 실수로 두 번 찍었을 때 방문 횟수가 이중으로 올라간다.
+    v_already_attended_today := exists (
+        select 1 from public.attendance_logs l
+        where l.user_id = v_user.id
+          and l.apt_id = p_apt_id
+          and (l.attended_at at time zone 'Asia/Seoul')::date = v_today
+    );
+
+    if not v_already_attended_today then
+        insert into public.attendance_logs (user_id, apt_id) values (v_user.id, p_apt_id);
+
+        -- 방금 새로 만든 멤버십은 이미 visit_count=1 로 시작했으니 여기서 또
+        -- 올리지 않는다. 기존 멤버십이었을 때만, 그것도 오늘 처음 온 경우에만 올린다.
+        if not v_is_new_membership then
+            update public.user_gym_memberships
+            set visit_count = visit_count + 1, last_checked_in_at = now()
+            where id = v_membership.id
+            returning * into v_membership;
+        end if;
+    end if;
+
+    if v_user.auth_user_id is null then
+        for v_attempt in 1..5 loop
+            v_pairing_code := lpad(floor(random() * 1000000)::text, 6, '0');
+            begin
+                insert into public.device_pairings (pairing_code, candidate_user_id, apt_id, expires_at)
+                values (v_pairing_code, v_user.id, p_apt_id, now() + interval '3 minutes');
+                exit;
+            exception when unique_violation then
+                if v_attempt = 5 then
+                    raise exception 'PAIRING_CODE_GENERATION_FAILED' using errcode = 'P0004';
+                end if;
+            end;
+        end loop;
+
+        return jsonb_build_object(
+            'user_id', v_user.id,
+            'needs_pairing', true,
+            'pairing_code', v_pairing_code,
+            'visit_count', v_membership.visit_count,
+            'prompt_gym_switch', v_is_new_membership and v_has_existing_membership
+        );
+    end if;
+
+    return jsonb_build_object(
+        'user_id', v_user.id,
+        'needs_pairing', false,
+        'visit_count', v_membership.visit_count,
+        'prompt_gym_switch', v_is_new_membership and v_has_existing_membership
+    );
+end;
+$$;
+
+comment on function public.kiosk_check_in(uuid, text) is
+    '태블릿 출입 체크인. 개인정보(이름/포인트/루틴)는 절대 돌려주지 않는다 — user_id, 방문횟수, 페어링 필요 여부뿐.';
+
+revoke all on function public.kiosk_check_in(uuid, text) from public;
+grant execute on function public.kiosk_check_in(uuid, text) to anon, authenticated;
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260812000011_gym_membership_rpcs.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 이사(헬스장 변경) 대응 RPC 2종.
+--
+-- confirm_gym_membership 은 키오스크(체크인 직후 "이 헬스장으로 바꿀까요?" 프롬프트)
+-- 와 개인 폰 앱(프로필 탭의 소속 전환) 양쪽에서 호출된다. 그래서 anon 도 호출할 수
+-- 있게 열어 두되, authenticated 로 호출됐을 때는 자기 것만 바꿀 수 있게 막는다 —
+-- 로그인한 사람이 남의 user_id 를 넣어서 남의 소속을 바꿔버리면 안 되기 때문이다.
+-- anon(키오스크) 호출은 auth.uid() 자체가 없으니 이 검사를 건너뛴다 —
+-- kiosk_check_in 과 같은 신뢰 모델이다.
+
+create or replace function public.confirm_gym_membership(
+    p_user_id     uuid,
+    p_apt_id      uuid,
+    p_make_primary boolean
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_owner_auth_id uuid;
+begin
+    select auth_user_id into v_owner_auth_id from public.users where id = p_user_id;
+
+    if not found then
+        raise exception 'USER_NOT_FOUND' using errcode = 'P0002';
+    end if;
+
+    if auth.uid() is not null and v_owner_auth_id is distinct from auth.uid() then
+        raise exception 'FORBIDDEN' using errcode = '42501';
+    end if;
+
+    if not exists (
+        select 1 from public.user_gym_memberships where user_id = p_user_id and apt_id = p_apt_id
+    ) then
+        raise exception 'MEMBERSHIP_NOT_FOUND' using errcode = 'P0002';
+    end if;
+
+    if p_make_primary then
+        -- 부분 유니크 인덱스(user_id 당 is_primary=true 1개)를 지키려면
+        -- 기존 primary 를 먼저 내리고 새 걸 올려야 한다.
+        update public.user_gym_memberships set is_primary = false
+        where user_id = p_user_id and is_primary and apt_id <> p_apt_id;
+
+        update public.user_gym_memberships set is_primary = true
+        where user_id = p_user_id and apt_id = p_apt_id;
+
+        update public.users set apt_id = p_apt_id where id = p_user_id;
+    end if;
+
+    return jsonb_build_object('user_id', p_user_id, 'apt_id', p_apt_id, 'is_primary', p_make_primary);
+end;
+$$;
+
+comment on function public.confirm_gym_membership(uuid, uuid, boolean) is
+    '이 헬스장을 주 소속으로 바꿀지 결정한다. p_make_primary=false 면 "1회성 방문"으로 그냥 둔다(멤버십은 이미 kiosk_check_in 이 만들어 둔 상태).';
+
+revoke all on function public.confirm_gym_membership(uuid, uuid, boolean) from public;
+grant execute on function public.confirm_gym_membership(uuid, uuid, boolean) to anon, authenticated;
+
+
+-- 프로필 탭에서 "내 헬스장 목록" 보여줄 때 쓴다. 개인 앱 전용이라 authenticated 만
+-- 받고, p_user_id 가 본인 것인지 auth.uid() 로 반드시 확인한다(anon 은 아예 거부).
+
+create or replace function public.list_my_gym_memberships(p_user_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_owner_auth_id uuid;
+begin
+    if auth.uid() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+
+    select auth_user_id into v_owner_auth_id from public.users where id = p_user_id;
+
+    if not found or v_owner_auth_id is distinct from auth.uid() then
+        raise exception 'FORBIDDEN' using errcode = '42501';
+    end if;
+
+    return coalesce(
+        jsonb_agg(
+            jsonb_build_object(
+                'apt_id', m.apt_id,
+                'apt_name', a.name,
+                'is_primary', m.is_primary,
+                'visit_count', m.visit_count,
+                'first_checked_in_at', m.first_checked_in_at,
+                'last_checked_in_at', m.last_checked_in_at
+            )
+            order by m.is_primary desc, m.last_checked_in_at desc
+        ),
+        '[]'::jsonb
+    )
+    from public.user_gym_memberships m
+    join public.apartments a on a.id = m.apt_id
+    where m.user_id = p_user_id;
+end;
+$$;
+
+comment on function public.list_my_gym_memberships(uuid) is
+    '내가 다닌 헬스장 목록(주 소속 우선, 최근 방문순). 개인 앱 전용, 본인 것만 조회 가능.';
+
+revoke all on function public.list_my_gym_memberships(uuid) from public;
+grant execute on function public.list_my_gym_memberships(uuid) to authenticated;
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260812000012_pairing_rpcs.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- QR 페어링 완료 처리 + 카카오/구글 최초 로그인 시 프로필 생성.
+
+-- 페어링이 "병합"으로 끝나면(카카오로 먼저 가입한 계정이 이미 있어서, 키오스크가
+-- 번호로 만든 그림자 계정을 흡수하는 경우) 그림자 계정(users 행)이 지워진다.
+-- candidate_user_id 를 on delete cascade 로 두면 이 페어링 기록 자체가 같이
+-- 지워져서, 그 순간 키오스크가 상태를 조회하면 "없음(not_found)"으로 보여
+-- 방금 성공한 페어링을 실패로 착각하게 된다. 상태 조회는 PII 를 안 돌려주므로
+-- candidate_user_id 가 나중에 null 이 돼도 문제없다.
+alter table public.device_pairings
+    alter column candidate_user_id drop not null;
+
+alter table public.device_pairings
+    drop constraint device_pairings_candidate_user_id_fkey;
+
+alter table public.device_pairings
+    add constraint device_pairings_candidate_user_id_fkey
+    foreign key (candidate_user_id) references public.users(id) on delete set null;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 키오스크가 폴링하는 상태 조회. PII 없이 상태 문자열만.
+-- ─────────────────────────────────────────────────────────────
+
+create or replace function public.get_pairing_status(p_pairing_code text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_pairing public.device_pairings;
+begin
+    select * into v_pairing from public.device_pairings where pairing_code = p_pairing_code;
+
+    if not found then
+        return jsonb_build_object('status', 'not_found');
+    elsif v_pairing.consumed_at is not null then
+        return jsonb_build_object('status', 'consumed');
+    elsif v_pairing.expires_at < now() then
+        return jsonb_build_object('status', 'expired');
+    else
+        return jsonb_build_object('status', 'pending');
+    end if;
+end;
+$$;
+
+comment on function public.get_pairing_status(text) is
+    '키오스크가 2초 간격으로 폴링. PII 없이 상태(pending/consumed/expired/not_found)만 돌려준다.';
+
+revoke all on function public.get_pairing_status(text) from public;
+grant execute on function public.get_pairing_status(text) to anon, authenticated;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 폰 앱이 QR 을 스캔한 뒤(또는 카메라 대신 코드를 직접 입력한 뒤) 호출.
+-- 지금 로그인된 auth.uid() 를 이 코드가 가리키는 계정에 연결한다.
+-- ─────────────────────────────────────────────────────────────
+
+create or replace function public.complete_pairing(p_pairing_code text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_pairing                    public.device_pairings;
+    v_candidate                  public.users;
+    v_existing                   public.users;
+    v_membership                 public.user_gym_memberships%rowtype;
+    v_candidate_primary_apt_id   uuid;
+    v_candidate_phone            varchar(20);
+    v_final_user                 public.users;
+begin
+    if auth.uid() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+
+    select * into v_pairing from public.device_pairings where pairing_code = p_pairing_code;
+
+    if not found then
+        raise exception 'PAIRING_NOT_FOUND' using errcode = 'P0002';
+    end if;
+    if v_pairing.consumed_at is not null then
+        raise exception 'PAIRING_ALREADY_USED' using errcode = 'P0005';
+    end if;
+    if v_pairing.expires_at < now() then
+        raise exception 'PAIRING_EXPIRED' using errcode = 'P0006';
+    end if;
+
+    select * into v_candidate from public.users where id = v_pairing.candidate_user_id;
+    select * into v_existing from public.users where auth_user_id = auth.uid();
+
+    if v_existing is null then
+        update public.users set auth_user_id = auth.uid() where id = v_candidate.id
+        returning * into v_final_user;
+
+    elsif v_existing.id = v_candidate.id then
+        -- 이미 페어링된 코드를 다시 스캔한 경우. no-op.
+        v_final_user := v_existing;
+
+    else
+        -- 병합: 카카오/구글로 먼저 만든 계정(v_existing)이 살아남고, 키오스크가
+        -- 번호로 만든 그림자 계정(v_candidate)은 흡수된다.
+        v_candidate_phone := v_candidate.phone_number;
+
+        select apt_id into v_candidate_primary_apt_id
+            from public.user_gym_memberships
+            where user_id = v_candidate.id and is_primary;
+
+        for v_membership in
+            select * from public.user_gym_memberships where user_id = v_candidate.id
+        loop
+            if exists (
+                select 1 from public.user_gym_memberships
+                where user_id = v_existing.id and apt_id = v_membership.apt_id
+            ) then
+                update public.user_gym_memberships
+                set visit_count = visit_count + v_membership.visit_count,
+                    first_checked_in_at = least(first_checked_in_at, v_membership.first_checked_in_at),
+                    last_checked_in_at = greatest(last_checked_in_at, v_membership.last_checked_in_at)
+                where user_id = v_existing.id and apt_id = v_membership.apt_id;
+
+                delete from public.user_gym_memberships where id = v_membership.id;
+            else
+                -- existing 의 주 소속을 침범하면 안 되니 옮겨 붙일 때는 무조건 false 로 둔다.
+                update public.user_gym_memberships
+                set user_id = v_existing.id, is_primary = false
+                where id = v_membership.id;
+            end if;
+        end loop;
+
+        -- existing 이 원래 멤버십이 하나도 없었다면(예: 카카오 가입 직후 첫 페어링),
+        -- 위에서 전부 is_primary=false 로 옮겨져 주 소속이 없는 상태가 된다.
+        -- candidate 가 원래 갖고 있던 주 소속을 물려준다.
+        if v_candidate_primary_apt_id is not null
+           and not exists (
+               select 1 from public.user_gym_memberships where user_id = v_existing.id and is_primary
+           )
+        then
+            update public.user_gym_memberships set is_primary = true
+                where user_id = v_existing.id and apt_id = v_candidate_primary_apt_id;
+            update public.users set apt_id = v_candidate_primary_apt_id where id = v_existing.id;
+        end if;
+
+        update public.attendance_logs set user_id = v_existing.id where user_id = v_candidate.id;
+
+        -- daily_routines 는 (user_id, equip_id, routine_date) 유니크라, 옮기기 전에
+        -- existing 이 이미 같은 조합을 갖고 있으면 candidate 쪽을 버린다(진짜 기록 보존).
+        delete from public.daily_routines d
+        where d.user_id = v_candidate.id
+          and exists (
+              select 1 from public.daily_routines d2
+              where d2.user_id = v_existing.id
+                and d2.equip_id = d.equip_id
+                and d2.routine_date = d.routine_date
+          );
+        update public.daily_routines set user_id = v_existing.id where user_id = v_candidate.id;
+
+        -- 그림자 계정을 지운다. candidate 의 phone_number 는 로컬 변수에 이미
+        -- 담아 뒀으니, 행이 사라진 뒤에 옮겨야 unique 제약이 잠깐이라도 안 깨진다.
+        delete from public.users where id = v_candidate.id;
+
+        if v_existing.phone_number is null then
+            update public.users set phone_number = v_candidate_phone where id = v_existing.id;
+        end if;
+
+        select * into v_final_user from public.users where id = v_existing.id;
+    end if;
+
+    update public.device_pairings
+    set consumed_at = now(), consumed_by_auth_user_id = auth.uid()
+    where id = v_pairing.id;
+
+    return jsonb_build_object('user', to_jsonb(v_final_user));
+end;
+$$;
+
+comment on function public.complete_pairing(text) is
+    'QR/코드 페어링을 완료한다. 이미 카카오·구글 계정이 있으면 그림자 계정(번호로만 있던 계정)을 흡수 병합한다.';
+
+revoke all on function public.complete_pairing(text) from public;
+grant execute on function public.complete_pairing(text) to authenticated;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 카카오/구글로 처음 로그인했을 때 public.users 행을 만든다(아직 전화번호 없음).
+-- 이미 있으면(재로그인) 그대로 돌려준다.
+-- ─────────────────────────────────────────────────────────────
+
+create or replace function public.bootstrap_oauth_profile()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_user public.users;
+begin
+    if auth.uid() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+
+    select * into v_user from public.users where auth_user_id = auth.uid();
+
+    if not found then
+        insert into public.users (auth_user_id) values (auth.uid()) returning * into v_user;
+    end if;
+
+    return jsonb_build_object('user', to_jsonb(v_user));
+end;
+$$;
+
+comment on function public.bootstrap_oauth_profile() is
+    '카카오/구글 로그인 직후 호출. 처음이면 전화번호 없는 프로필을 만들고, 있으면 그대로 돌려준다.';
+
+revoke all on function public.bootstrap_oauth_profile() from public;
+grant execute on function public.bootstrap_oauth_profile() to authenticated;
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260812000013_workout_completion.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 운동 완료 기록을 실제로 저장한다.
+--
+-- 지금까지 daily_routines.is_completed 는 컬럼만 있고 채워주는 곳이 없었다.
+-- 폰 앱의 세트 진행 화면(WorkoutSession)이 "몇 칸에 꽂았는지" 를 화면에만
+-- 보여주고 서버에 저장하지 않는 갭이 있었는데, 여기서 메운다.
+
+alter table public.daily_routines
+    add column if not exists actual_weight_kg numeric,
+    add column if not exists actual_reps integer,
+    add column if not exists completed_at timestamptz,
+    add column if not exists points_awarded integer not null default 0;
+
+comment on column public.daily_routines.actual_weight_kg is
+    '실제로 꽂은 무게(kg 환산). target_weight 는 처방값, 이건 실제 수행값.';
+comment on column public.daily_routines.actual_reps is '실제로 한 횟수.';
+
+
+create or replace function public.complete_routine(
+    p_routine_id       uuid,
+    p_actual_weight_kg numeric default null,
+    p_actual_reps      integer default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_routine       public.daily_routines;
+    v_owner_auth_id uuid;
+    -- 완료 1건당 지급 포인트. 지금은 난이도 무관 고정값이고, 나중에 세트·무게
+    -- 기준 차등 지급을 붙일 수 있는 자리로 남겨 둔다.
+    v_points        constant integer := 10;
+begin
+    if auth.uid() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+
+    select * into v_routine from public.daily_routines where id = p_routine_id;
+
+    if not found then
+        raise exception 'ROUTINE_NOT_FOUND' using errcode = 'P0002';
+    end if;
+
+    select auth_user_id into v_owner_auth_id from public.users where id = v_routine.user_id;
+
+    if v_owner_auth_id is distinct from auth.uid() then
+        raise exception 'FORBIDDEN' using errcode = '42501';
+    end if;
+
+    if v_routine.is_completed then
+        -- 이미 완료 처리된 걸 다시 눌러도 포인트를 또 주지 않는다.
+        return jsonb_build_object('routine', to_jsonb(v_routine), 'points_awarded', 0);
+    end if;
+
+    update public.daily_routines
+    set is_completed = true,
+        actual_weight_kg = p_actual_weight_kg,
+        actual_reps = p_actual_reps,
+        completed_at = now(),
+        points_awarded = v_points
+    where id = p_routine_id
+    returning * into v_routine;
+
+    update public.users set total_points = total_points + v_points where id = v_routine.user_id;
+
+    return jsonb_build_object('routine', to_jsonb(v_routine), 'points_awarded', v_points);
+end;
+$$;
+
+comment on function public.complete_routine(uuid, numeric, integer) is
+    '운동 완료 처리 + 포인트 지급. 개인 앱 전용, 본인 루틴만 완료할 수 있다.';
+
+revoke all on function public.complete_routine(uuid, numeric, integer) from public;
+grant execute on function public.complete_routine(uuid, numeric, integer) to authenticated;
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260812000014_generate_daily_routine_apt_param.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- generate_daily_routine 에 단지 파라미터를 추가한다.
+--
+-- 지금까지는 무조건 v_user.apt_id(주 소속)의 기구로만 루틴을 짰다. 이사 대응이
+-- 들어오면서 한 사람이 오늘은 A, 다음 주엔 이사 간 B 에서 운동할 수 있게 됐는데,
+-- 주 소속 하나만 보면 오늘 실제로 있는 헬스장과 다른 곳 기구로 루틴이 짜일 수
+-- 있다. p_apt_id 를 안 주면 예전처럼 주 소속을 쓰므로(coalesce), 기존 호출부는
+-- 코드 변경 없이 그대로 동작한다.
+--
+-- Postgres 는 매개변수 개수가 다르면 별개 함수로 취급하므로, 예전 2-인자 버전을
+-- 먼저 지우고 3-인자로 다시 만든다 — 안 지우면 두 버전이 동시에 남아 헷갈린다.
+
+drop function if exists public.generate_daily_routine(uuid, date);
+
+create or replace function public.generate_daily_routine(
+    p_user_id uuid,
+    p_date    date default current_date,
+    p_apt_id  uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_user          public.users;
+    v_target_apt_id uuid;
+    v_gender        text;
+    v_age_group     integer;
+    v_goals_key     text;
+    v_pain_areas    text[];
+    v_template_id   uuid;
+    v_created       integer := 0;
+    v_excluded      integer := 0;
+    v_unmapped      integer := 0;
+begin
+    select * into v_user from public.users u where u.id = p_user_id;
+    if not found then
+        raise exception 'USER_NOT_FOUND' using errcode = 'P0002';
+    end if;
+
+    v_target_apt_id := coalesce(p_apt_id, v_user.apt_id);
+
+    -- 프로필이 비어 있으면 가장 보수적인(=가벼운) 쪽으로 떨어뜨린다.
+    -- 설문을 덜 마친 사람에게 과한 무게를 주는 것보다 낫다.
+    v_gender := coalesce(v_user.profile_data->>'gender', 'female');
+    v_age_group := coalesce((v_user.profile_data->>'age_group')::integer, 70);
+
+    v_goals_key := coalesce(nullif(array_to_string(
+        array(
+            select jsonb_array_elements_text(v_user.profile_data->'goals') order by 1
+        ), '+'), ''), 'health');
+
+    v_pain_areas := case
+        when jsonb_typeof(v_user.profile_data->'pain_areas') = 'array'
+            then array(select jsonb_array_elements_text(v_user.profile_data->'pain_areas'))
+        else '{}'::text[]
+    end;
+
+    select t.id into v_template_id
+    from public.routine_templates t
+    where t.gender = v_gender and t.age_group = v_age_group and t.goals_key = v_goals_key;
+
+    -- 알 수 없는 조합이면 같은 성별·연령대의 '건강 유지'로 떨어뜨린다.
+    if not found then
+        select t.id into v_template_id
+        from public.routine_templates t
+        where t.gender = v_gender and t.age_group = v_age_group and t.goals_key = 'health';
+    end if;
+
+    if v_template_id is null then
+        raise exception 'ROUTINE_TEMPLATE_NOT_FOUND' using errcode = 'P0002';
+    end if;
+
+    -- 아픈 곳 때문에 통째로 빠진 운동 수
+    select count(*) into v_excluded
+    from public.routine_template_items i
+    where i.template_id = v_template_id
+      and exists (
+          select 1 from public.pain_area_rules r
+          where r.action = 'exclude'
+            and r.target_muscle = i.target_muscle
+            and r.pain_area = any (v_pain_areas)
+      );
+
+    -- 남았지만 이 단지에 해당 기구가 없어서 못 넣은 운동 수
+    select count(*) into v_unmapped
+    from public.routine_template_items i
+    where i.template_id = v_template_id
+      and not exists (
+          select 1 from public.pain_area_rules r
+          where r.action = 'exclude'
+            and r.target_muscle = i.target_muscle
+            and r.pain_area = any (v_pain_areas)
+      )
+      and not exists (
+          select 1 from public.equipments e
+          where e.apt_id = v_target_apt_id and e.target_muscle = i.target_muscle
+      );
+
+    with candidate as (
+        select
+            i.target_muscle,
+            i.sets,
+            i.reps,
+            i.weight_ratio,
+            i.sort_order,
+            -- derate 규칙이 여러 개 걸리면 가장 낮은 배율을 쓴다.
+            coalesce((
+                select min(r.weight_multiplier)
+                from public.pain_area_rules r
+                where r.action = 'derate'
+                  and r.target_muscle = i.target_muscle
+                  and r.pain_area = any (v_pain_areas)
+            ), 1.0) as derate
+        from public.routine_template_items i
+        where i.template_id = v_template_id
+          and not exists (
+              select 1 from public.pain_area_rules r
+              where r.action = 'exclude'
+                and r.target_muscle = i.target_muscle
+                and r.pain_area = any (v_pain_areas)
+          )
+    ),
+    matched as (
+        select c.*, e.id as equip_id, e.base_weight_kg, e.weight_step_kg
+        from candidate c
+        join lateral (
+            select e.*
+            from public.equipments e
+            where e.apt_id = v_target_apt_id and e.target_muscle = c.target_muscle
+            order by e.name
+            limit 1
+        ) e on true
+    ),
+    saved as (
+        insert into public.daily_routines
+            (user_id, equip_id, routine_date, target_weight, target_sets, target_reps, sort_order)
+        select
+            p_user_id,
+            m.equip_id,
+            p_date,
+            case
+                when m.base_weight_kg is null then null
+                -- 기구 조절 단위로 내림한다. 반올림하면 계산된 무게보다 무거워질 수 있는데,
+                -- 시니어에게는 조금 가벼운 쪽이 틀리는 방향으로 안전하다.
+                else greatest(
+                    m.weight_step_kg,
+                    (floor(m.base_weight_kg * m.weight_ratio * m.derate / m.weight_step_kg)
+                        * m.weight_step_kg)::integer
+                )
+            end,
+            m.sets,
+            m.reps,
+            m.sort_order
+        from matched m
+        order by m.sort_order
+        on conflict (user_id, equip_id, routine_date) do nothing
+        returning 1
+    )
+    select count(*) into v_created from saved;
+
+    return jsonb_build_object(
+        'routine_date', p_date,
+        'template', jsonb_build_object(
+            'gender', v_gender, 'age_group', v_age_group, 'goals_key', v_goals_key
+        ),
+        'created', v_created,
+        'excluded_by_pain', v_excluded,
+        'missing_equipment', v_unmapped,
+        -- 사람이 봐야 하는 경우: 아픈 곳 때문에 운동이 하나도 안 남았거나,
+        -- 아픈 곳을 3군데 이상 고른 분. 규칙 기반 자동 처방으로 감당할 범위를 넘는다.
+        'needs_trainer_review',
+            (v_created = 0 and v_excluded > 0) or coalesce(array_length(v_pain_areas, 1), 0) >= 3,
+        'routines', public.get_daily_routine(p_user_id, p_date)
+    );
+end;
+$$;
+
+comment on function public.generate_daily_routine(uuid, date, uuid) is
+    '미리 조합해 둔 템플릿 + 아픈 곳 규칙 + 단지 보유 기구로 하루 루틴을 만든다. p_apt_id 를 안 주면 주 소속을 쓴다.';
+
+revoke all on function public.generate_daily_routine(uuid, date, uuid) from public;
+grant execute on function public.generate_daily_routine(uuid, date, uuid) to anon, authenticated;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 오늘 실제로 체크인한 헬스장을 알아낸다. 개인 앱이 generate_daily_routine 을
+-- 부르기 전에 먼저 물어봐서, "오늘 있는 헬스장" 기구로 루틴을 짜게 한다.
+-- 오늘 체크인 기록이 없으면(직접 앱만 켠 경우) 주 소속으로 대체한다.
+-- ─────────────────────────────────────────────────────────────
+
+create or replace function public.get_todays_checkin(p_user_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_owner_auth_id uuid;
+    v_apt_id        uuid;
+    v_today         date := (now() at time zone 'Asia/Seoul')::date;
+begin
+    if auth.uid() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+
+    select auth_user_id into v_owner_auth_id from public.users where id = p_user_id;
+    if not found or v_owner_auth_id is distinct from auth.uid() then
+        raise exception 'FORBIDDEN' using errcode = '42501';
+    end if;
+
+    select l.apt_id into v_apt_id
+    from public.attendance_logs l
+    where l.user_id = p_user_id
+      and (l.attended_at at time zone 'Asia/Seoul')::date = v_today
+    order by l.attended_at desc
+    limit 1;
+
+    if v_apt_id is null then
+        select apt_id into v_apt_id from public.users where id = p_user_id;
+    end if;
+
+    return jsonb_build_object('apt_id', v_apt_id);
+end;
+$$;
+
+comment on function public.get_todays_checkin(uuid) is
+    '오늘 체크인한 헬스장(없으면 주 소속)을 돌려준다. 개인 앱 전용, 본인 것만.';
+
+revoke all on function public.get_todays_checkin(uuid) from public;
+grant execute on function public.get_todays_checkin(uuid) to authenticated;
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260812000015_attendance_and_analysis_rpcs.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 달력 / 분석 탭용 RPC 3종. 전부 개인 앱 전용(authenticated), 본인 것만 조회 가능.
+
+create or replace function public.get_attendance_days(p_user_id uuid, p_month date)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_owner_auth_id uuid;
+begin
+    if auth.uid() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+
+    select auth_user_id into v_owner_auth_id from public.users where id = p_user_id;
+    if not found or v_owner_auth_id is distinct from auth.uid() then
+        raise exception 'FORBIDDEN' using errcode = '42501';
+    end if;
+
+    return coalesce(
+        jsonb_agg(distinct day order by day),
+        '[]'::jsonb
+    )
+    from (
+        select (attended_at at time zone 'Asia/Seoul')::date as day
+        from public.attendance_logs
+        where user_id = p_user_id
+          and date_trunc('month', (attended_at at time zone 'Asia/Seoul')::date) = date_trunc('month', p_month)
+    ) days;
+end;
+$$;
+
+comment on function public.get_attendance_days(uuid, date) is
+    '해당 월에 출석한 날짜 목록(어느 헬스장이든). 달력 탭에서 점 찍는 용도.';
+
+revoke all on function public.get_attendance_days(uuid, date) from public;
+grant execute on function public.get_attendance_days(uuid, date) to authenticated;
+
+
+-- 분석 탭 원시 집계. 칼로리 같은 가공값은 여기서 계산하지 않는다 — 공식이 데모
+-- 피드백으로 자주 바뀔 것이므로 클라이언트(analysis/calorie.ts)에서 계산한다.
+
+create or replace function public.get_workout_summary(p_user_id uuid, p_from date, p_to date)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_owner_auth_id  uuid;
+    v_completed_count integer;
+    v_total_sets      integer;
+    v_by_muscle       jsonb;
+begin
+    if auth.uid() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+
+    select auth_user_id into v_owner_auth_id from public.users where id = p_user_id;
+    if not found or v_owner_auth_id is distinct from auth.uid() then
+        raise exception 'FORBIDDEN' using errcode = '42501';
+    end if;
+
+    select count(*), coalesce(sum(d.target_sets), 0)
+    into v_completed_count, v_total_sets
+    from public.daily_routines d
+    where d.user_id = p_user_id and d.is_completed
+      and d.routine_date between p_from and p_to;
+
+    select coalesce(
+        jsonb_agg(
+            jsonb_build_object(
+                'target_muscle', t.target_muscle,
+                'completed_count', t.completed_count,
+                'total_sets', t.total_sets
+            )
+            order by t.total_sets desc
+        ),
+        '[]'::jsonb
+    )
+    into v_by_muscle
+    from (
+        select e.target_muscle, count(*) as completed_count, coalesce(sum(d.target_sets), 0) as total_sets
+        from public.daily_routines d
+        join public.equipments e on e.id = d.equip_id
+        where d.user_id = p_user_id and d.is_completed
+          and d.routine_date between p_from and p_to
+        group by e.target_muscle
+    ) t;
+
+    return jsonb_build_object(
+        'completed_count', v_completed_count,
+        'total_sets', v_total_sets,
+        'by_muscle', v_by_muscle
+    );
+end;
+$$;
+
+comment on function public.get_workout_summary(uuid, date, date) is
+    '기간 내 완료 운동 원시 집계(완료 개수, 총 세트, 부위별). 칼로리 등 가공은 클라이언트가 한다.';
+
+revoke all on function public.get_workout_summary(uuid, date, date) from public;
+grant execute on function public.get_workout_summary(uuid, date, date) to authenticated;
+
+
+-- 운동 탭 상단 "DAY_N" 배지용. 어느 헬스장이든 상관없이 평생 출석한 날 수를 센다.
+
+create or replace function public.get_visit_stats(p_user_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_owner_auth_id      uuid;
+    v_total_days         integer;
+    v_first_attended_at  timestamptz;
+begin
+    if auth.uid() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+
+    select auth_user_id into v_owner_auth_id from public.users where id = p_user_id;
+    if not found or v_owner_auth_id is distinct from auth.uid() then
+        raise exception 'FORBIDDEN' using errcode = '42501';
+    end if;
+
+    select count(distinct (attended_at at time zone 'Asia/Seoul')::date), min(attended_at)
+    into v_total_days, v_first_attended_at
+    from public.attendance_logs
+    where user_id = p_user_id;
+
+    return jsonb_build_object(
+        'total_days', coalesce(v_total_days, 0),
+        'first_attended_at', v_first_attended_at
+    );
+end;
+$$;
+
+comment on function public.get_visit_stats(uuid) is
+    '평생 출석일 수(DAY_N 배지용)와 첫 출석일. 헬스장 구분 없이 센다.';
+
+revoke all on function public.get_visit_stats(uuid) from public;
+grant execute on function public.get_visit_stats(uuid) to authenticated;
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260812000016_ranking_rpc.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 랭킹 탭. 같은 아파트 단지 내에서만 비교한다(요구사항 확정: 전체 통합 랭킹 아님).
+-- 전화번호 등 PII 는 절대 안 돌려주고, 닉네임(없으면 회원+짧은 접미사)과 포인트만.
+
+create or replace function public.get_apartment_leaderboard(p_apt_id uuid, p_limit integer default 50)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_me uuid;
+begin
+    if auth.uid() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+
+    select id into v_me from public.users where auth_user_id = auth.uid();
+
+    return coalesce(
+        jsonb_agg(
+            jsonb_build_object(
+                'rank', lb.rnk,
+                'nickname', coalesce(lb.profile_data->>'nickname', '회원' || right(lb.id::text, 4)),
+                'total_points', lb.total_points,
+                'is_me', lb.id = v_me
+            )
+            order by lb.rnk
+        ),
+        '[]'::jsonb
+    )
+    from (
+        select
+            u.id, u.profile_data, u.total_points,
+            row_number() over (order by u.total_points desc, u.created_at asc) as rnk
+        from public.users u
+        join public.user_gym_memberships m on m.user_id = u.id and m.apt_id = p_apt_id
+    ) lb
+    -- 상위 p_limit 명 + 그 밖이어도 내 순위는 항상 포함(고정 행으로 보여주기 위해)
+    where lb.rnk <= p_limit or lb.id = v_me;
+end;
+$$;
+
+comment on function public.get_apartment_leaderboard(uuid, integer) is
+    '같은 단지 포인트 랭킹. 닉네임/포인트만 노출, 전화번호 등 PII 없음. 개인 앱 전용.';
+
+revoke all on function public.get_apartment_leaderboard(uuid, integer) from public;
+grant execute on function public.get_apartment_leaderboard(uuid, integer) to authenticated;
+
+-- ═══════════════════════════════════════════════════════════
 -- seed.sql — 시범단지 + 기구 5대 (테스트용)
 -- ═══════════════════════════════════════════════════════════
 
