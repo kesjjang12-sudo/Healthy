@@ -11,17 +11,23 @@ export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 export const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
 /**
- * 이 태블릿이 설치된 아파트 단지 id.
- * 지금은 빌드 시점 환경변수로 주입한다. 단지가 늘어나면 기기 최초 부팅 시
- * 관리자 코드로 단지를 고르고 AsyncStorage 에 저장하는 방식으로 바꾼다.
+ * 예전에 태블릿의 단지를 정하던 값. 이제는 태블릿이 최초 설정 때 등록 코드로
+ * 받아 기기에 저장한다(device-role/storage) — 그래야 앱 빌드 하나로 여러 단지를
+ * 감당한다. 빌드에 박힌 값은 단지마다 앱을 새로 빌드해야 했다.
+ *
+ * 남겨 두는 이유는 이미 설치된 태블릿 때문이다. 그 기기들엔 저장된 단지가
+ * 없으므로, 지금까지 실제로 쓰던 이 값을 새 형식으로 옮길 때 한 번 읽는다.
+ * 그 외에는 아무도 이 값을 쓰지 않는다.
  */
-export const APT_ID = process.env.EXPO_PUBLIC_FITROUTINE_APT_ID ?? '';
+export const LEGACY_APT_ID = process.env.EXPO_PUBLIC_FITROUTINE_APT_ID ?? '';
 
-/** 비어 있는 환경변수 이름들. 하나라도 있으면 앱을 정상 구동할 수 없다. */
+/**
+ * 비어 있는 환경변수 이름들. 하나라도 있으면 앱을 정상 구동할 수 없다.
+ * 단지 id 는 여기 없다 — 이제 필수가 아니다.
+ */
 export const MISSING_ENV: string[] = [
   ['EXPO_PUBLIC_SUPABASE_URL', SUPABASE_URL],
   ['EXPO_PUBLIC_SUPABASE_ANON_KEY', SUPABASE_ANON_KEY],
-  ['EXPO_PUBLIC_FITROUTINE_APT_ID', APT_ID],
 ]
   .filter(([, value]) => !value)
   .map(([name]) => name);

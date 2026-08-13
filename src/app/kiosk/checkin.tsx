@@ -10,7 +10,6 @@ import { CheckInError, kioskCheckIn } from '@/features/auth/kiosk-api';
 import { formatPhoneNumber, isValidPhoneNumber, PHONE_MAX_DIGITS } from '@/features/auth/phone';
 import { useDeviceRole } from '@/features/device-role/context';
 import type { KioskCheckInResult } from '@/lib/database.types';
-import { APT_ID } from '@/lib/env';
 
 /** 가로가 이만큼 넓으면 태블릿 가로 모드로 보고 2단 배치로 바꾼다. */
 const WIDE_LAYOUT_MIN_WIDTH = 900;
@@ -31,7 +30,9 @@ export default function KioskCheckinScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { role, isLoading: isRoleLoading } = useDeviceRole();
+  // aptId 는 이 태블릿이 최초 설정 때 받아 둔 단지다. 주민은 번호만 누르고,
+  // 그 사람이 어느 단지 사람인지는 이 값이 정한다.
+  const { role, aptId, aptName, isLoading: isRoleLoading } = useDeviceRole();
 
   const [digits, setDigits] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -68,11 +69,15 @@ export default function KioskCheckinScreen() {
       return;
     }
 
+    // 아래 가드가 이미 걸러내지만, 단지 없이 체크인을 쏘면 엉뚱한 곳에 출석이
+    // 남는 게 아니라 조용히 실패하는 편이 낫다.
+    if (!aptId) return;
+
     setIsSubmitting(true);
     setErrorMessage(null);
 
     try {
-      const checkIn = await kioskCheckIn(digits);
+      const checkIn = await kioskCheckIn(aptId, digits);
       setDigits('');
 
       if (checkIn.needs_pairing && checkIn.pairing_code) {
@@ -91,7 +96,7 @@ export default function KioskCheckinScreen() {
         // "이 헬스장으로 옮기셨나요?" 를 바로 물어본다 — 미루면 다음에 안 물어보게 된다.
         router.push({
           pathname: '/kiosk/membership-prompt',
-          params: { userId: checkIn.user_id, aptId: APT_ID },
+          params: { userId: checkIn.user_id, aptId },
         });
         return;
       }
@@ -104,11 +109,13 @@ export default function KioskCheckinScreen() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [digits, reset, router]);
+  }, [aptId, digits, reset, router]);
 
   useEffect(() => reset, [reset]);
 
-  if (!isRoleLoading && role !== 'kiosk') {
+  // 단지가 없는 키오스크는 있을 수 없다(설정 화면이 둘을 같이 정한다). 그래도
+  // 저장값이 손상된 경우엔 엉뚱한 단지로 체크인하느니 설정을 다시 받는다.
+  if (!isRoleLoading && (role !== 'kiosk' || !aptId)) {
     return <Redirect href="/device-setup" />;
   }
 
@@ -150,9 +157,18 @@ export default function KioskCheckinScreen() {
 
   const prompt = (
     <View style={styles.promptBlock}>
-      <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-        안녕하세요{'\n'}전화번호를 눌러주세요
-      </Text>
+      <View style={styles.titleBlock}>
+        {/* 관리사무소가 태블릿이 옳은 단지로 설정됐는지 눈으로 확인할 수 있게
+            둔다. 예전 방식으로 설정된 기기는 단지 이름을 모르므로 비어 있다. */}
+        {aptName ? (
+          <Text style={styles.aptName} maxFontSizeMultiplier={1.3}>
+            {aptName}
+          </Text>
+        ) : null}
+        <Text style={styles.title} maxFontSizeMultiplier={1.2}>
+          안녕하세요{'\n'}전화번호를 눌러주세요
+        </Text>
+      </View>
 
       <Text style={styles.display} maxFontSizeMultiplier={1.2} numberOfLines={1} adjustsFontSizeToFit>
         {typed}
@@ -237,6 +253,15 @@ const styles = StyleSheet.create({
   },
   promptBlock: {
     gap: Spacing.xl,
+  },
+  titleBlock: {
+    gap: Spacing.sm,
+  },
+  aptName: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.primary,
   },
   title: {
     fontSize: FontSize.title,

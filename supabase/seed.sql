@@ -1,5 +1,4 @@
 -- 로컬/개발용 시드 데이터.
--- apt_id 는 태블릿 앱의 EXPO_PUBLIC_FITROUTINE_APT_ID 와 맞춘다.
 
 insert into public.apartments (id, name, address)
 values (
@@ -8,6 +7,14 @@ values (
     '서울특별시 강남구 테헤란로 1'
 )
 on conflict (id) do nothing;
+
+-- 태블릿 최초 설정에 쓰는 값. 실제 단지는 등록 코드가 자동 생성되지만(랜덤 6자리),
+-- 시범단지만은 매번 조회하지 않게 고정해 둔다. 운영 단지에 이 PIN 을 그대로
+-- 쓰면 안 된다 — 코드는 공개돼도 되지만 PIN 은 관리사무소만 알아야 한다.
+update public.apartments
+set enroll_code    = 'TEST24',
+    kiosk_pin_hash = crypt('1234', gen_salt('bf'))
+where id = '11111111-1111-4111-8111-111111111111';
 
 -- base_weight_kg 는 "표준 성인 남성 시작 무게" 기준이다. 여기에 연령대·성별·목적·
 -- 아픈 곳 배율이 곱해져 개인별 무게가 나오므로, 단지마다 기구 사양에 맞춰 조정한다.

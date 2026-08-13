@@ -57,6 +57,7 @@ QR 페어링(그 헬스장에 물리적으로 가서 3분 안에 스캔해야 �
 | `equipments` | 기구와 시범 영상. `qr_code_val` 로 QR 스캔 시 조회 |
 | `daily_routines` | 유저별 하루 루틴. `actual_weight_kg`/`actual_reps`/`points_awarded` 는 완료 시 채워짐 |
 | `attendance_logs` | 출석 기록. `apt_id` 로 그날 어느 헬스장이었는지도 남긴다 |
+| `kiosk_enroll_attempts` | 단지 등록 실패 기록. PIN 무차별 대입을 막는 용도로만 쓰고 성공하면 지워진다 |
 
 마이그레이션은 `supabase/migrations/` 에 순서대로 있다. `supabase/setup.sql` 은 전부
 합쳐 둔 단일 실행용 파일이다(뒤에서 설명).
@@ -80,6 +81,8 @@ QR 페어링(그 헬스장에 물리적으로 가서 3분 안에 스캔해야 �
 | `20260812000015_attendance_and_analysis_rpcs.sql` | 달력·분석 탭용 RPC 3종 |
 | `20260812000016_ranking_rpc.sql` | `get_apartment_leaderboard`(같은 단지만) |
 | `20260812000017_drop_sign_in_with_phone.sql` | 옛 인증 RPC 제거 |
+| … | (18~23은 랭킹 기준·기구 조회·유산소·재설치 복구·실시간 체크인) |
+| `20260812000024_kiosk_apartment_enrollment.sql` | `apartments.enroll_code`, `resolve_apartment_for_kiosk` — 태블릿이 단지를 스스로 기억 |
 
 ### 루틴 생성: 런타임 AI 호출 없음
 
@@ -137,7 +140,8 @@ pain_area_rules 적용 → apt_id 의 보유 기구로 치환 → daily_routines
 | RPC | 호출 주체 | 하는 일 |
 | --- | --- | --- |
 | `kiosk_check_in(p_apt_id, p_phone_number)` | 키오스크(anon) | 체크인. 이름·포인트 등 PII 절대 반환 안 함. 페어링 필요 시 코드 발급 |
-| `verify_kiosk_pin(p_apt_id, p_pin)` | 키오스크(anon) | 기기를 키오스크로 설정할 때 PIN 확인 |
+| `resolve_apartment_for_kiosk(p_enroll_code, p_pin)` | 키오스크(anon) | 태블릿 최초 설정. 단지 코드+PIN 확인 후 `apt_id` 반환. 실패는 예외가 아니라 `status` 로 온다 |
+| `verify_kiosk_pin(p_apt_id, p_pin)` | 키오스크(anon) | **[deprecated]** 구버전 앱 호환용 |
 | `confirm_gym_membership(p_user_id, p_apt_id, p_make_primary)` | 키오스크 또는 개인 앱 | 주 소속 전환("이 헬스장으로 옮기셨나요?") |
 | `get_pairing_status(p_pairing_code)` | 키오스크(anon, 폴링) | PII 없이 상태(pending/consumed/expired)만 |
 | `complete_pairing(p_pairing_code)` | 개인 앱(authenticated) | QR 페어링 완료, 필요 시 그림자 계정 병합 |
@@ -186,8 +190,9 @@ cp .env.example .env
 ```
 
 `Project Settings → API` 에서 **Project URL** 과 **anon public** 키를 복사해 넣는다.
-`EXPO_PUBLIC_FITROUTINE_APT_ID` 는 `select id from apartments;` 로 확인한다 (시드를 그대로
-썼다면 `.env.example` 의 값이 맞다).
+`EXPO_PUBLIC_FITROUTINE_APT_ID` 는 이제 선택값이다. 태블릿은 최초 설정 때 단지 등록
+코드를 입력해 자기 단지를 기억하므로(아래 참고), 새로 설치하는 기기에는 필요 없다.
+이미 이 값이 박힌 채로 설치된 태블릿을 새 형식으로 옮길 때만 한 번 읽힌다.
 
 `.env` 값은 `EXPO_PUBLIC_` 접두사라 번들에 그대로 박힌다. **service_role key 는 절대 넣지 말 것.**
 값이 비어 있으면 앱이 빨간 에러 대신 "설정이 필요합니다" 안내 화면을 띄운다.
@@ -225,8 +230,8 @@ npx eas build --profile preview --platform android   # 설치용 .apk
 
 ### 4) 확인할 흐름
 
-1. **태블릿을 키오스크로 설정**: 최초 실행 시 "헬스장 입구 태블릿" 선택 → PIN 확인(단지에
-   PIN을 아직 안 정했으면 아무 값이나 통과됨) → 체크인 화면 고정
+1. **태블릿을 키오스크로 설정**: 최초 실행 시 "헬스장 입구 태블릿" 선택 → 단지 코드
+   `TEST24` → 관리자 PIN `1234` → 체크인 화면 고정(상단에 단지 이름이 뜬다)
 2. **태블릿에서 새 번호로 체크인**: 처음 보는 번호를 누르면 QR + 6자리 코드가 뜬다
 3. **폰을 개인 앱으로 설정**: 다른 기기(또는 시크릿 창)에서 "제 휴대폰입니다" 선택 →
    로그인 화면에서 **전화번호로 시작하기** → 카메라로 태블릿 QR을 찍거나 코드를 직접 입력
@@ -236,6 +241,39 @@ npx eas build --profile preview --platform android   # 설치용 .apk
 
 설문에서 아픈 곳을 **무릎**으로 고르면 레그 프레스가 목록에서 빠지는 게 보이고,
 3군데 이상 고르면 트레이너 상담 안내가 뜬다.
+
+### 5) 단지를 새로 추가하려면
+
+앱은 전국 공용 빌드 하나다. 단지가 늘어도 앱을 다시 빌드하지 않는다 — 태블릿이 최초
+설정 때 "단지 등록 코드"를 입력해 자기 `apt_id` 를 받아 기기에 저장하고, 그 뒤로는 그
+값으로 체크인한다. **주민이 어느 단지 사람인지는 이 값이 정한다.**
+
+주민에게는 단지를 고르게 하지 않는다. 소속이 자기신고가 되면 아무 단지나 골라 남의
+순위표에 낄 수 있다. 소속의 근거는 "그 태블릿 앞에 실제로 섰다"는 사실 하나뿐이다.
+
+```sql
+-- 1) 단지를 만든다. 등록 코드는 자동 생성된다(헷갈리는 I/L/O/0/1 을 뺀 6자리).
+insert into public.apartments (name, address)
+values ('○○아파트', '서울특별시 ...')
+returning id, enroll_code;
+
+-- 2) 관리자 PIN 을 정한다. 이걸 안 하면 태블릿이 "아직 관리자 PIN이 설정되지 않았습니다" 로 막힌다.
+update public.apartments
+set kiosk_pin_hash = crypt('원하는PIN', gen_salt('bf'))
+where enroll_code = '위에서-나온-코드';
+
+-- 3) 그 단지의 기구를 등록한다(apt_id 는 1)에서 나온 값).
+insert into public.equipments (apt_id, qr_code_val, name, ...) values ...;
+```
+
+관리사무소에는 **등록 코드와 PIN 두 개**만 알려주면 된다. 태블릿에서 "헬스장 입구
+태블릿" → 코드 → PIN 순으로 입력하면 설치가 끝난다.
+
+코드는 공개돼도 되지만 PIN 은 관리사무소만 알아야 한다 — 둘을 모두 아는 사람은 그 단지의
+태블릿을 자처할 수 있다. 코드 하나당 15분에 10회까지만 시도할 수 있고, 넘으면 잠긴다.
+
+> 시범단지(`supabase/seed.sql`)는 코드 `TEST24` / PIN `1234` 로 고정돼 있다.
+> **운영 단지에 이 PIN 을 그대로 쓰지 말 것.**
 
 ## 3. 지금까지 만든 것
 
