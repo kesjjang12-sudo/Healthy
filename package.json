@@ -9,7 +9,9 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:push": "node scripts/apply-sql.mjs",
+    "db:check": "node scripts/apply-sql.mjs --check"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "~2.2.0",
