@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Keypad } from '@/components/keypad';
 import { PrimaryButton } from '@/components/primary-button';
+import { WeightSuggestionCard } from '@/components/weight-suggestion-card';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
 import {
@@ -82,10 +83,19 @@ export default function RoutineDetailScreen() {
     );
   }
 
-  return <WorkoutSession item={item} onExit={goBack} />;
+  return <WorkoutSession item={item} onExit={goBack} onWeightChanged={retry} />;
 }
 
-function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => void }) {
+function WorkoutSession({
+  item,
+  onExit,
+  onWeightChanged,
+}: {
+  item: RoutineItem;
+  onExit: () => void;
+  /** 무게를 바꾸면 처방값이 달라지므로 루틴을 다시 불러와야 한다. */
+  onWeightChanged: () => void;
+}) {
   const insets = useSafeAreaInsets();
   const isCardio = isCardioItem(item);
 
@@ -131,7 +141,7 @@ function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => voi
   const body = isFinished ? (
     <FinishedView item={item} pin={pin} pointsAwarded={pointsAwarded} saveError={saveError} />
   ) : session.phase === 'ready' ? (
-    <ReadyView item={item} />
+    <ReadyView item={item} onWeightChanged={onWeightChanged} />
   ) : session.phase === 'working' ? (
     <WorkingView item={item} currentSet={session.currentSet} totalSets={totalSets} />
   ) : session.phase === 'resting' ? (
@@ -192,7 +202,7 @@ function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => voi
 }
 
 /** 시작 전: 무엇을 어떻게 하는 운동인지 */
-function ReadyView({ item }: { item: RoutineItem }) {
+function ReadyView({ item, onWeightChanged }: { item: RoutineItem; onWeightChanged: () => void }) {
   const volume = formatVolume(item);
   const isCardio = isCardioItem(item);
 
@@ -207,6 +217,13 @@ function ReadyView({ item }: { item: RoutineItem }) {
         <Text style={styles.title} maxFontSizeMultiplier={1.2}>
           {item.name}
         </Text>
+        {/* 외래어 이름 아래에 한글 직역과 종류를 붙인다. "체스트 프레스"가
+            뭔지 모르셔도 "가슴 밀기"는 바로 읽힌다. */}
+        {item.name_ko || item.station_kind ? (
+          <Text style={styles.subName} maxFontSizeMultiplier={1.3}>
+            {[item.name_ko, item.station_kind].filter(Boolean).join('  ·  ')}
+          </Text>
+        ) : null}
         {/* 기구 이름만으로는 뭘 하는 기구인지 안 와닿는 분이 많다. 설명이
             채워져 있으면 그대로 보여준다 — 없으면 억지로 지어내지 않는다. */}
         {item.description ? (
@@ -215,6 +232,30 @@ function ReadyView({ item }: { item: RoutineItem }) {
           </Text>
         ) : null}
       </View>
+
+      {/* 지난 기록에 근거한 무게 제안. 시작 버튼을 누르기 전에 보여야 오늘
+          것에 반영된다 — 끝난 뒤에 뜨면 다음에나 쓸 얘기가 된다. */}
+      {item.weight_suggestion ? (
+        <WeightSuggestionCard
+          equipId={item.equip_id}
+          suggestion={item.weight_suggestion}
+          onApplied={onWeightChanged}
+        />
+      ) : null}
+
+      {/* "이 부위는 굳이 안 해도 되는데" 하고 건너뛰거나, 잘못 알고 있는 정보
+          때문에 피하는 운동이 있다. 하는 방법보다 먼저 이유를 보여준다 —
+          납득이 안 되면 방법을 읽을 이유도 없다. */}
+      {item.why_it_matters ? (
+        <View style={styles.whyBox}>
+          <Text style={styles.whyTitle} maxFontSizeMultiplier={1.2}>
+            왜 해야 하나요?
+          </Text>
+          <Text style={styles.whyText} maxFontSizeMultiplier={1.3}>
+            {item.why_it_matters}
+          </Text>
+        </View>
+      ) : null}
 
       {volume ? (
         <View style={styles.hero}>
@@ -503,6 +544,31 @@ const styles = StyleSheet.create({
     lineHeight: FontSize.body * 1.5,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
+  },
+  subName: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textTertiary,
+  },
+  whyBox: {
+    gap: Spacing.sm,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.surface,
+  },
+  whyTitle: {
+    fontSize: FontSize.body,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.primary,
+  },
+  whyText: {
+    fontSize: FontSize.body,
+    fontWeight: '500',
+    lineHeight: FontSize.body * 1.6,
+    letterSpacing: LetterSpacing.body,
+    color: Colors.text,
   },
   name: {
     fontSize: FontSize.subtitle,

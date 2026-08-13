@@ -25,7 +25,10 @@ export default function KioskPairingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { role, isLoading: isRoleLoading } = useDeviceRole();
-  const { code } = useLocalSearchParams<{ code: string }>();
+  // relink = 이미 쓰던 분이 폰을 바꿨거나 앱이 로그아웃돼 다시 잇는 경우.
+  // 이때 "처음 오셨네요"가 뜨면 자기 계정이 날아간 줄 알고 겁먹는다.
+  const { code, mode } = useLocalSearchParams<{ code: string; mode?: string }>();
+  const isRelink = mode === 'relink';
 
   const [status, setStatus] = useState<PairingStatus>('pending');
 
@@ -92,11 +95,16 @@ export default function KioskPairingScreen() {
           <>
             <View style={styles.headings}>
               <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-                처음 오셨네요
+                {isRelink ? '다시 연결할게요' : '처음 오셨네요'}
               </Text>
               <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
                 휴대폰 카메라로 이 화면을 찍어주세요
               </Text>
+              {isRelink ? (
+                <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+                  기록은 그대로 남아 있어요. 이 폰을 계정에 다시 잇기만 하면 됩니다.
+                </Text>
+              ) : null}
             </View>
 
             <View style={styles.qrBox}>

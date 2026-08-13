@@ -27,9 +27,19 @@ function formatTarget(item: RoutineItem): string {
   return parts.join(' · ');
 }
 
+/**
+ * "[가슴] 체스트 프레스" 처럼 부위를 앞에 붙인다.
+ *
+ * 외래어 이름만 있으면 시니어에게는 무슨 운동인지 안 와닿는다. 부위를 앞에
+ * 세우면 이름을 몰라도 어디를 쓰는 운동인지는 바로 읽힌다.
+ */
+function formatName(item: RoutineItem): string {
+  return item.target_muscle ? `[${item.target_muscle}] ${item.name}` : item.name;
+}
+
 export function RoutineCard({ item, order, onPress }: Props) {
   const done = Boolean(item.is_completed);
-  const label = `${order}번째 운동, ${item.name}, ${formatTarget(item)}${done ? ', 완료' : ''}`;
+  const label = `${order}번째 운동, ${formatName(item)}, ${formatTarget(item)}${done ? ', 완료' : ''}`;
 
   const body = (
     <>
@@ -45,11 +55,17 @@ export function RoutineCard({ item, order, onPress }: Props) {
 
       <View style={styles.texts}>
         <Text style={[styles.name, done && styles.nameDone]} maxFontSizeMultiplier={1.3}>
-          {item.name}
+          {formatName(item)}
         </Text>
+        {/* 한글 직역과 종류(맨몸/케이블 등). 종류는 "기구 앞에 줄이 길면
+            맨몸으로 대신할 수 있다"를 판단하는 근거이기도 하다. */}
+        {item.name_ko || item.station_kind ? (
+          <Text style={styles.subName} maxFontSizeMultiplier={1.3}>
+            {[item.name_ko, item.station_kind].filter(Boolean).join('  ·  ')}
+          </Text>
+        ) : null}
         <Text style={styles.target} maxFontSizeMultiplier={1.3}>
           {formatTarget(item)}
-          {item.target_muscle ? `  ·  ${item.target_muscle}` : ''}
         </Text>
       </View>
     </>
@@ -118,6 +134,12 @@ const styles = StyleSheet.create({
   },
   nameDone: {
     color: Colors.textSecondary,
+  },
+  subName: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textTertiary,
   },
   target: {
     fontSize: FontSize.caption,

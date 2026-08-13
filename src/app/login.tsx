@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PrimaryButton } from '@/components/primary-button';
 import { StrengthHookBanner } from '@/components/strength-hook-banner';
 import { Colors, FontSize, LetterSpacing, Spacing } from '@/constants/theme';
-import { signInAsTestUser } from '@/features/auth/anonymous';
+import { isEmptyProfile, signInAsTestUser } from '@/features/auth/anonymous';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { OAuthError, signInWithGoogle, signInWithKakao } from '@/features/auth/oauth';
 import { pickHookMessage } from '@/features/content/hooking-copy';
@@ -22,7 +22,7 @@ type Provider = 'kakao' | 'google';
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, isRestoring } = useAuthSession();
+  const { user, isRestoring, isAnonymous } = useAuthSession();
 
   const [pendingProvider, setPendingProvider] = useState<Provider | null>(null);
   const [isTestSigningIn, setIsTestSigningIn] = useState(false);
@@ -53,15 +53,23 @@ export default function LoginScreen() {
 
     try {
       await signInAsTestUser();
+      // 위의 Redirect 는 이제 껍데기 익명 세션을 통과시키지 않는다. 테스트
+      // 계정은 정확히 그 상태이므로, 여기서 직접 보낸다.
+      router.replace('/onboarding');
     } catch {
       setErrorMessage('테스트 로그인에 실패했습니다. 다시 시도해 주세요.');
     } finally {
       setIsTestSigningIn(false);
     }
-  }, []);
+  }, [router]);
 
   // 로그인 성공 시 auth-session 이 세션 변화를 감지해 프로필을 가져오면 여기로 반영된다.
-  if (!isRestoring && user) {
+  //
+  // 단, 익명 세션에 빈 프로필만 달려 있는 상태는 로그인이 아니다. 페어링을
+  // 중간에 그만두면 그런 세션이 남는데, 그걸 로그인으로 치면 "전화번호 가입을
+  // 눌렀다가 뒤로 나왔을 뿐인데 성별·나이를 묻는" 일이 벌어진다. 테스트 계정은
+  // 아래 handleTestSignIn 에서 직접 이동시키므로 이 문을 열어 둘 필요가 없다.
+  if (!isRestoring && user && !(isAnonymous && isEmptyProfile(user))) {
     return <Redirect href={user.profile_data?.onboarded_at ? '/workout' : '/onboarding'} />;
   }
 
@@ -107,9 +115,12 @@ export default function LoginScreen() {
           label="전화번호로 시작하기"
           variant="quiet"
           size="compact"
-          onPress={() => router.push('/pair-scan')}
+          onPress={() => router.push('/phone-login')}
           disabled={pendingProvider !== null || isTestSigningIn}
         />
+        <Text style={styles.footerNote} maxFontSizeMultiplier={1.3}>
+          문자로 인증번호를 받아 로그인합니다
+        </Text>
         {/* 카카오/구글 심사 전, 페어링할 키오스크가 없을 때 쓰는 임시 테스트
             경로. 실제 출시 전에 빼야 한다. */}
         <PrimaryButton
@@ -160,6 +171,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: LetterSpacing.body,
     color: Colors.danger,
+    textAlign: 'center',
+  },
+  footerNote: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textTertiary,
     textAlign: 'center',
   },
   footer: {

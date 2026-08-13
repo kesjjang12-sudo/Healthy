@@ -36,6 +36,19 @@ export async function listMyGymMemberships(userId: string): Promise<GymMembershi
 }
 
 /**
+ * 지금 로그인한 사람을 이 단지 헬스장에 소속시킨다.
+ *
+ * 태블릿을 한 번도 안 거친 계정은 users.apt_id 가 null 이라, 루틴을 짤 때
+ * "이 단지 기구" 가 0건으로 잡혀 오늘의 운동이 통째로 비어 버린다.
+ * 출석은 만들지 않는다 — 출석은 실제로 왔다는 기록이라 여기서 올리면 안 된다.
+ */
+export async function joinGym(aptId: string): Promise<void> {
+  const { error } = await supabase.rpc('join_gym', { p_apt_id: aptId });
+
+  if (error) throw toMembershipError(error);
+}
+
+/**
  * 이 헬스장을 주 소속으로 바꾼다 — 곧 "이사했다"는 뜻이므로 다니던 다른
  * 헬스장에서는 빠진다(그 단지 랭킹에 더는 안 나온다). 방문 이력과 운동 기록은
  * 그대로 남는다.

@@ -122,13 +122,14 @@ export type Equipment = {
   apt_id: string | null;
   qr_code_val: string;
   name: string;
-  /** "가슴 밀기"처럼 동작으로 읽히는 우리말 이름. 비어 있으면 name 을 그대로 쓴다. */
+  /** 운동 이름의 한글 직역. 예: 체스트 프레스 → "가슴 밀기". 없으면 화면에서 생략한다. */
   name_ko: string | null;
+  /** 머신 / 스미스머신 / 케이블 / 맨몸 / 유산소 */
+  station_kind: string | null;
   /** 시니어가 이해하기 쉬운 한 줄 설명. 비어 있으면 화면에서 부위명으로 대체한다. */
   description: string | null;
+  why_it_matters: string | null;
   target_muscle: string | null;
-  /** 머신 / 케이블 / 스미스머신 / 맨몸 / 유산소 — 헬스장에서 기구를 찾을 때의 단서 */
-  station_kind: string | null;
   video_url: string;
   /** 표준 성인 남성 시작 무게. null 이면 무게 없이 맨몸으로 안내한다 */
   base_weight_kg: number | null;
@@ -169,7 +170,13 @@ export type RoutineItem = {
   routine_id: string;
   equip_id: string;
   name: string;
+  /** 운동 이름의 한글 직역. 예: 체스트 프레스 → "가슴 밀기". 없으면 화면에서 생략한다. */
+  name_ko: string | null;
+  /** 머신 / 스미스머신 / 케이블 / 맨몸 / 유산소 */
+  station_kind: string | null;
   description: string | null;
+  /** 이 운동을 왜 해야 하는지. 건너뛰기 쉬운 부위와 흔한 오해를 짚어 준다. */
+  why_it_matters: string | null;
   target_muscle: string | null;
   video_url: string;
   qr_code_val: string;
@@ -179,6 +186,19 @@ export type RoutineItem = {
   /** 유산소 처방 시간(분). 근력 운동이면 null — target_reps 와 동시에 채워지지 않는다. */
   target_duration_minutes: number | null;
   is_completed: boolean;
+  /**
+   * 지난 수행 기록에 근거한 무게 조정 제안. 제안일 뿐 적용은 본인이 누를 때만
+   * 된다. 근거가 없거나(처음 하는 기구) 무게 개념이 없는 운동이면 null.
+   */
+  weight_suggestion: WeightSuggestion | null;
+};
+
+/** weight_suggestion RPC 결과. 올릴지 내릴지와 그 근거 문구. */
+export type WeightSuggestion = {
+  action: 'increase' | 'decrease';
+  current_kg: number;
+  suggested_kg: number;
+  reason: string;
 };
 
 /**
@@ -190,7 +210,12 @@ export type RoutineItem = {
 export type EquipmentLookup = {
   id: string;
   name: string;
+  /** 운동 이름의 한글 직역. 예: 체스트 프레스 → "가슴 밀기". 없으면 화면에서 생략한다. */
+  name_ko: string | null;
+  /** 머신 / 스미스머신 / 케이블 / 맨몸 / 유산소 */
+  station_kind: string | null;
   description: string | null;
+  why_it_matters: string | null;
   target_muscle: string | null;
   video_url: string;
   qr_code_val: string;
@@ -379,6 +404,14 @@ export type Database = {
           /** 이번 전환으로 떠나게 된 헬스장 수. 화면이 안내 문구를 정할 때 쓴다. */
           left_count: number;
         };
+      };
+      join_gym: {
+        Args: { p_apt_id: string };
+        Returns: { user_id: string; apt_id: string | null; is_primary: boolean };
+      };
+      apply_weight_suggestion: {
+        Args: { p_equip_id: string; p_weight_kg: number };
+        Returns: { equip_id: string; weight_kg: number };
       };
       list_my_gym_memberships: {
         Args: { p_user_id: string };

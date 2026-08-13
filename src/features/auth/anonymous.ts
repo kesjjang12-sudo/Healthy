@@ -1,4 +1,25 @@
+import { joinGym } from '@/features/gym-membership/api';
+import type { User } from '@/lib/database.types';
+import { LEGACY_APT_ID } from '@/lib/env';
 import { supabase } from '@/lib/supabase';
+
+/**
+ * "아직 아무것도 아닌 계정"인지.
+ *
+ * bootstrap_oauth_profile 은 세션만 있으면 users 행을 만든다 — 익명 세션도
+ * 예외가 아니다. 그래서 페어링을 중간에 그만두거나 정리(signOut)가 네트워크
+ * 문제로 실패하면, 로그인한 적 없는 사람에게 빈 프로필이 남는다. 그 행이
+ * 남아 있으면 로그인 화면은 "로그인된 사람"으로 보고 설문으로 넘겨버린다.
+ *
+ * 전화번호가 붙었으면(페어링 완료) 또는 설문을 마쳤으면 실체가 있는 계정이다.
+ * 카카오/구글 계정은 둘 다 없어도 실체가 있으므로, 이 판정은 반드시 익명
+ * 세션인지와 함께 봐야 한다 — 이 함수만으로 지우면 갓 가입한 카카오 회원이
+ * 날아간다.
+ */
+export function isEmptyProfile(user: User | null): boolean {
+  if (!user) return true;
+  return !user.phone_number && !user.profile_data?.onboarded_at;
+}
 
 /**
  * ensureSessionForPairing 이 이번 호출에서 세션을 새로 만들었는지.
@@ -62,4 +83,24 @@ export async function discardSessionIfCreated(
  */
 export async function signInAsTestUser(): Promise<void> {
   await ensureSessionForPairing();
+
+  // 세션만 만들면 users.apt_id 가 null 이라 루틴이 0개로 나온다 — 루틴은
+  // "이 단지에 있는 기구"로 짜이는데 소속이 없으면 기구가 하나도 안 잡힌다.
+  // 테스트 계정은 태블릿에 갈 일이 없으니 여기서 바로 소속을 붙여 준다.
+  //
+  // 프로필은 bootstrap_oauth_profile 이 만든다. auth-session 이 세션 변화를
+  // 감지해 그걸 부르는데, join_gym 은 users 행이 이미 있어야 하므로
+  // (USER_NOT_FOUND) 순서를 여기서 확실히 해 둔다.
+  await supabase.rpc('bootstrap_oauth_profile');
+
+  // 소속 붙이기가 실패해도 로그인 자체는 살린다.
+  //
+  // join_gym 은 서버에 마이그레이션이 올라가야 존재하는 함수다. 아직 안 올린
+  // 상태에서 이걸 그냥 await 하면 함수가 없다는 오류가 그대로 올라와,
+  // "테스트 로그인에 실패했습니다"가 뜨고 로그인 자체를 못 하게 된다 —
+  // 소속이 없으면 루틴이 비는 것뿐인데 그것 때문에 문을 막을 이유가 없다.
+  // 루틴이 비면 운동 탭이 이유를 설명해 준다.
+  // 시범단지 id 는 이제 필수 env 가 아니다(태블릿이 등록 코드로 단지를 정한다).
+  // 값이 비어 있으면 소속 없이 두고, 운동 탭이 이유를 설명하게 한다.
+  if (LEGACY_APT_ID) await joinGym(LEGACY_APT_ID).catch(() => {});
 }
