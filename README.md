@@ -372,11 +372,58 @@ GoTrue 가 실제로는 JWT 클레임에서 읽어 오는 함수라 로컬에서
 select set_config('request.jwt.claim.sub', '<auth.users 의 id>', false);
 ```
 
-## 5. 다음 단계
+## 5. 로그인 수단 켜기 (대시보드 작업)
 
-1. **실제 SMS 인증** — 전화번호 로그인은 지금 QR 페어링(물리적 근접)으로 신원을 대신
-   확인한다. Twilio 등으로 실제 SMS OTP 를 붙이면 폰 소유 증명이 완성된다
-2. **카카오 전화번호 스코프** — 사업자등록 + 카카오 심사를 받으면, 카카오 로그인만으로
+코드는 다 들어가 있고, 남은 건 대시보드 설정뿐이다. 안 켜면 앱에서 눌러도 실패한다.
+
+### 5-1. 카카오 (무료, 먼저 하는 걸 권함)
+
+1. [developers.kakao.com](https://developers.kakao.com) → 애플리케이션 추가
+2. 카카오 로그인 활성화 → Redirect URI 에 아래 주소 등록
+   ```
+   https://<프로젝트ref>.supabase.co/auth/v1/callback
+   ```
+3. Supabase 대시보드 → Authentication → Sign In / Providers → Kakao 켜고
+   REST API 키와 Client Secret 입력
+
+한 번 연결해 두면 폰을 바꾸거나 앱을 지워도 계정을 잃지 않는다. QR 재연결이 필요 없다.
+
+### 5-2. 전화번호 SMS 인증 (솔라피)
+
+Supabase 가 기본 제공하는 SMS 업체는 Twilio / MessageBird / Vonage / TextLocal 뿐이라
+솔라피는 목록에 없다. 대신 **Send SMS Hook** 으로 붙인다 — OTP 생성·검증은 Supabase 가
+그대로 하고, "문자 보내는 순간"만 우리 함수로 가로채 솔라피로 넘긴다.
+구현체는 `supabase/functions/send-sms/` 에 있다.
+
+1. 솔라피에서 **발신번호를 사전 등록**한다. 국내법상 등록되지 않은 번호로는 못 보낸다
+2. Edge Function 배포
+   ```bash
+   npx supabase functions deploy send-sms --no-verify-jwt
+   ```
+   `--no-verify-jwt` 가 필요하다 — 이 함수는 사용자가 아니라 Supabase Auth 가 부르므로
+   사용자 JWT 가 없다. 대신 훅 서명으로 검증한다(함수 안에서 처리)
+3. 시크릿 넣기 (**코드나 .env 에 적어 커밋하지 말 것**)
+   ```bash
+   npx supabase secrets set SOLAPI_API_KEY=... SOLAPI_API_SECRET=... SOLAPI_SENDER=029302266
+   ```
+4. Supabase 대시보드 → Authentication → Hooks → **Send SMS Hook** 켜고 위 함수 선택.
+   거기서 발급되는 서명 키(`v1,whsec_...`)를 시크릿으로 추가
+   ```bash
+   npx supabase secrets set SEND_SMS_HOOK_SECRET='v1,whsec_...'
+   ```
+5. Authentication → Sign In / Providers → **Phone** 활성화
+
+함수 테스트는 실제 발송 없이 돌아간다(fetch 를 가로채 인증 헤더·본문만 검증):
+```bash
+deno test --allow-env --allow-net supabase/functions/send-sms/
+```
+
+Phone 을 안 켠 상태에서 앱이 인증번호를 요청하면 "문자 인증이 아직 준비되지 않았습니다"
+가 뜬다 — 조용히 실패하지 않는다.
+
+## 6. 다음 단계
+
+1. **카카오 전화번호 스코프** — 사업자등록 + 카카오 심사를 받으면, 카카오 로그인만으로
    전화번호까지 자동으로 받아 QR 페어링 없이도 매핑이 끝난다. `oauth.ts` 에 훅 지점만
    남겨 뒀다
 3. **유산소 실제 수행 기록** — `generate_daily_routine` 은 40대 이상에게 유산소(트레드밀
