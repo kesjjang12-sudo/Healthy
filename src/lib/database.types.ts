@@ -91,6 +91,10 @@ export type UserGymMembership = {
   visit_count: number;
   first_checked_in_at: string;
   last_checked_in_at: string;
+  /** 이사로 이 헬스장을 떠난 시각. null 이면 지금 다니는 곳 — 랭킹은 null 인 행만 센다. */
+  left_at: string | null;
+  /** "오늘만 방문했어요" 응답 시각. 30일간은 이사 여부를 다시 묻지 않는다. */
+  switch_declined_at: string | null;
   created_at: string | null;
 };
 
@@ -220,7 +224,10 @@ export type KioskCheckInResult = {
   pairing_code?: string;
   /** 이 헬스장에서의 방문 횟수(멤버십 기준, 오늘 재체크인해도 안 올라간다) */
   visit_count: number;
-  /** 이미 다른 단지가 주 소속인 사람이 새 단지에서 처음 체크인한 경우 */
+  /**
+   * 주 소속이 아닌 헬스장에 온 날. "이 헬스장으로 옮기셨나요?"를 물어야 한다.
+   * 같은 날 두 번 찍거나, "오늘만 방문했어요"를 누른 뒤 30일간은 false 다.
+   */
   prompt_gym_switch: boolean;
 };
 
@@ -233,6 +240,8 @@ export type GymMembershipSummary = {
   visit_count: number;
   first_checked_in_at: string;
   last_checked_in_at: string;
+  /** 이사로 떠난 곳이면 그 시각. 목록에는 남지만 그 단지 랭킹에는 안 나온다. */
+  left_at: string | null;
 };
 
 export type WorkoutSummary = {
@@ -359,7 +368,13 @@ export type Database = {
       };
       confirm_gym_membership: {
         Args: { p_user_id: string; p_apt_id: string; p_make_primary: boolean };
-        Returns: { user_id: string; apt_id: string; is_primary: boolean };
+        Returns: {
+          user_id: string;
+          apt_id: string;
+          is_primary: boolean;
+          /** 이번 전환으로 떠나게 된 헬스장 수. 화면이 안내 문구를 정할 때 쓴다. */
+          left_count: number;
+        };
       };
       list_my_gym_memberships: {
         Args: { p_user_id: string };

@@ -103,8 +103,17 @@ export default function ProfileTab() {
       try {
         await makeGymPrimary(user!.id, aptId);
         setUser({ ...user!, apt_id: aptId });
+
+        // 주 소속을 옮기면 다니던 다른 헬스장은 떠난 것으로 처리된다(그 단지
+        // 랭킹에서 빠진다). 목록에서는 사라지지 않는다 — 방문 이력은 기록이다.
+        const leftAt = new Date().toISOString();
         setMemberships(
-          (current) => current?.map((m) => ({ ...m, is_primary: m.apt_id === aptId })) ?? current,
+          (current) =>
+            current?.map((m) =>
+              m.apt_id === aptId
+                ? { ...m, is_primary: true, left_at: null }
+                : { ...m, is_primary: false, left_at: m.left_at ?? leftAt },
+            ) ?? current,
         );
       } catch (error) {
         setMembershipError(error instanceof GymMembershipError ? error.message : '바꾸지 못했습니다.');
@@ -195,16 +204,22 @@ export default function ProfileTab() {
             {memberships.map((m) => (
               <View key={m.apt_id} style={styles.gymRow}>
                 <View style={styles.gymTexts}>
-                  <Text style={styles.gymName} maxFontSizeMultiplier={1.3}>
+                  <Text
+                    style={[styles.gymName, m.left_at ? styles.gymNameLeft : null]}
+                    maxFontSizeMultiplier={1.3}>
                     {m.apt_name}
                   </Text>
                   <Text style={styles.gymMeta} maxFontSizeMultiplier={1.3}>
-                    {m.is_primary ? '주 소속' : `방문 ${m.visit_count}회`}
+                    {m.is_primary
+                      ? '주 소속'
+                      : m.left_at
+                        ? `이전에 다니던 곳 · 방문 ${m.visit_count}회`
+                        : `방문 ${m.visit_count}회`}
                   </Text>
                 </View>
                 {!m.is_primary ? (
                   <PrimaryButton
-                    label="주 소속으로"
+                    label={m.left_at ? '다시 다니기' : '주 소속으로'}
                     variant="quiet"
                     size="compact"
                     loading={switchingAptId === m.apt_id}
@@ -320,6 +335,9 @@ const styles = StyleSheet.create({
     fontSize: FontSize.body,
     fontWeight: '700',
     color: Colors.text,
+  },
+  gymNameLeft: {
+    color: Colors.textSecondary,
   },
   gymMeta: {
     fontSize: FontSize.caption,
