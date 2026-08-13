@@ -36,6 +36,21 @@ export type ProfileData = {
   pain_areas?: PainArea[];
   /** 온보딩 설문 완료 여부 */
   onboarded_at?: string;
+  /**
+   * 마지막으로 받은 동의의 요약.
+   *
+   * 정본은 `user_consents` 테이블이다(동의·철회 이력 전체). 여기 두는 건
+   * 화면이 매번 이력을 조회하지 않고도 "이 사람에게 다시 동의를 받아야 하나"를
+   * 판단하기 위한 사본이다 — 로그인 직후 라우팅에서 쓰기 때문에 왕복을 한 번
+   * 줄이는 게 체감이 크다.
+   */
+  consent?: {
+    /** 동의할 때 보여준 문서/항목 구성의 버전 */
+    version?: string;
+    agreed_at?: string;
+    /** 선택 동의(아픈 곳)에 동의했는지 */
+    pain_areas?: boolean;
+  };
   [key: string]: Json | undefined;
 };
 
@@ -404,6 +419,22 @@ export type Database = {
       get_workout_summary: {
         Args: { p_user_id: string; p_from: string; p_to: string };
         Returns: WorkoutSummary;
+      };
+      record_consents: {
+        Args: { p_user_id: string; p_version: string; p_consents: Record<string, boolean> };
+        Returns: { user: User };
+      };
+      revoke_consent: {
+        Args: { p_user_id: string; p_consent_key: string };
+        Returns: { user: User };
+      };
+      get_my_consents: {
+        Args: { p_user_id: string };
+        Returns: Record<string, { agreed: boolean; version: string; recorded_at: string }>;
+      };
+      record_kiosk_consent: {
+        Args: { p_user_id: string; p_version: string };
+        Returns: void;
       };
       get_progress_summary: {
         Args: { p_user_id: string; p_days?: number };

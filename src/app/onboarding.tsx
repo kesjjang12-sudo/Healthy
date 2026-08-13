@@ -1,5 +1,5 @@
 import { Redirect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -15,13 +15,14 @@ import { PrimaryButton } from '@/components/primary-button';
 import { TextField } from '@/components/text-field';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
+import { needsConsent } from '@/features/legal/api';
 import { updateProfileData } from '@/features/onboarding/api';
 import {
-  CONFIRM_STEP_INDEX,
+  confirmStepIndex,
   findFirstUnansweredIndex,
   formatAnswer,
   isAnswered,
-  PROFILE_QUESTIONS,
+  questionsFor,
   type ProfileQuestion,
 } from '@/features/onboarding/questions';
 import type { ProfileData, User } from '@/lib/database.types';
@@ -48,6 +49,8 @@ export default function OnboardingScreen() {
 
   if (isRestoring) return null;
   if (!user) return <Redirect href="/login" />;
+  // 아픈 곳을 묻기 전에 동의를 받아야 한다.
+  if (needsConsent(user)) return <Redirect href="/consent" />;
   if (user.profile_data?.onboarded_at) return <Redirect href="/workout" />;
 
   return <OnboardingFlow user={user} />;
@@ -66,6 +69,10 @@ function OnboardingFlow({ user }: { user: User }) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { setUser, signOut } = useAuthSession();
+
+  // 아픈 곳에 동의하지 않으신 분께는 그 문항을 아예 띄우지 않는다.
+  const questions = useMemo(() => questionsFor(user.profile_data), [user.profile_data]);
+  const lastStepIndex = confirmStepIndex(questions);
 
   // 지난번에 중간에 나갔다면 남은 문항부터 이어서 묻는다.
   const [stepIndex, setStepIndex] = useState(() => findFirstUnansweredIndex(user.profile_data));
@@ -166,7 +173,7 @@ function OnboardingFlow({ user }: { user: User }) {
   }, [answers, router, setUser, user.id]);
 
   const isWide = width >= WIDE_LAYOUT_MIN_WIDTH;
-  const isConfirmStep = stepIndex >= CONFIRM_STEP_INDEX;
+  const isConfirmStep = stepIndex >= lastStepIndex;
 
   if (isSubmitting) {
     return (
@@ -182,8 +189,8 @@ function OnboardingFlow({ user }: { user: User }) {
   const progress = (
     <View
       style={styles.progress}
-      accessibilityLabel={`전체 ${CONFIRM_STEP_INDEX + 1}단계 중 ${Math.min(stepIndex, CONFIRM_STEP_INDEX) + 1}번째`}>
-      {[...PROFILE_QUESTIONS, null].map((item, index) => (
+      accessibilityLabel={`전체 ${lastStepIndex + 1}단계 중 ${Math.min(stepIndex, lastStepIndex) + 1}번째`}>
+      {[...questions, null].map((item, index) => (
         <View
           key={item?.key ?? 'confirm'}
           style={[styles.progressSegment, index <= stepIndex && styles.progressSegmentActive]}
@@ -217,7 +224,7 @@ function OnboardingFlow({ user }: { user: User }) {
           </View>
 
           <View style={styles.summary}>
-            {PROFILE_QUESTIONS.map((question, index) => (
+            {questions.map((question, index) => (
               <View key={question.key} style={styles.summaryRow}>
                 <View style={styles.summaryTexts}>
                   <Text style={styles.summaryLabel} maxFontSizeMultiplier={1.3}>
@@ -251,7 +258,7 @@ function OnboardingFlow({ user }: { user: User }) {
     );
   }
 
-  const question = PROFILE_QUESTIONS[stepIndex];
+  const question = questions[stepIndex];
   const multiValues = question.mode === 'multi' ? selectedValues(question, answers) : undefined;
   const isNoneSelected = multiValues?.length === 0;
 

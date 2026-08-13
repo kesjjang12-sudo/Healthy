@@ -7,6 +7,8 @@ import { Keypad } from '@/components/keypad';
 import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Spacing } from '@/constants/theme';
 import { CheckInError, kioskCheckIn } from '@/features/auth/kiosk-api';
+import { recordKioskConsent } from '@/features/legal/api';
+import { KIOSK_CONSENT_NOTICE } from '@/features/legal/consent-items';
 import { formatPhoneNumber, isValidPhoneNumber, PHONE_MAX_DIGITS } from '@/features/auth/phone';
 import { useDeviceRole } from '@/features/device-role/context';
 import type { KioskCheckInResult } from '@/lib/database.types';
@@ -74,6 +76,11 @@ export default function KioskCheckinScreen() {
     try {
       const checkIn = await kioskCheckIn(digits);
       setDigits('');
+
+      // 화면에 상시로 떠 있는 수집 고지에 대한 동의를 남긴다. 태블릿 앞에 줄이
+      // 서 있으므로 기록이 실패해도 체크인을 막지 않는다 — 기록이 목적이지
+      // 관문이 아니다.
+      void recordKioskConsent(checkIn.user_id).catch(() => {});
 
       if (checkIn.needs_pairing && checkIn.pairing_code) {
         // 처음 오신 분(또는 아직 폰 앱과 연결 안 된 분)은 바로 QR 화면으로.
@@ -200,6 +207,12 @@ export default function KioskCheckinScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
+        {/* 수집 고지는 버튼 바로 위에 상시로 둔다. 공용 태블릿에서 약관 전문을
+            스크롤하게 하는 건 줄을 세우는 일이라, 받는 항목이 전화번호 하나뿐인
+            이 화면에서는 그 한 줄을 늘 보이게 하는 편이 실제로 읽힌다. */}
+        <Text style={styles.notice} maxFontSizeMultiplier={1.3}>
+          {KIOSK_CONSENT_NOTICE}
+        </Text>
         <PrimaryButton
           label="체크인"
           onPress={() => void handleSubmit()}
@@ -215,6 +228,14 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  notice: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    lineHeight: FontSize.caption * 1.55,
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textTertiary,
+    textAlign: 'center',
   },
   content: {
     flexGrow: 1,

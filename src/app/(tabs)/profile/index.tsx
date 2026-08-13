@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +10,8 @@ import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/th
 import { useAuthSession } from '@/features/auth/auth-session';
 import { GymMembershipError, listMyGymMemberships, makeGymPrimary } from '@/features/gym-membership/api';
 import { getHealthConnectionStatus } from '@/features/health/provider';
+import { ConsentError, revokeConsent } from '@/features/legal/api';
+import { CONSENT_ITEMS } from '@/features/legal/consent-items';
 import { updateProfileData } from '@/features/onboarding/api';
 import { PROFILE_QUESTIONS } from '@/features/onboarding/questions';
 import type { GymMembershipSummary } from '@/lib/database.types';
@@ -28,6 +31,7 @@ const PROVIDER_LABELS: Record<string, string> = {
  */
 export default function ProfileTab() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { user, setUser, signOut } = useAuthSession();
 
   const [nickname, setNickname] = useState(user?.profile_data?.nickname ?? '');
@@ -36,6 +40,28 @@ export default function ProfileTab() {
   const [memberships, setMemberships] = useState<GymMembershipSummary[] | null>(null);
   const [membershipError, setMembershipError] = useState<string | null>(null);
   const [switchingAptId, setSwitchingAptId] = useState<string | null>(null);
+  const [isRevoking, setIsRevoking] = useState(false);
+  const [consentError, setConsentError] = useState<string | null>(null);
+
+  /**
+   * 선택 동의 철회.
+   *
+   * 서버가 기록만 남기는 게 아니라 저장된 아픈 곳 값도 실제로 지운다 —
+   * 개인정보처리방침에 "거두시면 바로 지웁니다"라고 적어 두고 안 지우면
+   * 그 방침이 거짓말이 된다.
+   */
+  const revokePainAreas = useCallback(async () => {
+    setIsRevoking(true);
+    setConsentError(null);
+
+    try {
+      setUser(await revokeConsent(user!.id, 'pain_areas'));
+    } catch (error) {
+      setConsentError(error instanceof ConsentError ? error.message : '잠시 후 다시 시도해 주세요.');
+    } finally {
+      setIsRevoking(false);
+    }
+  }, [setUser, user]);
 
   useEffect(() => {
     void supabase.auth.getSession().then(({ data }) => {
@@ -233,6 +259,56 @@ export default function ProfileTab() {
         ) : null}
       </View>
 
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
+          약관과 개인정보
+        </Text>
+
+        <View style={styles.legalRow}>
+          <PrimaryButton
+            label="이용약관"
+            variant="secondary"
+            size="compact"
+            style={styles.legalButton}
+            onPress={() => router.push('/legal/terms')}
+          />
+          <PrimaryButton
+            label="개인정보처리방침"
+            variant="secondary"
+            size="compact"
+            style={styles.legalButton}
+            onPress={() => router.push('/legal/privacy')}
+          />
+        </View>
+
+        {/* 선택 동의는 언제든 거둘 수 있어야 한다. 필수 동의는 여기 안 띄운다 —
+            그건 서비스를 안 쓰겠다는 뜻이라 탈퇴 경로로 처리해야 한다. */}
+        {user!.profile_data?.consent?.pain_areas === true ? (
+          <View style={styles.consentBox}>
+            <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+              {CONSENT_ITEMS.find((item) => item.key === 'pain_areas')?.declineNote}
+            </Text>
+            <PrimaryButton
+              label="아픈 곳 정보 동의 거두기"
+              variant="quiet"
+              size="compact"
+              loading={isRevoking}
+              onPress={() => void revokePainAreas()}
+            />
+          </View>
+        ) : (
+          <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+            아픈 곳 정보는 받고 있지 않습니다. 다시 받으시려면 문의해 주세요.
+          </Text>
+        )}
+
+        {consentError ? (
+          <Text style={styles.errorText} maxFontSizeMultiplier={1.3} accessibilityLiveRegion="polite">
+            {consentError}
+          </Text>
+        ) : null}
+      </View>
+
       {providerLabel ? (
         <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
           {providerLabel}로 로그인되어 있습니다.
@@ -247,6 +323,19 @@ export default function ProfileTab() {
 }
 
 const styles = StyleSheet.create({
+  legalRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  legalButton: {
+    flex: 1,
+  },
+  consentBox: {
+    gap: Spacing.sm,
+    padding: Spacing.lg,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surface,
+  },
   screen: {
     flex: 1,
     backgroundColor: Colors.background,

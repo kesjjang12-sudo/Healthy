@@ -134,8 +134,24 @@ export const PROFILE_QUESTIONS: readonly ProfileQuestion[] = [
   },
 ] as const;
 
-/** 설문 문항 뒤에 붙는 최종 확인 화면의 인덱스 */
-export const CONFIRM_STEP_INDEX = PROFILE_QUESTIONS.length;
+/**
+ * 이 사람에게 실제로 물어볼 문항.
+ *
+ * 아픈 곳은 건강에 관한 정보라 별도 동의를 받는데, 그 동의를 안 하신 분께는
+ * **묻지도 않아야 한다.** 물어보고 저장만 안 하는 건 동의 없이 수집한 것과
+ * 다르지 않다 — 화면에 띄우는 순간 답을 하시게 된다.
+ */
+export function questionsFor(
+  profile: Partial<ProfileData> | null | undefined,
+): readonly ProfileQuestion[] {
+  const allowsPainAreas = profile?.consent?.pain_areas === true;
+  return PROFILE_QUESTIONS.filter((question) => question.key !== 'pain_areas' || allowsPainAreas);
+}
+
+/** 최종 확인 화면의 인덱스. 문항 수가 사람마다 달라서 목록을 받아 센다. */
+export function confirmStepIndex(questions: readonly ProfileQuestion[]): number {
+  return questions.length;
+}
 
 /** 이 문항에 답을 했는지. 목적은 최소 1개, 아픈 곳은 "없습니다"(빈 배열)도 답으로 친다. */
 export function isAnswered(question: ProfileQuestion, values: Partial<ProfileData>): boolean {
@@ -154,8 +170,9 @@ export function isAnswered(question: ProfileQuestion, values: Partial<ProfileDat
  * 지난번에 중간에 나갔더라도 남은 문항부터 이어서 물을 수 있다.
  */
 export function findFirstUnansweredIndex(values: Partial<ProfileData> | null | undefined): number {
-  const index = PROFILE_QUESTIONS.findIndex((question) => !isAnswered(question, values ?? {}));
-  return index === -1 ? CONFIRM_STEP_INDEX : index;
+  const questions = questionsFor(values);
+  const index = questions.findIndex((question) => !isAnswered(question, values ?? {}));
+  return index === -1 ? confirmStepIndex(questions) : index;
 }
 
 /** 최종 확인 화면에 보여줄 답변 문구 */
