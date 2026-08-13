@@ -324,6 +324,10 @@ export type Database = {
         Args: { p_user_id: string; p_apt_id: string; p_make_primary: boolean };
         Returns: { user_id: string; apt_id: string; is_primary: boolean };
       };
+      join_gym: {
+        Args: { p_apt_id: string };
+        Returns: { user_id: string; apt_id: string | null; is_primary: boolean };
+      };
       list_my_gym_memberships: {
         Args: { p_user_id: string };
         Returns: GymMembershipSummary[];

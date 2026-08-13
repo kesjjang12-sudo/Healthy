@@ -1,4 +1,6 @@
+import { joinGym } from '@/features/gym-membership/api';
 import type { User } from '@/lib/database.types';
+import { APT_ID } from '@/lib/env';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -81,4 +83,14 @@ export async function discardSessionIfCreated(
  */
 export async function signInAsTestUser(): Promise<void> {
   await ensureSessionForPairing();
+
+  // 세션만 만들면 users.apt_id 가 null 이라 루틴이 0개로 나온다 — 루틴은
+  // "이 단지에 있는 기구"로 짜이는데 소속이 없으면 기구가 하나도 안 잡힌다.
+  // 테스트 계정은 태블릿에 갈 일이 없으니 여기서 바로 소속을 붙여 준다.
+  //
+  // 프로필은 bootstrap_oauth_profile 이 만든다. auth-session 이 세션 변화를
+  // 감지해 그걸 부르는데, join_gym 은 users 행이 이미 있어야 하므로
+  // (USER_NOT_FOUND) 순서를 여기서 확실히 해 둔다.
+  await supabase.rpc('bootstrap_oauth_profile');
+  await joinGym(APT_ID);
 }

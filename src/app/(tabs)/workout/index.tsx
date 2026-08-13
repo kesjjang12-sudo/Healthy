@@ -111,6 +111,19 @@ export default function WorkoutTab() {
               오늘의 운동 {result?.routines.length ?? 0}가지
             </Text>
 
+            {/* 루틴은 "내가 소속된 헬스장에 있는 기구"로만 짜인다. 태블릿에 한
+                번도 번호를 안 찍은 계정은 소속이 없어 기구가 0건으로 잡히고,
+                여기가 통째로 빈다. 예전엔 "0가지"만 뜨고 이유가 없어서 고장난
+                것처럼 보였다. */}
+            {result && result.routines.length === 0 ? (
+              <View style={styles.notice}>
+                <Text style={styles.noticeText} maxFontSizeMultiplier={1.3}>
+                  아직 다니는 헬스장이 등록되지 않아 오늘의 운동을 짤 수 없어요. 입구 태블릿에
+                  전화번호를 한 번 눌러 주시면 그때부터 루틴이 만들어집니다.
+                </Text>
+              </View>
+            ) : null}
+
             {result?.needs_trainer_review ? (
               <View style={styles.notice}>
                 <Text style={styles.noticeText} maxFontSizeMultiplier={1.3}>

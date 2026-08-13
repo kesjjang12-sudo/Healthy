@@ -35,6 +35,19 @@ export async function listMyGymMemberships(userId: string): Promise<GymMembershi
   return data ?? [];
 }
 
+/**
+ * 지금 로그인한 사람을 이 단지 헬스장에 소속시킨다.
+ *
+ * 태블릿을 한 번도 안 거친 계정은 users.apt_id 가 null 이라, 루틴을 짤 때
+ * "이 단지 기구" 가 0건으로 잡혀 오늘의 운동이 통째로 비어 버린다.
+ * 출석은 만들지 않는다 — 출석은 실제로 왔다는 기록이라 여기서 올리면 안 된다.
+ */
+export async function joinGym(aptId: string): Promise<void> {
+  const { error } = await supabase.rpc('join_gym', { p_apt_id: aptId });
+
+  if (error) throw toMembershipError(error);
+}
+
 /** 이 헬스장을 주 소속으로 바꾼다. */
 export async function makeGymPrimary(userId: string, aptId: string): Promise<void> {
   const { error } = await supabase.rpc('confirm_gym_membership', {
