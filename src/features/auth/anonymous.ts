@@ -1,4 +1,23 @@
+import type { User } from '@/lib/database.types';
 import { supabase } from '@/lib/supabase';
+
+/**
+ * "아직 아무것도 아닌 계정"인지.
+ *
+ * bootstrap_oauth_profile 은 세션만 있으면 users 행을 만든다 — 익명 세션도
+ * 예외가 아니다. 그래서 페어링을 중간에 그만두거나 정리(signOut)가 네트워크
+ * 문제로 실패하면, 로그인한 적 없는 사람에게 빈 프로필이 남는다. 그 행이
+ * 남아 있으면 로그인 화면은 "로그인된 사람"으로 보고 설문으로 넘겨버린다.
+ *
+ * 전화번호가 붙었으면(페어링 완료) 또는 설문을 마쳤으면 실체가 있는 계정이다.
+ * 카카오/구글 계정은 둘 다 없어도 실체가 있으므로, 이 판정은 반드시 익명
+ * 세션인지와 함께 봐야 한다 — 이 함수만으로 지우면 갓 가입한 카카오 회원이
+ * 날아간다.
+ */
+export function isEmptyProfile(user: User | null): boolean {
+  if (!user) return true;
+  return !user.phone_number && !user.profile_data?.onboarded_at;
+}
 
 /**
  * ensureSessionForPairing 이 이번 호출에서 세션을 새로 만들었는지.
