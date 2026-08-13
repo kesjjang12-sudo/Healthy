@@ -13,7 +13,7 @@ Deno.env.set('SOLAPI_API_KEY', 'TESTKEY123');
 Deno.env.set('SOLAPI_API_SECRET', 'TESTSECRET456');
 Deno.env.set('SOLAPI_SENDER', '0212345678');
 
-const { handleSendSms } = await import('./index.ts');
+const { handleSendSms } = await import('./handler.ts');
 
 /** 대시보드가 보내는 것과 같은 형태로 서명된 요청을 만든다. */
 function signedRequest(body: unknown): Request {
