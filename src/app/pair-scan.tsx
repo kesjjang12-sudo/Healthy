@@ -20,6 +20,15 @@ import { parsePairingCode } from '@/features/pairing/qr-payload';
 const CODE_MAX_DIGITS = 6;
 
 /**
+ * "전화번호로 시작하기"를 눌렀는데 왜 갑자기 QR 이냐 — 이 화면에서 가장 많이
+ * 막히는 지점이다. 이미 가입한 사람이 앱을 지웠거나 로그아웃된 경우, QR 을
+ * 띄우는 방법(태블릿에 번호 누르기)을 모르면 폰은 "찍으세요", 태블릿은 가만히
+ * 있는 교착에 빠진다. 그래서 얻는 방법을 화면에 직접 적어 둔다.
+ */
+const PAIRING_GUIDE =
+  '헬스장 입구 태블릿에 전화번호를 누르면 QR이 떠요. 이미 가입하셨더라도 폰을 바꾸거나 앱이 로그아웃됐다면 이 연결을 한 번 더 해야 합니다.';
+
+/**
  * 로그인 화면에서 "전화번호로 시작하기"를 고르면 오는 화면.
  * 태블릿(키오스크)이 띄운 QR 을 카메라로 찍거나, 카메라가 어려우면 화면에 뜬
  * 6자리 숫자를 직접 입력해도 된다.
@@ -88,6 +97,9 @@ export default function PairScanScreen() {
             <Text style={styles.title} maxFontSizeMultiplier={1.2}>
               태블릿에 뜬 번호를{'\n'}입력해 주세요
             </Text>
+            <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+              {PAIRING_GUIDE}
+            </Text>
           </View>
 
           <Text style={styles.codeDisplay} maxFontSizeMultiplier={1.2}>
@@ -150,6 +162,9 @@ export default function PairScanScreen() {
           <View style={styles.headings}>
             <Text style={styles.title} maxFontSizeMultiplier={1.2}>
               태블릿 화면을{'\n'}카메라로 찍어주세요
+            </Text>
+            <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+              {PAIRING_GUIDE}
             </Text>
           </View>
         ) : null}

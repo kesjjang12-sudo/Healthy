@@ -18,8 +18,12 @@ const WIDE_LAYOUT_MIN_WIDTH = 900;
 /** 아직 안 누른 자리를 옅게 깔아 둔다. */
 const DIGIT_MASK = '010-0000-0000';
 
-/** 체크인 완료 화면을 보여주는 시간. 줄 서 있는 다음 사람을 오래 기다리게 하면 안 된다. */
-const RESULT_DISPLAY_MS = 6_000;
+/**
+ * 체크인 완료 화면을 보여주는 시간. 줄 서 있는 다음 사람을 오래 기다리게 하면
+ * 안 되지만, 앱이 로그아웃된 사람에게는 이 화면의 "다시 연결" 안내를 읽고
+ * 누를 시간이기도 하다 — 6초로는 읽다가 화면이 사라진다.
+ */
+const RESULT_DISPLAY_MS = 12_000;
 
 /**
  * 헬스장 입구 태블릿 전용 체크인 화면. 예전 index.tsx 의 키패드 UI를 그대로
@@ -125,20 +129,27 @@ export default function KioskCheckinScreen() {
 
           {/* 폰을 바꾸거나 앱을 지운 분은 여기서 다시 연결해야 한다. 예전엔 이
               경로가 없어서, 이미 연결된 적 있는 사람은 계정에 영영 못 돌아왔다.
-              평소엔 눈에 잘 안 띄는 보조 버튼으로 두고, 필요한 사람만 누른다. */}
+              문구가 "휴대폰을 바꾸셨나요?"뿐이면 앱이 로그아웃됐을 뿐인 사람은
+              자기 얘기인 줄 모르고 지나친다 — 실제로 그렇게 갇힌 보고가 있었다.
+              그래서 조건을 먼저 적어 주고, 버튼은 할 일을 그대로 쓴다. */}
           {result.pairing_code ? (
-            <PrimaryButton
-              label="휴대폰을 바꾸셨나요?"
-              variant="quiet"
-              size="compact"
-              onPress={() => {
-                if (resetTimer.current) clearTimeout(resetTimer.current);
-                router.push({
-                  pathname: '/kiosk/pairing',
-                  params: { code: result.pairing_code! },
-                });
-              }}
-            />
+            <>
+              <Text style={styles.resultHint} maxFontSizeMultiplier={1.3}>
+                폰을 바꾸셨거나 앱이 로그아웃됐다면
+              </Text>
+              <PrimaryButton
+                label="폰에 다시 연결하기"
+                variant="secondary"
+                size="compact"
+                onPress={() => {
+                  if (resetTimer.current) clearTimeout(resetTimer.current);
+                  router.push({
+                    pathname: '/kiosk/pairing',
+                    params: { code: result.pairing_code!, mode: 'relink' },
+                  });
+                }}
+              />
+            </>
           ) : null}
         </View>
       </View>
@@ -291,5 +302,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: LetterSpacing.subtitle,
     color: Colors.textSecondary,
+  },
+  resultHint: {
+    marginTop: Spacing.xl,
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+    textAlign: 'center',
   },
 });

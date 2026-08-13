@@ -110,6 +110,11 @@ export default function LoginScreen() {
           onPress={() => router.push('/pair-scan')}
           disabled={pendingProvider !== null || isTestSigningIn}
         />
+        {/* 이 경로는 헬스장 태블릿이 있어야 끝난다. 누르고 나서야 카메라를 보고
+            당황하지 않도록, 무엇이 필요한지 누르기 전에 알려준다. */}
+        <Text style={styles.footerNote} maxFontSizeMultiplier={1.3}>
+          헬스장 태블릿에 번호를 누르면 QR이 떠요
+        </Text>
         {/* 카카오/구글 심사 전, 페어링할 키오스크가 없을 때 쓰는 임시 테스트
             경로. 실제 출시 전에 빼야 한다. */}
         <PrimaryButton
@@ -160,6 +165,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: LetterSpacing.body,
     color: Colors.danger,
+    textAlign: 'center',
+  },
+  footerNote: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textTertiary,
     textAlign: 'center',
   },
   footer: {
