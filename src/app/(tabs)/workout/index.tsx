@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -7,6 +7,7 @@ import { PrimaryButton } from '@/components/primary-button';
 import { RoutineCard } from '@/components/routine-card';
 import { StrengthHookBanner } from '@/components/strength-hook-banner';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
+import { useCheckInListener } from '@/features/attendance/use-checkin-listener';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { pickHookMessage } from '@/features/content/hooking-copy';
 import { useDailyRoutine } from '@/features/routine/use-daily-routine';
@@ -26,8 +27,28 @@ export default function WorkoutTab() {
   const insets = useSafeAreaInsets();
   const { user } = useAuthSession();
   const { result, isLoading, errorMessage, retry } = useDailyRoutine(user!.id);
-  const visitStats = useVisitStats(user!.id);
+  const { stats: visitStats, refresh: refreshVisitStats } = useVisitStats(user!.id);
   const hookMessage = useMemo(() => pickHookMessage(), []);
+
+  // 태블릿에서 체크인이 찍히면 여기서 바로 받아 화면을 맞춘다.
+  // 루틴까지 다시 부르는 이유: 오늘 어느 헬스장에 체크인했는지에 따라 그
+  // 헬스장 기구로 루틴이 짜이기 때문이다(이사 대응).
+  const [justCheckedIn, setJustCheckedIn] = useState(false);
+
+  const handleCheckIn = useCallback(() => {
+    setJustCheckedIn(true);
+    refreshVisitStats();
+    retry();
+  }, [refreshVisitStats, retry]);
+
+  useCheckInListener(user!.id, handleCheckIn);
+
+  // 안내는 잠깐만 띄운다. 계속 남아 있으면 다음에 열었을 때 방금 찍은 것처럼 보인다.
+  useEffect(() => {
+    if (!justCheckedIn) return;
+    const timer = setTimeout(() => setJustCheckedIn(false), 6_000);
+    return () => clearTimeout(timer);
+  }, [justCheckedIn]);
 
   const name = user!.profile_data?.nickname ?? '회원';
 
@@ -44,6 +65,17 @@ export default function WorkoutTab() {
             {name} 님{'\n'}오늘도 나오셨네요
           </Text>
         </View>
+
+        {justCheckedIn ? (
+          <View style={styles.checkedInBanner}>
+            <Text
+              style={styles.checkedInText}
+              maxFontSizeMultiplier={1.3}
+              accessibilityLiveRegion="polite">
+              체크인되었습니다. 오늘도 잘 오셨어요!
+            </Text>
+          </View>
+        ) : null}
 
         <View style={styles.points}>
           <Text style={styles.pointsLabel} maxFontSizeMultiplier={1.2}>
@@ -187,6 +219,18 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: Spacing.sm,
+  },
+  checkedInBanner: {
+    padding: Spacing.lg,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.successFaint,
+  },
+  checkedInText: {
+    fontSize: FontSize.body,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.success,
+    textAlign: 'center',
   },
   buttonRow: {
     flexDirection: 'row',
