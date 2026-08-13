@@ -122,6 +122,24 @@ export default function KioskCheckinScreen() {
           <Text style={styles.resultSub} maxFontSizeMultiplier={1.3}>
             {result.visit_count}번째 방문이시네요
           </Text>
+
+          {/* 폰을 바꾸거나 앱을 지운 분은 여기서 다시 연결해야 한다. 예전엔 이
+              경로가 없어서, 이미 연결된 적 있는 사람은 계정에 영영 못 돌아왔다.
+              평소엔 눈에 잘 안 띄는 보조 버튼으로 두고, 필요한 사람만 누른다. */}
+          {result.pairing_code ? (
+            <PrimaryButton
+              label="휴대폰을 바꾸셨나요?"
+              variant="quiet"
+              size="compact"
+              onPress={() => {
+                if (resetTimer.current) clearTimeout(resetTimer.current);
+                router.push({
+                  pathname: '/kiosk/pairing',
+                  params: { code: result.pairing_code! },
+                });
+              }}
+            />
+          ) : null}
         </View>
       </View>
     );

@@ -184,8 +184,13 @@ export type GenerateRoutineResult = {
  */
 export type KioskCheckInResult = {
   user_id: string;
+  /** 아직 한 번도 폰을 연결한 적 없는 사람. true 면 태블릿이 QR 화면으로 바로 보낸다. */
   needs_pairing: boolean;
-  /** needs_pairing 이 true 일 때만 존재 */
+  /**
+   * 항상 내려온다. 이미 연결된 사람에게도 주는 이유는, 폰을 바꾸거나 앱을
+   * 지운 경우 다시 연결할 방법이 이것뿐이기 때문이다(익명 세션은 자격
+   * 증명이 없어 그 계정으로 재로그인할 수 없다). 3분 뒤 만료된다.
+   */
   pairing_code?: string;
   /** 이 헬스장에서의 방문 횟수(멤버십 기준, 오늘 재체크인해도 안 올라간다) */
   visit_count: number;
