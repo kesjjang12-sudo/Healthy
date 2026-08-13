@@ -15,7 +15,17 @@ type Props = {
 /** 목표를 한 줄로 읽히게 만든다: "30kg · 3세트 · 10회", 유산소는 "15분" */
 function formatTarget(item: RoutineItem): string {
   // 유산소는 세트/횟수 개념이 없다 — "1세트"라고 뜨면 오히려 헷갈린다.
-  if (item.target_duration_minutes !== null) return `${item.target_duration_minutes}분`;
+  if (item.target_duration_minutes !== null) {
+    // 끝난 운동은 처방이 아니라 실제로 움직인 시간을 보여준다. 달력에서
+    // 지난 날을 볼 때 "15분 처방"이 아니라 "8분 했음"이 알고 싶은 값이다.
+    // (이 기록이 생기기 전에 완료한 옛 기록은 실제값이 없어 처방값으로 남는다.
+    //  DB 마이그레이션이 아직 안 된 서버라면 이 칸 자체가 안 내려오므로
+    //  null 이 아니라 타입으로 확인한다 — "undefined분"이 뜨면 안 된다.)
+    const actual = item.actual_duration_minutes;
+    if (item.is_completed && typeof actual === 'number') return `${actual}분`;
+
+    return `${item.target_duration_minutes}분`;
+  }
 
   const parts: string[] = [];
 

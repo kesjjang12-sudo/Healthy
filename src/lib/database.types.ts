@@ -117,6 +117,8 @@ export type DailyRoutine = {
   /** 실제로 꽂은 무게(kg 환산). target_weight 는 처방값, 이건 실제 수행값. complete_routine 이 채운다. */
   actual_weight_kg: number | null;
   actual_reps: number | null;
+  /** 유산소를 실제로 수행한 시간(분). 근력 운동이거나 아직 안 받았으면 null. */
+  actual_duration_minutes: number | null;
   completed_at: string | null;
   points_awarded: number;
   created_at: string | null;
@@ -144,6 +146,11 @@ export type RoutineItem = {
   target_reps: number | null;
   /** 유산소 처방 시간(분). 근력 운동이면 null — target_reps 와 동시에 채워지지 않는다. */
   target_duration_minutes: number | null;
+  /**
+   * 유산소를 실제로 수행한 시간(분). 완료 전이거나 근력 운동이면 null.
+   * 이 컬럼이 생기기 전에 완료한 옛 기록도 null 이다("모른다"는 뜻).
+   */
+  actual_duration_minutes: number | null;
   is_completed: boolean;
 };
 
@@ -209,9 +216,22 @@ export type GymMembershipSummary = {
   last_checked_in_at: string;
 };
 
+/**
+ * 분석 탭 원시 집계. 근력과 유산소는 단위가 달라(세트 vs 분) 섞지 않고 따로 센다.
+ * completed_count 만 둘을 합친 값이다.
+ */
 export type WorkoutSummary = {
+  /** 근력 + 유산소 완료 개수 */
   completed_count: number;
+  /** 근력 완료 개수 */
+  strength_count: number;
+  /** 근력 세트 합계. 유산소 행의 형식상 1세트는 빠져 있다 */
   total_sets: number;
+  /** 유산소 완료 개수 */
+  cardio_count: number;
+  /** 유산소 실제 수행 시간 합계(분). 실제값이 없는 옛 기록은 처방 시간으로 센다 */
+  cardio_minutes: number;
+  /** 근력만. 유산소는 부위별 세트라는 단위 자체가 안 맞아 빠져 있다 */
   by_muscle: { target_muscle: string | null; completed_count: number; total_sets: number }[];
 };
 
@@ -341,7 +361,13 @@ export type Database = {
         Returns: { user: User };
       };
       complete_routine: {
-        Args: { p_routine_id: string; p_actual_weight_kg?: number; p_actual_reps?: number };
+        Args: {
+          p_routine_id: string;
+          p_actual_weight_kg?: number;
+          p_actual_reps?: number;
+          /** 유산소 실제 수행 시간(분). 1~240 을 벗어나면 INVALID_DURATION 으로 거부된다. */
+          p_actual_duration_minutes?: number;
+        };
         Returns: { routine: DailyRoutine; points_awarded: number };
       };
       get_todays_checkin: {

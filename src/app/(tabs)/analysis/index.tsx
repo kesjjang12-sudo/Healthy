@@ -18,8 +18,10 @@ function periodStart(period: Period): Date {
 }
 
 /**
- * 분석 탭. 근력운동 완료 기록 기반 대략치만 보여준다 — 러닝/유산소 기록은
- * 이번 스코프가 아니다(스키마 자체가 없다).
+ * 분석 탭. 완료 기록 기반 대략치만 보여준다.
+ *
+ * 근력은 세트로, 유산소는 실제로 움직인 분(分)으로 센다 — 단위가 다르니
+ * 한 숫자로 합치지 않고 나란히 보여준다.
  */
 export default function AnalysisTab() {
   const insets = useSafeAreaInsets();
@@ -51,11 +53,22 @@ export default function AnalysisTab() {
   const calories = useMemo(() => {
     if (!summary) return null;
     return estimateCalories({
-      completedCount: summary.completed_count,
-      totalSets: summary.total_sets,
+      strengthCount: summary.strength_count,
+      strengthSets: summary.total_sets,
+      cardioMinutes: summary.cardio_minutes,
       bodyWeightKg: user!.profile_data?.weight_kg,
     });
   }, [summary, user]);
+
+  // "완료 3개 · 근력 6세트 · 유산소 20분". 없는 항목은 아예 빼서 0 이 눈에
+  // 걸리지 않게 한다.
+  const summaryLine = useMemo(() => {
+    if (!summary) return '';
+    const parts = [`완료 ${summary.completed_count}개`];
+    if (summary.total_sets > 0) parts.push(`근력 ${summary.total_sets}세트`);
+    if (summary.cardio_minutes > 0) parts.push(`유산소 ${summary.cardio_minutes}분`);
+    return parts.join(' · ');
+  }, [summary]);
 
   const maxMuscleSets = summary ? Math.max(1, ...summary.by_muscle.map((m) => m.total_sets)) : 1;
 
@@ -100,7 +113,7 @@ export default function AnalysisTab() {
               {calories?.toLocaleString('ko-KR')}kcal
             </Text>
             <Text style={styles.heroSub} maxFontSizeMultiplier={1.3}>
-              완료 {summary.completed_count}개 · 총 {summary.total_sets}세트
+              {summaryLine}
             </Text>
           </View>
 
@@ -130,15 +143,20 @@ export default function AnalysisTab() {
                 ))}
               </View>
             </View>
-          ) : (
+          ) : summary.completed_count === 0 ? (
             <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
               이 기간에 완료한 운동이 없습니다.
+            </Text>
+          ) : (
+            // 유산소만 한 기간. 부위별 막대는 비어 있지만 운동을 안 한 건 아니다.
+            <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+              이 기간에는 유산소만 하셨습니다.
             </Text>
           )}
 
           <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-            칼로리는 정확한 측정값이 아니라 대략치입니다. 러닝 등 유산소 기록은 아직 지원하지
-            않습니다.
+            칼로리는 정확한 측정값이 아니라 대략치입니다. 유산소는 실제로 움직인 시간으로,
+            근력은 완료한 세트 수로 어림잡습니다.
           </Text>
         </>
       )}

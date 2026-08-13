@@ -55,7 +55,7 @@ QR 페어링(그 헬스장에 물리적으로 가서 3분 안에 스캔해야 �
 | `user_gym_memberships` | 유저가 다닌 헬스장 이력. `is_primary` 행이 지금의 "주 소속"(이사 대응의 핵심) |
 | `device_pairings` | 키오스크가 발급한 1회성 QR 페어링 코드(3분 유효) |
 | `equipments` | 기구와 시범 영상. `qr_code_val` 로 QR 스캔 시 조회 |
-| `daily_routines` | 유저별 하루 루틴. `actual_weight_kg`/`actual_reps`/`points_awarded` 는 완료 시 채워짐 |
+| `daily_routines` | 유저별 하루 루틴. `actual_weight_kg`/`actual_reps`/`actual_duration_minutes`(유산소)/`points_awarded` 는 완료 시 채워짐 |
 | `attendance_logs` | 출석 기록. `apt_id` 로 그날 어느 헬스장이었는지도 남긴다 |
 
 마이그레이션은 `supabase/migrations/` 에 순서대로 있다. `supabase/setup.sql` 은 전부
@@ -80,6 +80,13 @@ QR 페어링(그 헬스장에 물리적으로 가서 3분 안에 스캔해야 �
 | `20260812000015_attendance_and_analysis_rpcs.sql` | 달력·분석 탭용 RPC 3종 |
 | `20260812000016_ranking_rpc.sql` | `get_apartment_leaderboard`(같은 단지만) |
 | `20260812000017_drop_sign_in_with_phone.sql` | 옛 인증 RPC 제거 |
+| `20260812000018_ranking_by_attendance.sql` | 랭킹 기준을 포인트 → 출석 횟수로 |
+| `20260812000019_equipment_description.sql` | `equipments.description`(쉬운 말 설명) |
+| `20260812000020_equipment_qr_lookup.sql` | `get_equipment_by_qr`(루틴 밖 기구도 조회) |
+| `20260812000021_cardio_routine.sql` | 유산소 처방(분) + 40대 이상 템플릿에 추가 |
+| `20260812000022_repair_after_reinstall.sql` | 앱 재설치 후 계정 복구 |
+| `20260812000023_realtime_checkin.sql` | 키오스크 체크인을 폰이 실시간 반영 |
+| `20260812000024_cardio_actual_duration.sql` | 유산소 **실제 수행 시간** 기록 + 분석 집계 분리 |
 
 ### 루틴 생성: 런타임 AI 호출 없음
 
@@ -147,9 +154,9 @@ pain_area_rules 적용 → apt_id 의 보유 기구로 치환 → daily_routines
 | `generate_daily_routine(p_user_id, p_date?, p_apt_id?)` | 개인 앱 | 하루 루틴 생성 |
 | `get_daily_routine(p_user_id, p_date?)` | 개인 앱 | 해당 날짜 루틴 조회 |
 | `get_todays_checkin(p_user_id)` | 개인 앱 | 오늘 체크인한 헬스장(없으면 주 소속) |
-| `complete_routine(p_routine_id, p_actual_weight_kg?, p_actual_reps?)` | 개인 앱 | 완료 처리 + 포인트 지급(1건당 10점, 재완료는 중복 지급 안 함) |
+| `complete_routine(p_routine_id, p_actual_weight_kg?, p_actual_reps?, p_actual_duration_minutes?)` | 개인 앱 | 완료 처리 + 포인트 지급(1건당 10점, 재완료는 중복 지급 안 함). 유산소는 실제 수행 분(1~240)을 함께 받는다 |
 | `get_attendance_days(p_user_id, p_month)` | 개인 앱 | 달력 탭 — 그 달 출석일 |
-| `get_workout_summary(p_user_id, p_from, p_to)` | 개인 앱 | 분석 탭 원시 집계(칼로리 계산은 클라이언트가 함) |
+| `get_workout_summary(p_user_id, p_from, p_to)` | 개인 앱 | 분석 탭 원시 집계. 근력(세트)과 유산소(분)를 나눠서 준다(칼로리 계산은 클라이언트가 함) |
 | `get_visit_stats(p_user_id)` | 개인 앱 | 운동 탭 "DAY_N" 배지용 평생 출석일 수 |
 | `get_apartment_leaderboard(p_apt_id, p_limit?)` | 개인 앱 | 같은 단지 랭킹. 닉네임/포인트만, PII 없음 |
 
@@ -237,6 +244,11 @@ npx eas build --profile preview --platform android   # 설치용 .apk
 설문에서 아픈 곳을 **무릎**으로 고르면 레그 프레스가 목록에서 빠지는 게 보이고,
 3군데 이상 고르면 트레이너 상담 안내가 뜬다.
 
+연령대를 **40대 이상**으로 고르면 목록 맨 뒤에 유산소(트레드밀)가 붙는다. 시작을 누르고
+1~2분 뒤에 마치면 기록 화면에 그 시간이 미리 채워져 있고, 숫자판으로 고칠 수 있다.
+마친 뒤 **분석** 탭에 "유산소 N분"이 잡히는지, **달력**에서 그날을 열었을 때 처방 시간이
+아니라 실제로 한 시간이 보이는지 함께 확인한다.
+
 ## 3. 지금까지 만든 것
 
 ```
@@ -254,10 +266,10 @@ src/
 │   │   ├── pairing.tsx         QR 표시 + 페어링 상태 폴링
 │   │   └── membership-prompt.tsx  "이 헬스장으로 옮기셨나요?"
 │   └── (tabs)/                 개인 앱 하단 탭 5개
-│       ├── workout/            오늘의 운동 목록 + 기구 상세(세트 진행, 완료 저장)
+│       ├── workout/            오늘의 운동 목록 + 기구 상세(세트 진행, 유산소 시간 측정, 완료 저장)
 │       ├── calendar/           출석 달력 + 하루 상세
 │       ├── ranking/            같은 단지 랭킹
-│       ├── analysis/           칼로리 대략치 + 부위별 세트
+│       ├── analysis/           칼로리 대략치 + 부위별 세트 + 유산소 시간
 │       └── profile/            닉네임/성별/연령대, 내 헬스장, 로그아웃
 ├── components/                keypad, primary-button, choice-button, routine-card,
 │                               check-mark, tab-bar, calendar-grid, text-field, ...
@@ -268,7 +280,7 @@ src/
 │   ├── pairing/                QR 페어링 API + 딥링크 payload
 │   ├── gym-membership/         내 헬스장 목록 / 주 소속 전환
 │   ├── onboarding/             문항 정의, profile_data 병합 저장
-│   ├── routine/                루틴 생성/조회/완료, 세트 진행 상태 머신
+│   ├── routine/                루틴 생성/조회/완료, 세트 진행 상태 머신, 유산소 경과 시간
 │   ├── calendar/, ranking/, analysis/    각 탭 API + 순수 계산 함수
 │   └── content/hooking-copy.ts  근력운동 후킹 카피
 └── lib/                        supabase 클라이언트, DB 타입, env, RPC 에러 처리
@@ -295,6 +307,41 @@ src/
 - 잘못 눌러도 마지막 **확인 화면**에서 항목별로 되돌릴 수 있다
 - 중간 답도 그때그때 저장한다. 도중에 나가도 다음 방문 때 **남은 문항부터** 이어서 묻는다
 - 설문 완료 여부는 `profile_data.onboarded_at` 으로 판단한다
+
+### 유산소 기록 — 앱이 재고, 사람이 고친다
+
+40대 이상에게는 유산소가 자동으로 처방된다(`20260812000021_cardio_routine.sql`). 근력은
+"세트 × 횟수"로 처방하고 완료 버튼을 누르면 처방한 만큼 했다고 보지만, 유산소에는 그
+가정이 안 맞는다 — 15분 처방을 받고 8분만 걷다 내려오거나, 걷다 보니 25분을 하는 일이
+흔하다. 전부 15분으로 적어 두면 분석 탭 숫자가 사실과 달라진다.
+
+그래서 실제 수행 시간을 따로 받는다(`daily_routines.actual_duration_minutes`).
+
+```
+[시작] 누름 → 화면에 흐른 시간이 올라감(목표를 넘기면 "목표 15분을 채우셨습니다")
+[다 했어요] 누름 → 잰 시간이 기록 화면에 미리 채워져 있음
+              → 맞으면 그대로 [기록하고 마치기], 다르면 숫자판으로 고침
+```
+
+**왜 물어보기만 하지 않나.** "몇 분 하셨어요?"만 물으면 대개 화면에 적힌 처방 시간을
+그대로 답한다(기억해서 답하는 게 아니라 보이는 숫자를 읽는 쪽에 가깝다). 앱이 재서
+채워 두면 대부분 그대로 두면 되고, 틀렸을 때만 고치면 된다.
+
+- 첫 숫자를 누르면 잰 값을 지우고 새로 받는다 — 뒤에 붙이면 8분이 "81분"이 된다
+- 1~240분 밖이면 버튼이 잠긴다. `complete_routine` 도 같은 범위를 다시 확인해
+  `INVALID_DURATION` 으로 막는다(잘못 눌린 세 자리가 분석 집계를 통째로 망가뜨린다)
+- 시간을 안 주고 완료하면 `actual_duration_minutes` 는 **null 로 남는다**. 처방값을
+  실제값 자리에 베껴 넣으면 "모른다"와 "처방대로 했다"를 구분할 수 없게 된다
+- 분석 탭은 유산소를 근력과 섞지 않는다. 유산소 행은 형식상 1세트로 들어가 있어서
+  근력 세트 합계에 더하면 "총 세트"가 부풀고 부위별 막대에 '유산소 1세트' 같은 줄이
+  생긴다. 근력은 세트로, 유산소는 분으로 따로 센다(`get_workout_summary`)
+- 칼로리도 둘을 나눠 계산해 더한다 — 근력은 MET 5.0(세트 수로 시간 어림), 유산소는
+  MET 4.0 × 실제 수행 분(`src/features/analysis/calorie.ts`)
+
+**아직 못 하는 것.** 재는 값은 [시작]과 [다 했어요] 사이의 시계 시간이지 실제로 벨트
+위에서 움직인 시간이 아니다. 완료를 늦게 누르면 그만큼 길게 잡히고, 그걸 검증할 방법은
+지금 없다(사람이 고칠 수 있게 열어 둔 이유다). 웨어러블 연동이 붙으면 그때 실측으로
+바꿀 수 있다 — 아래 "다음 단계" 4번.
 
 ### 디자인 방향 — 토스식 시각 언어 + 시니어 치수
 
@@ -379,24 +426,19 @@ select set_config('request.jwt.claim.sub', '<auth.users 의 id>', false);
 2. **카카오 전화번호 스코프** — 사업자등록 + 카카오 심사를 받으면, 카카오 로그인만으로
    전화번호까지 자동으로 받아 QR 페어링 없이도 매핑이 끝난다. `oauth.ts` 에 훅 지점만
    남겨 뒀다
-3. **유산소 실제 수행 기록** — `generate_daily_routine` 은 40대 이상에게 유산소(트레드밀
-   등)를 자동으로 처방하고 분(`target_duration_minutes`)으로 안내한다(운동 탭 →
-   기구 화면). 다만 "실제로 몇 분 했는지"는 아직 안 받는다 — 완료 버튼을 누르면
-   처방 시간을 그대로 수행한 것으로 기록한다(근력운동의 "처방 횟수 = 실제 수행"과 같은
-   가정). 분석 탭도 아직 유산소 시간을 따로 집계하지 않는다 — 근력운동 완료 기록만 본다
-4. **기구 QR 로그인 전 딥링크 이어가기** — 시스템 카메라로 기구 QR(`fitroutine://equip/<code>`)을
+3. **기구 QR 로그인 전 딥링크 이어가기** — 시스템 카메라로 기구 QR(`fitroutine://equip/<code>`)을
    찍었는데 로그인이 안 되어 있으면 지금은 그냥 로그인 화면으로 보낸다(`src/app/equip/[qr].tsx`).
    로그인을 마친 뒤 원래 찍었던 QR 로 자동으로 돌아가는 기능은 없다 — 로그인된 상태에서
    앱 안 스캐너(운동 탭 → "기구 QR 찍기")로 찍으면 바로 되니 급하지 않다고 보고 미뤘다
-5. **웨어러블/폰 건강 앱 연동** — `src/features/health/` 에 인터페이스만 만들어 뒀고 실제
+4. **웨어러블/폰 건강 앱 연동** — `src/features/health/` 에 인터페이스만 만들어 뒀고 실제
    HealthKit/Health Connect 연동은 안 했다. 네이티브 모듈(`react-native-health`,
    `react-native-health-connect`) 설치 + `app.json` config plugin 추가 + 네이티브 빌드가
    필요한데, 이 저장소를 만든 개발 환경은 네이티브 빌드를 실행/검증할 수 없어서 실제
    패키지를 넣지 않았다 — 잘못 붙이면 다음 실제 빌드에서야 설정 실수가 드러난다.
    `provider.ts` 상단 주석에 붙이는 순서를 적어 뒀다
-6. **운동 시연 영상/이미지** — 지금 기구별 안내는 트레이너가 채우는 텍스트 설명
+5. **운동 시연 영상/이미지** — 지금 기구별 안내는 트레이너가 채우는 텍스트 설명
    (`equipments.description`)과 링크로 여는 외부 영상(`video_url`)뿐이다. 경쟁 앱처럼
    앱 안에서 바로 재생되는 아바타 애니메이션/움짤 시연은 만들지 않았다 — AI 생성
    운동 자세 영상은 틀린 자세를 안내할 위험이 있어 이 저장소에서 직접 만들지 않기로
    했고, 실사 촬영이 필요하다(운영진 결정 사항)
-7. 트레이너 검수 후 `goal_blocks` / `pain_area_rules` / `age_modifiers` 수치 조정
+6. 트레이너 검수 후 `goal_blocks` / `pain_area_rules` / `age_modifiers` 수치 조정
