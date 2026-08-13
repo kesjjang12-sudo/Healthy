@@ -272,6 +272,11 @@ src/
 │   ├── calendar/, ranking/, analysis/    각 탭 API + 순수 계산 함수
 │   └── content/hooking-copy.ts  근력운동 후킹 카피
 └── lib/                        supabase 클라이언트, DB 타입, env, RPC 에러 처리
+
+supabase/
+├── migrations/, setup.sql, seed.sql       DB 스키마·RPC·시드
+├── config.toml                            Edge Function 배포 설정
+└── functions/send-sms/index.ts            Auth Send SMS 훅 → 솔라피 문자 발송 (3.6)
 ```
 
 ### 온보딩 설문 (4문항 + 최종 확인)
@@ -363,6 +368,55 @@ node scripts/apply-sql.mjs supabase/migrations/xxx.sql   # 파일 하나만
 커밋하면 안 된다(`.env` 는 gitignore 되어 있다). 토큰 발급:
 https://supabase.com/dashboard/account/tokens
 
+## 3.6 실제 SMS 인증 (솔라피 + Edge Function)
+
+전화번호 OTP 문자를 보내는 Edge Function 이다(`supabase/functions/send-sms/index.ts`).
+Supabase Auth 의 **Send SMS 훅**으로 등록하면, `signInWithOtp({ phone })` 을 부를 때
+Auth 가 이 함수를 호출하고 함수가 솔라피(SOLAPI)로 문자를 쏜다.
+
+```bash
+# 1) 함수 배포 (--no-verify-jwt 필수: 사용자가 아니라 Auth 가 호출하므로 JWT 가 없다)
+npx supabase functions deploy send-sms --no-verify-jwt
+
+# 2) 시크릿 — 키는 여기에만 넣는다(코드/저장소에 절대 넣지 않는다)
+npx supabase secrets set SOLAPI_API_KEY=... SOLAPI_API_SECRET=... SOLAPI_SENDER=발신번호
+```
+
+`SOLAPI_SENDER` 는 솔라피에 **사전 등록된 발신번호**여야 한다(등록 안 된 번호는 거절된다).
+`--no-verify-jwt` 는 `supabase/config.toml` 에도 `verify_jwt = false` 로 박아 뒀으니,
+플래그를 잊고 배포해도 훅이 401 로 죽지는 않는다.
+
+### 3) 훅 켜기 + 서명 시크릿 (중요)
+
+대시보드 → Authentication → Hooks → **Send SMS** → HTTPS URI 에
+`https://<project-ref>.supabase.co/functions/v1/send-sms` 를 넣고 켠다. 이때 같이
+나오는 `v1,whsec_...` 값을 반드시 함수에도 넣어야 한다:
+
+```bash
+npx supabase secrets set SEND_SMS_HOOK_SECRET='v1,whsec_...'
+```
+
+JWT 검증을 껐으므로 이 함수의 URL 은 **인증 없이 열려 있다**. 이 시크릿을 넣으면
+Standard Webhooks 서명을 검증해서 Auth 가 보낸 요청만 받는다. 안 넣으면 함수는
+동작하지만(서명 검증을 건너뛰고 로그에 경고를 남긴다) 남이 URL 만 알아내면 우리 솔라피
+잔액으로 문자를 뿌릴 수 있다. 운영에서는 필수다.
+
+### 확인
+
+시크릿 없이 호출하면 설정이 덜 됐다는 뜻이다 — 문자는 나가지 않는다:
+
+```bash
+curl -X POST https://<project-ref>.supabase.co/functions/v1/send-sms \
+  -H 'Content-Type: application/json' -d '{}'
+# {"error":{"http_code":500,"message":"SMS 발송 설정이 완료되지 않았다"}}
+```
+
+로그는 대시보드 → Edge Functions → send-sms → Logs 에서 본다. 인증번호와 전화번호
+뒷 4자리는 로그에 남기지 않는다(`010-1234-****` 로 마스킹).
+
+참고: 아직 앱 화면은 이 경로를 쓰지 않는다 — 전화번호 신원 확인은 여전히 QR 페어링이다
+(`## 5. 다음 단계` 1번). 이 함수는 발송 경로만 먼저 붙여 둔 것이다.
+
 ## 4. 로컬에서 DB 테스트하기
 
 Supabase 프로젝트 없이도 마이그레이션과 RPC 를 검증할 수 있다. `auth.users` 를 참조하는
@@ -395,8 +449,10 @@ select set_config('request.jwt.claim.sub', '<auth.users 의 id>', false);
 
 ## 5. 다음 단계
 
-1. **실제 SMS 인증** — 전화번호 로그인은 지금 QR 페어링(물리적 근접)으로 신원을 대신
-   확인한다. Twilio 등으로 실제 SMS OTP 를 붙이면 폰 소유 증명이 완성된다
+1. **실제 SMS 인증** — 발송 경로(솔라피 Edge Function)는 `## 3.6` 에 붙여 뒀지만, 앱
+   화면은 아직 그걸 쓰지 않는다. 전화번호 로그인은 여전히 QR 페어링(물리적 근접)으로
+   신원을 대신 확인한다. 로그인 화면에 `signInWithOtp({ phone })` + 인증번호 입력
+   화면을 붙이면 폰 소유 증명이 완성된다
 2. **카카오 전화번호 스코프** — 사업자등록 + 카카오 심사를 받으면, 카카오 로그인만으로
    전화번호까지 자동으로 받아 QR 페어링 없이도 매핑이 끝난다. `oauth.ts` 에 훅 지점만
    남겨 뒀다

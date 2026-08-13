@@ -1,0 +1,9 @@
+# Supabase CLI 설정. 지금은 Edge Function 하나만 선언해 둔다.
+project_id = "fitroutine"
+
+# send-sms 는 Supabase Auth(GoTrue)가 직접 호출한다 — 사용자 JWT 가 없다.
+# 그래서 JWT 검증을 끈다(`--no-verify-jwt` 와 같은 효과이며, 플래그를 잊고 배포해도
+# 이 설정이 남아 있으므로 훅이 401 로 죽지 않는다).
+# 대신 SEND_SMS_HOOK_SECRET 으로 Standard Webhooks 서명을 검증한다 — functions/send-sms/index.ts 참고.
+[functions.send-sms]
+verify_jwt = false
