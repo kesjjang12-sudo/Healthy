@@ -1,7 +1,14 @@
 import { supabase } from '@/lib/supabase';
 
 /**
- * QR/코드 페어링 흐름 전에 호출한다.
+ * ensureSessionForPairing 이 이번 호출에서 세션을 새로 만들었는지.
+ * 페어링이 실패했을 때 되돌릴 대상을 가리는 데 쓴다 — 원래 로그인돼 있던
+ * 사람(카카오 등)을 실패했다고 로그아웃시키면 안 되기 때문이다.
+ */
+export type PairingSessionStart = { createdSession: boolean };
+
+/**
+ * QR/코드 페어링 직전에 호출한다.
  *
  * 카카오·구글 없이 "전화번호로 로그인"을 고른 사람도 페어링 RPC(complete_pairing)
  * 가 auth.uid() 로 신원을 확인할 수 있어야 한다. signInAnonymously 로 진짜 GoTrue
@@ -11,15 +18,33 @@ import { supabase } from '@/lib/supabase';
  * 이미 세션이 있으면(카카오로 로그인한 상태에서 페어링만 추가로 하는 경우)
  * 새로 만들지 않고 그대로 둔다 — 그래야 complete_pairing 이 "이미 있는 계정에
  * 그림자 계정을 합친다"는 올바른 경로를 탄다.
+ *
+ * ⚠️ 화면에 들어오자마자 부르지 말 것. 실제로 페어링을 시도하는 순간에만
+ * 부르고, 실패하면 discardSessionIfCreated 로 되돌려야 한다.
  */
-export async function ensureSessionForPairing(): Promise<void> {
+export async function ensureSessionForPairing(): Promise<PairingSessionStart> {
   const { data } = await supabase.auth.getSession();
-  if (data.session) return;
+  if (data.session) return { createdSession: false };
 
   const { error } = await supabase.auth.signInAnonymously();
   if (error) {
     throw new Error('연결을 시작하지 못했습니다. 다시 시도해 주세요.');
   }
+  return { createdSession: true };
+}
+
+/**
+ * 페어링이 끝내 실패했을 때 이 시도에서 만든 임시 세션만 정리한다.
+ *
+ * 이게 없으면 QR 인증에 실패하거나 도중에 뒤로 나가도 세션이 남아서,
+ * 로그인도 안 한 사람이 "로그인된 상태"가 된다 — 로그인 화면이 그걸 보고
+ * 곧장 온보딩(설문)으로 넘겨버리는 문제가 실제로 있었다.
+ */
+export async function discardSessionIfCreated(
+  start: PairingSessionStart | null,
+): Promise<void> {
+  if (!start?.createdSession) return;
+  await supabase.auth.signOut();
 }
 
 /**
@@ -36,5 +61,5 @@ export async function ensureSessionForPairing(): Promise<void> {
  * 로그인 수단이 다 막혀 있어 개발 중 테스트용으로 급하게 열어 둔 경로다.
  */
 export async function signInAsTestUser(): Promise<void> {
-  return ensureSessionForPairing();
+  await ensureSessionForPairing();
 }

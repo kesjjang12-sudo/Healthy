@@ -1,13 +1,17 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Keypad } from '@/components/keypad';
 import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
-import { ensureSessionForPairing } from '@/features/auth/anonymous';
+import {
+  discardSessionIfCreated,
+  ensureSessionForPairing,
+  type PairingSessionStart,
+} from '@/features/auth/anonymous';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { PairingError, completePairing } from '@/features/pairing/api';
 import { parsePairingCode } from '@/features/pairing/qr-payload';
@@ -32,25 +36,30 @@ export default function PairScanScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const hasHandledScan = useRef(false);
 
-  // 이 화면에 들어오는 순간 세션이 필요하다 — 카카오/구글 없이도 페어링
-  // RPC 가 auth.uid() 로 신원을 확인할 수 있어야 하기 때문이다.
-  useEffect(() => {
-    void ensureSessionForPairing().catch(() => {
-      setErrorMessage('연결을 시작하지 못했습니다. 인터넷 연결을 확인해 주세요.');
-    });
-  }, []);
-
   const finishWithCode = useCallback(
     async (code: string) => {
       setIsProcessing(true);
       setErrorMessage(null);
 
+      // 세션은 실제로 페어링을 시도하는 이 순간에만 만든다. 화면에 들어오자마자
+      // 만들면 인증에 실패하거나 뒤로 나가도 세션이 남아서, 로그인한 적 없는
+      // 사람이 로그인된 것으로 취급돼 로그인 화면이 곧장 설문으로 넘겨버린다.
+      let sessionStart: PairingSessionStart | null = null;
+
       try {
+        sessionStart = await ensureSessionForPairing();
         const user = await completePairing(code);
         setUser(user);
         router.replace(user.profile_data?.onboarded_at ? '/workout' : '/onboarding');
       } catch (error) {
-        setErrorMessage(error instanceof PairingError ? error.message : '연결하지 못했습니다.');
+        // 이번 시도에서 만든 임시 세션만 되돌린다. 로그아웃 자체가 실패해도
+        // 화면에는 원래의 페어링 오류를 보여주는 게 맞다.
+        await discardSessionIfCreated(sessionStart).catch(() => {});
+        setErrorMessage(
+          error instanceof PairingError
+            ? error.message
+            : '연결하지 못했습니다. 인터넷 연결을 확인해 주세요.',
+        );
         hasHandledScan.current = false;
         setIsProcessing(false);
       }

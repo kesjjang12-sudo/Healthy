@@ -64,7 +64,7 @@ function OnboardingFlow({ user }: { user: User }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { setUser } = useAuthSession();
+  const { setUser, signOut } = useAuthSession();
 
   // 지난번에 중간에 나갔다면 남은 문항부터 이어서 묻는다.
   const [stepIndex, setStepIndex] = useState(() => findFirstUnansweredIndex(user.profile_data));
@@ -121,6 +121,17 @@ function OnboardingFlow({ user }: { user: User }) {
     setErrorMessage(null);
     setStepIndex((current) => Math.max(0, current - 1));
   }, []);
+
+  /**
+   * 첫 문항에서는 설문 안에 돌아갈 곳이 없다. 그렇다고 버튼을 아예 안 두면
+   * 잘못 들어온 사람이 빠져나갈 방법이 없어진다(로그인이 어정쩡하게 끝났을 때
+   * 실제로 갇히는 문제가 있었다). 로그아웃까지 하고 나가야 로그인 화면이
+   * 다시 설문으로 되돌려보내지 않는다.
+   */
+  const handleExit = useCallback(async () => {
+    await signOut();
+    router.replace('/login');
+  }, [router, signOut]);
 
   const handleConfirm = useCallback(async () => {
     setIsSubmitting(true);
@@ -300,7 +311,15 @@ function OnboardingFlow({ user }: { user: User }) {
             onPress={handleBack}
             style={styles.backButton}
           />
-        ) : null}
+        ) : (
+          <PrimaryButton
+            label="다른 방법으로 로그인"
+            variant="quiet"
+            size="compact"
+            onPress={() => void handleExit()}
+            style={styles.backButton}
+          />
+        )}
       </View>
     </View>
   );

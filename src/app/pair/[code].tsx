@@ -5,7 +5,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Spacing } from '@/constants/theme';
-import { ensureSessionForPairing } from '@/features/auth/anonymous';
+import {
+  discardSessionIfCreated,
+  ensureSessionForPairing,
+  type PairingSessionStart,
+} from '@/features/auth/anonymous';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { completePairing, PairingError } from '@/features/pairing/api';
 
@@ -28,12 +32,17 @@ export default function PairCodeScreen() {
     hasStarted.current = true;
 
     void (async () => {
+      // 실패하면 이 시도에서 만든 임시 세션을 되돌린다 — 안 그러면 인증에
+      // 실패한 사람이 로그인된 상태로 남아 설문 화면으로 떨어진다.
+      let sessionStart: PairingSessionStart | null = null;
+
       try {
-        await ensureSessionForPairing();
+        sessionStart = await ensureSessionForPairing();
         const user = await completePairing(code);
         setUser(user);
         router.replace(user.profile_data?.onboarded_at ? '/workout' : '/onboarding');
       } catch (error) {
+        await discardSessionIfCreated(sessionStart).catch(() => {});
         setErrorMessage(error instanceof PairingError ? error.message : '연결하지 못했습니다.');
       }
     })();
