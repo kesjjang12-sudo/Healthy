@@ -27,9 +27,20 @@ function formatTarget(item: RoutineItem): string {
   return parts.join(' · ');
 }
 
+/** 기구가 어디 있는지(또는 기구가 필요 없는지)를 한 마디로 */
+function formatPlace(item: RoutineItem): string | null {
+  if (item.location_label) return item.location_label;
+  // equip_id 가 없으면 이 단지에 기구가 없어 맨몸운동으로 대체된 처방이다.
+  if (item.equip_id === null) return '기구 없이';
+  return null;
+}
+
 export function RoutineCard({ item, order, onPress }: Props) {
   const done = Boolean(item.is_completed);
-  const label = `${order}번째 운동, ${item.name}, ${formatTarget(item)}${done ? ', 완료' : ''}`;
+  const place = formatPlace(item);
+  const label = `${order}번째 운동, ${item.name}, ${formatTarget(item)}${
+    place ? `, ${place}` : ''
+  }${done ? ', 완료' : ''}`;
 
   const body = (
     <>
@@ -52,6 +63,14 @@ export function RoutineCard({ item, order, onPress }: Props) {
           {item.target_muscle ? `  ·  ${item.target_muscle}` : ''}
         </Text>
       </View>
+
+      {/* 토스 목록처럼 오른쪽 끝에 보조정보 — 기구를 찾아가야 하는 시니어에게
+          위치는 이름 다음으로 중요한 정보다. */}
+      {place ? (
+        <Text style={styles.place} maxFontSizeMultiplier={1.2}>
+          {place}
+        </Text>
+      ) : null}
     </>
   );
 
@@ -124,5 +143,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
+  },
+  place: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.primary,
   },
 });

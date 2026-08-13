@@ -117,13 +117,21 @@ export type KioskEnrollAttempt = {
   attempted_at: string;
 };
 
-export type Equipment = {
+/**
+ * 운동 도감(전체 공용). 기구 운동과 맨몸운동의 이름·설명·영상을 본사가 미리
+ * 등록해 둔다. 단지별로 복사하지 않는다.
+ */
+export type ExerciseCatalog = {
   id: string;
-  apt_id: string | null;
-  qr_code_val: string;
   name: string;
+  /** "위에서 당기기"처럼 기구 이름보다 먼저 와닿는 쉬운 말 이름 */
+  name_ko: string | null;
+  /** 머신 / 덤벨 / 맨몸 / 유산소. '맨몸'은 기구가 없어도 처방할 수 있다 */
+  station_kind: string;
   /** 시니어가 이해하기 쉬운 한 줄 설명. 비어 있으면 화면에서 부위명으로 대체한다. */
   description: string | null;
+  /** 이 운동이 생활에서 왜 중요한지. 시니어 동기부여용 한 단락 */
+  why_it_matters: string | null;
   target_muscle: string | null;
   video_url: string;
   /** 표준 성인 남성 시작 무게. null 이면 무게 없이 맨몸으로 안내한다 */
@@ -133,9 +141,37 @@ export type Equipment = {
   created_at: string | null;
 };
 
+/** weight_suggestion RPC 가 계산해 루틴 항목에 끼워 주는 무게 조정 제안 */
+export type WeightSuggestion = {
+  action: 'increase' | 'decrease';
+  current_kg: number;
+  suggested_kg: number;
+  reason: string;
+};
+
+/**
+ * 단지별 보유 기구. "이 단지에 도감의 이 운동 기구가 몇 번 구역에 있다"만
+ * 담는다. 이름·설명·영상은 catalog_id 로 도감을 따라간다.
+ */
+export type Equipment = {
+  id: string;
+  apt_id: string | null;
+  catalog_id: string;
+  qr_code_val: string;
+  /** 헬스장 안 위치 표기. 예: "13번 구역". 없으면 화면에서 위치 줄을 생략한다. */
+  location_label: string | null;
+  /** 단지별 기구 사양 보정값. null 이면 도감 기본값을 쓴다 */
+  base_weight_kg: number | null;
+  weight_step_kg: number | null;
+  created_at: string | null;
+};
+
 export type DailyRoutine = {
   id: string;
   user_id: string | null;
+  /** 처방된 운동(도감). 기구가 철거돼도 기록의 정체는 이걸로 남는다 */
+  catalog_id: string;
+  /** 그 운동을 수행할 단지 보유 기구. 맨몸운동이면 null */
   equip_id: string | null;
   routine_date: string | null;
   target_weight: number | null;
@@ -160,15 +196,24 @@ export type AttendanceLog = {
   attended_at: string | null;
 };
 
-/** get_daily_routine 이 돌려주는 한 줄. 루틴 + 기구 정보를 합쳐 놓은 형태다. */
+/** get_daily_routine 이 돌려주는 한 줄. 루틴 + 도감 + 기구 위치를 합쳐 놓은 형태다. */
 export type RoutineItem = {
   routine_id: string;
-  equip_id: string;
+  catalog_id: string;
+  /** 이 단지가 보유한 기구. null 이면 기구 없이 하는 맨몸운동이다. */
+  equip_id: string | null;
   name: string;
+  name_ko: string | null;
+  station_kind: string;
   description: string | null;
+  why_it_matters: string | null;
   target_muscle: string | null;
   video_url: string;
-  qr_code_val: string;
+  qr_code_val: string | null;
+  /** 기구가 있는 위치. 예: "13번 구역". 맨몸운동이거나 미입력이면 null */
+  location_label: string | null;
+  /** 무게 조정 제안. 완료했거나 근거가 없으면 null */
+  weight_suggestion: WeightSuggestion | null;
   target_weight: number | null;
   target_sets: number | null;
   target_reps: number | null;
@@ -185,11 +230,17 @@ export type RoutineItem = {
  */
 export type EquipmentLookup = {
   id: string;
+  catalog_id: string;
   name: string;
+  name_ko: string | null;
+  station_kind: string;
   description: string | null;
+  why_it_matters: string | null;
   target_muscle: string | null;
   video_url: string;
   qr_code_val: string;
+  /** 기구가 있는 위치. 예: "13번 구역" */
+  location_label: string | null;
   base_weight_kg: number | null;
   weight_step_kg: number;
 };
@@ -316,11 +367,20 @@ export type Database = {
         Update: Partial<KioskEnrollAttempt>;
         Relationships: [];
       };
+      exercise_catalog: {
+        Row: ExerciseCatalog;
+        Insert: Partial<ExerciseCatalog> & Pick<ExerciseCatalog, 'name' | 'video_url'>;
+        Update: Partial<ExerciseCatalog>;
+        Relationships: [];
+      };
       equipments: {
         Row: Equipment;
-        Insert: Partial<Equipment> & Pick<Equipment, 'qr_code_val' | 'name' | 'video_url'>;
+        Insert: Partial<Equipment> & Pick<Equipment, 'qr_code_val' | 'catalog_id'>;
         Update: Partial<Equipment>;
-        Relationships: [Relationship<'equipments_apt_id_fkey', 'apt_id', 'apartments'>];
+        Relationships: [
+          Relationship<'equipments_apt_id_fkey', 'apt_id', 'apartments'>,
+          Relationship<'equipments_catalog_id_fkey', 'catalog_id', 'exercise_catalog'>,
+        ];
       };
       daily_routines: {
         Row: DailyRoutine;

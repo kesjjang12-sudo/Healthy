@@ -101,6 +101,7 @@ export default function EquipmentExploreScreen() {
           {equipment.target_muscle ? (
             <Text style={styles.eyebrow} maxFontSizeMultiplier={1.3}>
               {equipment.target_muscle} 운동
+              {equipment.location_label ? ` · ${equipment.location_label}` : ''}
             </Text>
           ) : null}
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>

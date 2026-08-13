@@ -202,6 +202,12 @@ function ReadyView({ item }: { item: RoutineItem }) {
         {item.target_muscle ? (
           <Text style={styles.eyebrow} maxFontSizeMultiplier={1.3}>
             {item.target_muscle} 운동
+            {/* 기구를 찾아가야 하면 위치를, 기구가 필요 없으면 그 사실을 바로 알린다. */}
+            {item.location_label
+              ? ` · ${item.location_label}`
+              : item.equip_id === null
+                ? ' · 기구 없이 하는 운동'
+                : ''}
           </Text>
         ) : null}
         <Text style={styles.title} maxFontSizeMultiplier={1.2}>
