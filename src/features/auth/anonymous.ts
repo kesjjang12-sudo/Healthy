@@ -1,6 +1,6 @@
 import { joinGym } from '@/features/gym-membership/api';
 import type { User } from '@/lib/database.types';
-import { APT_ID } from '@/lib/env';
+import { LEGACY_APT_ID } from '@/lib/env';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -81,7 +81,7 @@ export async function discardSessionIfCreated(
  * ⚠️ 실제 출시 전에는 로그인 화면에서 이 버튼을 빼야 한다 — 지금은 다른
  * 로그인 수단이 다 막혀 있어 개발 중 테스트용으로 급하게 열어 둔 경로다.
  */
-export async function signInAsTestUser(): Promise<void> {
+export async function signInAsTestUser(): Promise<User | null> {
   await ensureSessionForPairing();
 
   // 세션만 만들면 users.apt_id 가 null 이라 루틴이 0개로 나온다 — 루틴은
@@ -91,7 +91,11 @@ export async function signInAsTestUser(): Promise<void> {
   // 프로필은 bootstrap_oauth_profile 이 만든다. auth-session 이 세션 변화를
   // 감지해 그걸 부르는데, join_gym 은 users 행이 이미 있어야 하므로
   // (USER_NOT_FOUND) 순서를 여기서 확실히 해 둔다.
-  await supabase.rpc('bootstrap_oauth_profile');
+  //
+  // 여기서 받은 프로필을 그대로 돌려준다. auth-session 의 백그라운드 로드를
+  // 기다리면, 로드가 끝나기 전에 온보딩으로 이동했다가 "user 없음 → 로그인으로"
+  // 튕기는 경쟁이 생긴다 — 실기기의 느린 네트워크에서 실제로 벌어졌다.
+  const { data } = await supabase.rpc('bootstrap_oauth_profile');
 
   // 소속 붙이기가 실패해도 로그인 자체는 살린다.
   //
@@ -100,5 +104,9 @@ export async function signInAsTestUser(): Promise<void> {
   // "테스트 로그인에 실패했습니다"가 뜨고 로그인 자체를 못 하게 된다 —
   // 소속이 없으면 루틴이 비는 것뿐인데 그것 때문에 문을 막을 이유가 없다.
   // 루틴이 비면 운동 탭이 이유를 설명해 준다.
-  await joinGym(APT_ID).catch(() => {});
+  // 시범단지 id 는 이제 필수 env 가 아니다(태블릿이 등록 코드로 단지를 정한다).
+  // 값이 비어 있으면 소속 없이 두고, 운동 탭이 이유를 설명하게 한다.
+  if (LEGACY_APT_ID) await joinGym(LEGACY_APT_ID).catch(() => {});
+
+  return data?.user ?? null;
 }

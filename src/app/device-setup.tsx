@@ -1,68 +1,77 @@
 import { Redirect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Keypad } from '@/components/keypad';
 import { PrimaryButton } from '@/components/primary-button';
+import { TextField } from '@/components/text-field';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
+import { EnrollmentError, resolveApartmentForKiosk } from '@/features/apartment/api';
 import { useDeviceRole } from '@/features/device-role/context';
-import { APT_ID } from '@/lib/env';
-import { supabase } from '@/lib/supabase';
 
 /** 관리자 PIN 은 길이를 강제하지 않지만, 화면이 끝없이 늘어나지 않게 상한만 둔다. */
 const PIN_MAX_DIGITS = 8;
+
+/** 단지 등록 코드는 6자리다. 구분용 하이픈·공백은 세지 않는다. */
+const ENROLL_CODE_LENGTH = 6;
+
+/** 관리사무소가 'test-24' 로 적어 와도 통하게 한다. 정규화는 서버도 똑같이 한다. */
+function normalizeEnrollCode(raw: string): string {
+  return raw.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, ENROLL_CODE_LENGTH);
+}
 
 /**
  * 이 앱은 하나의 코드베이스가 헬스장 입구 태블릿(키오스크)과 개인 폰 양쪽에
  * 깔린다. 최초 실행 시 한 번만 "이 기기는 무엇인가요?"를 묻는다.
  *
  * 개인 폰 선택은 바로 통과시킨다 — 잘못 골라도 개인정보가 새는 방향이 아니다.
- * 키오스크 선택은 관리자 PIN을 확인한다 — 개인 폰이 실수로(혹은 장난으로)
- * 공용 체크인 화면으로 바뀌어버리면 안 되기 때문이다. PIN을 아직 안 정한
- * 단지는(시범 단계) verify_kiosk_pin 이 항상 통과시킨다.
+ *
+ * 태블릿 선택은 단지 등록 코드와 관리자 PIN 을 받는다. 두 가지를 한꺼번에
+ * 하는 셈인데, 둘 다 같은 이유에서 필요하다. 코드는 이 태블릿이 어느 단지인지
+ * 정하고(그래야 여기서 번호를 누른 주민이 옳은 단지로 체크인된다), PIN 은
+ * 아무나 그 단지의 태블릿을 자처하지 못하게 막는다. 이 값이 정해지고 나면
+ * 기기에 저장돼서 다시 묻지 않는다.
  */
 export default function DeviceSetupScreen() {
   const insets = useSafeAreaInsets();
-  const { role, isLoading, setRole } = useDeviceRole();
+  const { role, isLoading, setPersonal, setKiosk } = useDeviceRole();
 
-  const [mode, setMode] = useState<'choose' | 'kiosk-pin'>('choose');
+  const [mode, setMode] = useState<'choose' | 'enroll-code' | 'kiosk-pin'>('choose');
+  const [enrollCode, setEnrollCode] = useState('');
   const [pin, setPin] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const choosePersonal = useCallback(() => {
-    void setRole('personal');
-  }, [setRole]);
+    void setPersonal();
+  }, [setPersonal]);
 
   const submitPin = useCallback(async () => {
     setIsSubmitting(true);
     setErrorMessage(null);
 
     try {
-      const { data, error } = await supabase.rpc('verify_kiosk_pin', {
-        p_apt_id: APT_ID,
-        p_pin: pin,
-      });
+      const apartment = await resolveApartmentForKiosk(enrollCode, pin);
+      await setKiosk({ aptId: apartment.apt_id, aptName: apartment.apt_name });
+    } catch (error) {
+      setErrorMessage(
+        error instanceof EnrollmentError ? error.message : '확인하지 못했습니다. 다시 시도해 주세요.',
+      );
+      setPin('');
 
-      if (error) throw error;
-
-      if (!data) {
-        setErrorMessage('PIN이 올바르지 않습니다.');
-        setPin('');
-        return;
+      // 코드 자체가 틀렸을 수도 있으니 코드 입력으로 되돌린다. 잠긴 경우엔
+      // 되돌려 봐야 소용없으므로 PIN 화면에 그대로 둔다.
+      if (error instanceof EnrollmentError && error.code === 'INVALID') {
+        setMode('enroll-code');
       }
-
-      await setRole('kiosk');
-    } catch {
-      setErrorMessage('확인하지 못했습니다. 인터넷 연결을 확인해 주세요.');
     } finally {
       setIsSubmitting(false);
     }
-  }, [pin, setRole]);
+  }, [enrollCode, pin, setKiosk]);
 
-  // 이미 역할이 정해진 기기라면 이 화면을 볼 일이 없다. index.tsx 가 여기로
-  // 보내는 건 role 이 아직 없을 때뿐이다.
+  // 이미 설정이 끝난 기기라면 이 화면을 볼 일이 없다. index.tsx 가 여기로
+  // 보내는 건 설정이 아직 없을 때뿐이다.
   if (!isLoading && role) {
     return <Redirect href={role === 'kiosk' ? '/kiosk/checkin' : '/'} />;
   }
@@ -81,11 +90,68 @@ export default function DeviceSetupScreen() {
           </View>
 
           <View style={styles.choices}>
-            <PrimaryButton label="헬스장 입구 태블릿" onPress={() => setMode('kiosk-pin')} />
+            <PrimaryButton
+              label="헬스장 입구 태블릿"
+              onPress={() => {
+                setErrorMessage(null);
+                setMode('enroll-code');
+              }}
+            />
             <PrimaryButton label="제 휴대폰입니다" variant="secondary" onPress={choosePersonal} />
           </View>
         </ScrollView>
       </View>
+    );
+  }
+
+  if (mode === 'enroll-code') {
+    const isComplete = enrollCode.length === ENROLL_CODE_LENGTH;
+
+    return (
+      <KeyboardAvoidingView
+        style={styles.screen}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xxl }]}
+          keyboardShouldPersistTaps="handled">
+          <View style={styles.headings}>
+            <Text style={styles.title} maxFontSizeMultiplier={1.2}>
+              단지 코드를{'\n'}입력해 주세요
+            </Text>
+            <Text
+              style={[styles.helper, errorMessage ? styles.helperError : null]}
+              maxFontSizeMultiplier={1.3}
+              accessibilityLiveRegion="polite">
+              {errorMessage ?? '관리사무소에서 받은 6자리 코드입니다.'}
+            </Text>
+          </View>
+
+          <TextField
+            label="단지 코드"
+            value={enrollCode}
+            onChangeText={(text) => {
+              setErrorMessage(null);
+              setEnrollCode(normalizeEnrollCode(text));
+            }}
+            placeholder="예: TEST24"
+            autoCapitalize="characters"
+            returnKeyType="next"
+            onSubmitEditing={() => {
+              if (isComplete) setMode('kiosk-pin');
+            }}
+          />
+        </ScrollView>
+
+        <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
+          <PrimaryButton label="다음" onPress={() => setMode('kiosk-pin')} disabled={!isComplete} />
+          <PrimaryButton
+            label="뒤로"
+            variant="quiet"
+            size="compact"
+            onPress={() => setMode('choose')}
+          />
+        </View>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -102,7 +168,7 @@ export default function DeviceSetupScreen() {
             style={[styles.helper, errorMessage ? styles.helperError : null]}
             maxFontSizeMultiplier={1.3}
             accessibilityLiveRegion="polite">
-            {errorMessage ?? '단지 관리사무소에서 정한 번호입니다.'}
+            {errorMessage ?? `단지 코드 ${enrollCode} · 관리사무소에서 정한 번호입니다.`}
           </Text>
         </View>
 
@@ -136,7 +202,12 @@ export default function DeviceSetupScreen() {
           disabled={pin.length === 0}
           loading={isSubmitting}
         />
-        <PrimaryButton label="뒤로" variant="quiet" size="compact" onPress={() => setMode('choose')} />
+        <PrimaryButton
+          label="뒤로"
+          variant="quiet"
+          size="compact"
+          onPress={() => setMode('enroll-code')}
+        />
       </View>
     </View>
   );

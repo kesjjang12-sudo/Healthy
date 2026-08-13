@@ -23,11 +23,13 @@ export type PainArea = 'knee' | 'lower_back' | 'shoulder' | 'neck' | 'wrist' | '
  */
 export type ProfileData = {
   /**
-   * 랭킹 등 남에게 보이는 이름. update_nickname RPC 로만 바뀐다(욕설 필터와
-   * 14일 변경 제한이 걸려 있다). 실명을 여기 넣으면 안 된다 — 랭킹에 그대로
+   * 랭킹 등 남에게 보이는 이름. update_nickname RPC 로만 바뀐다(비속어 필터와
+   * 2주 변경 제한이 걸려 있다). 실명을 여기 넣으면 안 된다 — 랭킹에 그대로
    * 노출된다. 실명은 real_name 이 따로 갖는다.
    */
   nickname?: string;
+  /** 마지막 닉네임 변경 시각. 2주 제한의 기준점 — 서버(update_nickname)가 찍는다. */
+  nickname_changed_at?: string;
   /**
    * 가입 때 받는 실명. 회원 확인용이라 화면 어디에도 남에게 보이지 않는다.
    */
@@ -57,10 +59,29 @@ export type Apartment = {
   id: string;
   name: string;
   address: string | null;
+  /** 관리사무소가 태블릿 최초 설정 시 입력하는 6자리 단지 코드. 이 값 + PIN 으로 태블릿이 apt_id 를 받아 간다. */
+  enroll_code: string;
   /** crypt() 로 해시된 키오스크 설정 PIN. 클라이언트는 절대 이 값을 직접 읽지 않는다(RPC로만 검증). */
   kiosk_pin_hash: string | null;
   created_at: string | null;
 };
+
+/** 태블릿이 기기에 저장해 두고 체크인마다 쓰는 단지. */
+export type KioskApartment = {
+  apt_id: string;
+  apt_name: string;
+};
+
+/**
+ * resolve_apartment_for_kiosk 응답.
+ *
+ * 다른 RPC 와 달리 실패가 예외가 아니라 status 로 온다 — 실패를 예외로 던지면
+ * 그 호출의 트랜잭션이 롤백되면서 서버가 방금 기록한 "실패 시도"까지 지워져
+ * 무차별 대입 잠금이 아예 작동하지 않는다.
+ */
+export type KioskEnrollmentResult =
+  | ({ status: 'ok' } & KioskApartment)
+  | { status: 'invalid' | 'pin_not_set' | 'locked' };
 
 export type User = {
   id: string;
@@ -72,6 +93,11 @@ export type User = {
   total_points: number | null;
   role: UserRole | null;
   profile_data: ProfileData;
+  /**
+   * 고객대응용 계정번호("1234-5678"). uuid 는 전화로 불러줄 수 없어서 만든
+   * 사람이 읽을 수 있는 고유 번호다. 서버가 가입 때 자동 발급한다.
+   */
+  support_code: string | null;
   created_at: string | null;
 };
 
@@ -84,6 +110,10 @@ export type UserGymMembership = {
   visit_count: number;
   first_checked_in_at: string;
   last_checked_in_at: string;
+  /** 이사로 이 헬스장을 떠난 시각. null 이면 지금 다니는 곳 — 랭킹은 null 인 행만 센다. */
+  left_at: string | null;
+  /** "오늘만 방문했어요" 응답 시각. 30일간은 이사 여부를 다시 묻지 않는다. */
+  switch_declined_at: string | null;
   created_at: string | null;
 };
 
@@ -97,6 +127,13 @@ export type DevicePairing = {
   consumed_at: string | null;
   consumed_by_auth_user_id: string | null;
   created_at: string | null;
+};
+
+/** 단지 등록 실패 기록. PIN 무차별 대입을 막는 용도로만 쓰고, 성공하면 지워진다. */
+export type KioskEnrollAttempt = {
+  id: string;
+  enroll_code: string;
+  attempted_at: string;
 };
 
 export type Equipment = {
@@ -235,7 +272,10 @@ export type KioskCheckInResult = {
   pairing_code?: string;
   /** 이 헬스장에서의 방문 횟수(멤버십 기준, 오늘 재체크인해도 안 올라간다) */
   visit_count: number;
-  /** 이미 다른 단지가 주 소속인 사람이 새 단지에서 처음 체크인한 경우 */
+  /**
+   * 주 소속이 아닌 헬스장에 온 날. "이 헬스장으로 옮기셨나요?"를 물어야 한다.
+   * 같은 날 두 번 찍거나, "오늘만 방문했어요"를 누른 뒤 30일간은 false 다.
+   */
   prompt_gym_switch: boolean;
 };
 
@@ -248,6 +288,8 @@ export type GymMembershipSummary = {
   visit_count: number;
   first_checked_in_at: string;
   last_checked_in_at: string;
+  /** 이사로 떠난 곳이면 그 시각. 목록에는 남지만 그 단지 랭킹에는 안 나온다. */
+  left_at: string | null;
 };
 
 export type WorkoutSummary = {
@@ -316,6 +358,12 @@ export type Database = {
           Relationship<'device_pairings_apt_id_fkey', 'apt_id', 'apartments'>,
         ];
       };
+      kiosk_enroll_attempts: {
+        Row: KioskEnrollAttempt;
+        Insert: Partial<KioskEnrollAttempt> & Pick<KioskEnrollAttempt, 'enroll_code'>;
+        Update: Partial<KioskEnrollAttempt>;
+        Relationships: [];
+      };
       equipments: {
         Row: Equipment;
         Insert: Partial<Equipment> & Pick<Equipment, 'qr_code_val' | 'name' | 'video_url'>;
@@ -344,6 +392,12 @@ export type Database = {
         Args: { p_user_id: string; p_patch: Partial<ProfileData> };
         Returns: User;
       };
+      // 닉네임 전용. 비속어 검사와 "2주에 한 번" 제한(테스트 계정 제외)을
+      // 서버가 지킨다 — update_profile_data 는 nickname 키를 받지 않는다.
+      update_nickname: {
+        Args: { p_nickname: string };
+        Returns: { user: User };
+      };
       generate_daily_routine: {
         // p_apt_id 를 안 주면 유저의 주 소속(users.apt_id)을 쓴다.
         Args: { p_user_id: string; p_date?: string; p_apt_id?: string };
@@ -353,9 +407,14 @@ export type Database = {
         Args: { p_user_id: string; p_date?: string };
         Returns: RoutineItem[];
       };
+      /** @deprecated resolve_apartment_for_kiosk 를 쓸 것. 구버전 앱 호환으로만 남아 있다. */
       verify_kiosk_pin: {
         Args: { p_apt_id: string; p_pin: string };
         Returns: boolean;
+      };
+      resolve_apartment_for_kiosk: {
+        Args: { p_enroll_code: string; p_pin: string };
+        Returns: KioskEnrollmentResult;
       };
       kiosk_check_in: {
         Args: { p_apt_id: string; p_phone_number: string };
@@ -363,7 +422,13 @@ export type Database = {
       };
       confirm_gym_membership: {
         Args: { p_user_id: string; p_apt_id: string; p_make_primary: boolean };
-        Returns: { user_id: string; apt_id: string; is_primary: boolean };
+        Returns: {
+          user_id: string;
+          apt_id: string;
+          is_primary: boolean;
+          /** 이번 전환으로 떠나게 된 헬스장 수. 화면이 안내 문구를 정할 때 쓴다. */
+          left_count: number;
+        };
       };
       join_gym: {
         Args: { p_apt_id: string };

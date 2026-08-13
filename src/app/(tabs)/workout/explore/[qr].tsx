@@ -24,7 +24,10 @@ import type { EquipmentLookup } from '@/lib/database.types';
 export default function EquipmentExploreScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { qr } = useLocalSearchParams<{ qr: string }>();
+  // from=guide 로 오면 QR 을 찍은 게 아니라 "기구 사용법 모아보기" 목록에서
+  // 골라 들어온 것이다 — "오늘 루틴에 없는 운동" 경고 대신 QR 안내를 띄운다.
+  const { qr, from } = useLocalSearchParams<{ qr: string; from?: string }>();
+  const fromGuide = from === 'guide';
 
   const [equipment, setEquipment] = useState<EquipmentLookup | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -93,7 +96,9 @@ export default function EquipmentExploreScreen() {
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xl }]}>
         <View style={styles.notice}>
           <Text style={styles.noticeText} maxFontSizeMultiplier={1.3}>
-            오늘 루틴에는 없는 운동입니다. 궁금해서 보시는 거라면 자유롭게 살펴보세요.
+            {fromGuide
+              ? '헬스장에서 이 기구 앞에 붙은 QR 을 찍어도 이 화면이 바로 열립니다.'
+              : '오늘 루틴에는 없는 운동입니다. 궁금해서 보시는 거라면 자유롭게 살펴보세요.'}
           </Text>
         </View>
 
@@ -163,7 +168,12 @@ export default function EquipmentExploreScreen() {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
         <PrimaryButton label="영상으로 보기" variant="secondary" onPress={openVideo} />
-        <PrimaryButton label="운동 목록으로" variant="quiet" size="compact" onPress={goBack} />
+        <PrimaryButton
+          label={fromGuide ? '기구 목록으로' : '운동 목록으로'}
+          variant="quiet"
+          size="compact"
+          onPress={goBack}
+        />
       </View>
     </View>
   );

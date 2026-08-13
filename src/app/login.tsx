@@ -22,7 +22,7 @@ type Provider = 'kakao' | 'google';
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, isRestoring, isAnonymous } = useAuthSession();
+  const { user, isRestoring, isAnonymous, setUser } = useAuthSession();
 
   const [pendingProvider, setPendingProvider] = useState<Provider | null>(null);
   const [isTestSigningIn, setIsTestSigningIn] = useState(false);
@@ -52,16 +52,20 @@ export default function LoginScreen() {
     setErrorMessage(null);
 
     try {
-      await signInAsTestUser();
+      const testUser = await signInAsTestUser();
+      // 받은 프로필을 즉시 상태에 심는다. auth-session 의 백그라운드 로드를
+      // 기다리면 온보딩이 "user 없음"으로 보고 이 화면으로 되돌리는데, 이
+      // 화면은 빈 익명 계정을 통과시키지 않아 아무 일도 없는 것처럼 멈춘다.
+      if (testUser) setUser(testUser);
       // 위의 Redirect 는 이제 껍데기 익명 세션을 통과시키지 않는다. 테스트
       // 계정은 정확히 그 상태이므로, 여기서 직접 보낸다.
-      router.replace('/onboarding');
+      router.replace(testUser?.profile_data?.onboarded_at ? '/workout' : '/onboarding');
     } catch {
       setErrorMessage('테스트 로그인에 실패했습니다. 다시 시도해 주세요.');
     } finally {
       setIsTestSigningIn(false);
     }
-  }, [router]);
+  }, [router, setUser]);
 
   // 로그인 성공 시 auth-session 이 세션 변화를 감지해 프로필을 가져오면 여기로 반영된다.
   //
