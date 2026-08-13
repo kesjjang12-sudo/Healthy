@@ -92,5 +92,13 @@ export async function signInAsTestUser(): Promise<void> {
   // 감지해 그걸 부르는데, join_gym 은 users 행이 이미 있어야 하므로
   // (USER_NOT_FOUND) 순서를 여기서 확실히 해 둔다.
   await supabase.rpc('bootstrap_oauth_profile');
-  await joinGym(APT_ID);
+
+  // 소속 붙이기가 실패해도 로그인 자체는 살린다.
+  //
+  // join_gym 은 서버에 마이그레이션이 올라가야 존재하는 함수다. 아직 안 올린
+  // 상태에서 이걸 그냥 await 하면 함수가 없다는 오류가 그대로 올라와,
+  // "테스트 로그인에 실패했습니다"가 뜨고 로그인 자체를 못 하게 된다 —
+  // 소속이 없으면 루틴이 비는 것뿐인데 그것 때문에 문을 막을 이유가 없다.
+  // 루틴이 비면 운동 탭이 이유를 설명해 준다.
+  await joinGym(APT_ID).catch(() => {});
 }
