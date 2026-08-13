@@ -22,8 +22,16 @@ export type PainArea = 'knee' | 'lower_back' | 'shoulder' | 'neck' | 'wrist' | '
  * 모든 필드를 optional 로 두고, 읽는 쪽에서 없을 수 있다고 가정한다.
  */
 export type ProfileData = {
-  /** 표시용 이름 */
+  /**
+   * 랭킹 등 남에게 보이는 이름. update_nickname RPC 로만 바뀐다(욕설 필터와
+   * 14일 변경 제한이 걸려 있다). 실명을 여기 넣으면 안 된다 — 랭킹에 그대로
+   * 노출된다. 실명은 real_name 이 따로 갖는다.
+   */
   nickname?: string;
+  /**
+   * 가입 때 받는 실명. 회원 확인용이라 화면 어디에도 남에게 보이지 않는다.
+   */
+  real_name?: string;
   gender?: Gender;
   age_group?: AgeGroup;
   height_cm?: number;
@@ -34,6 +42,10 @@ export type ProfileData = {
   weekly_target?: number;
   /** 아픈 부위. 빈 배열은 "아픈 곳 없음"을 답했다는 뜻이고, undefined 는 아직 안 물어본 것이다. */
   pain_areas?: PainArea[];
+  /** 생년월일 (YYYY-MM-DD). 가입 화면에서 받는다. age_group 은 여기서 뽑는다. */
+  birth_date?: string;
+  /** 개인정보 수집·이용에 동의한 시각. 동의했다는 사실만으로는 기록이 안 된다. */
+  privacy_consent_at?: string;
   /** 온보딩 설문 완료 여부 */
   onboarded_at?: string;
   [key: string]: Json | undefined;
