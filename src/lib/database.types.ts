@@ -92,8 +92,13 @@ export type Equipment = {
   apt_id: string | null;
   qr_code_val: string;
   name: string;
+  /** 운동 이름의 한글 직역. 예: 체스트 프레스 → "가슴 밀기". 없으면 화면에서 생략한다. */
+  name_ko: string | null;
+  /** 머신 / 스미스머신 / 케이블 / 맨몸 / 유산소 */
+  station_kind: string | null;
   /** 시니어가 이해하기 쉬운 한 줄 설명. 비어 있으면 화면에서 부위명으로 대체한다. */
   description: string | null;
+  why_it_matters: string | null;
   target_muscle: string | null;
   video_url: string;
   /** 표준 성인 남성 시작 무게. null 이면 무게 없이 맨몸으로 안내한다 */
@@ -135,7 +140,13 @@ export type RoutineItem = {
   routine_id: string;
   equip_id: string;
   name: string;
+  /** 운동 이름의 한글 직역. 예: 체스트 프레스 → "가슴 밀기". 없으면 화면에서 생략한다. */
+  name_ko: string | null;
+  /** 머신 / 스미스머신 / 케이블 / 맨몸 / 유산소 */
+  station_kind: string | null;
   description: string | null;
+  /** 이 운동을 왜 해야 하는지. 건너뛰기 쉬운 부위와 흔한 오해를 짚어 준다. */
+  why_it_matters: string | null;
   target_muscle: string | null;
   video_url: string;
   qr_code_val: string;
@@ -156,7 +167,12 @@ export type RoutineItem = {
 export type EquipmentLookup = {
   id: string;
   name: string;
+  /** 운동 이름의 한글 직역. 예: 체스트 프레스 → "가슴 밀기". 없으면 화면에서 생략한다. */
+  name_ko: string | null;
+  /** 머신 / 스미스머신 / 케이블 / 맨몸 / 유산소 */
+  station_kind: string | null;
   description: string | null;
+  why_it_matters: string | null;
   target_muscle: string | null;
   video_url: string;
   qr_code_val: string;
