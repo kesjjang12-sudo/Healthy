@@ -13,7 +13,7 @@
 
 | | 키오스크 (공용, 입구) | 개인 폰 앱 |
 | --- | --- | --- |
-| 로그인 | 없음 — 전화번호는 **출입 체크인**일 뿐 | 카카오 / 구글 / 전화번호(QR) |
+| 로그인 | 없음 — 전화번호는 **출입 체크인**일 뿐 | 카카오 / 구글 / 전화번호(문자 인증·QR) |
 | 보여주는 것 | "N번째 방문입니다" 확인, QR 페어링 | 오늘의 운동, 달력, 랭킹, 분석, 프로필 |
 | 세션 | Supabase Auth 세션 없음(anon 키 RPC만) | 진짜 Supabase Auth 세션 |
 
@@ -40,8 +40,10 @@ QR 페어링(그 헬스장에 물리적으로 가서 3분 안에 스캔해야 �
 계정"이 기존 계정에 **병합**된다(방문 이력·포인트·루틴 기록 모두 합쳐짐). 병합 로직은
 `complete_pairing` 안에 있다(`supabase/migrations/20260812000012_pairing_rpcs.sql`).
 
-전화번호로만 계속 쓰고 싶은 사람은 `signInAnonymously()` 로 만든 세션이 그대로 계정이
-된다 — 카카오/구글 없이도 정식 로그인 경로다.
+전화번호로만 계속 쓰고 싶은 사람에게는 두 길이 있다. 기본은 문자 인증(SMS OTP,
+`## 3.6`) — 키오스크 없이 어디서든 되고, 앱을 지웠다 깔아도 같은 번호로 다시 들어온다.
+QR 페어링 쪽에서는 `signInAnonymously()` 로 만든 세션이 그대로 계정이 된다(익명 세션은
+자격 증명이 없어 앱을 지우면 재연결이 필요하다 — 그 복구도 문자 인증이 해 준다).
 
 ## 1. DB 구조 — 하이브리드 아키텍처
 
@@ -245,7 +247,8 @@ src/
 │   ├── _layout.tsx           기기 역할에 따라 세션 공급자를 나눠 씌우는 루트
 │   ├── index.tsx              순수 디스패처(역할별로 리다이렉트만 함)
 │   ├── device-setup.tsx       "이 기기는 무엇인가요?" (키오스크는 PIN 확인)
-│   ├── login.tsx               카카오/구글/전화(QR) 로그인 + 근력운동 후킹 카피
+│   ├── login.tsx               카카오/구글/전화 로그인 + 근력운동 후킹 카피
+│   ├── phone-login.tsx         전화번호 문자 인증(SMS OTP) 로그인 (3.6)
 │   ├── pair-scan.tsx           앱 안 QR 스캐너 + 수동 코드 입력
 │   ├── pair/[code].tsx         시스템 카메라로 딥링크를 열었을 때
 │   ├── onboarding.tsx          신규 회원 프로필 설문 4문항 + 최종 확인
@@ -263,7 +266,7 @@ src/
 │                               check-mark, tab-bar, calendar-grid, text-field, ...
 ├── constants/theme.ts         색·치수·자간 토큰 (토스식 시각 언어 + 시니어 치수)
 ├── features/
-│   ├── auth/                   oauth, anonymous, auth-session(개인 앱), session(키오스크), kiosk-api
+│   ├── auth/                   oauth, anonymous, phone-otp(문자 인증), auth-session(개인 앱), session(키오스크), kiosk-api
 │   ├── device-role/            기기가 키오스크인지 개인 폰인지 기억
 │   ├── pairing/                QR 페어링 API + 딥링크 payload
 │   ├── gym-membership/         내 헬스장 목록 / 주 소속 전환
@@ -388,7 +391,10 @@ npx supabase secrets set SOLAPI_API_KEY=... SOLAPI_API_SECRET=... SOLAPI_SENDER=
 
 ### 3) 훅 켜기 + 서명 시크릿 (중요)
 
-대시보드 → Authentication → Hooks → **Send SMS** → HTTPS URI 에
+먼저 전화 로그인 자체를 켠다: 대시보드 → Authentication → Sign In / Providers →
+**Phone** 활성화(기본은 꺼져 있다. SMS Provider 는 훅이 대신하므로 아무거나 둬도 된다).
+
+다음 대시보드 → Authentication → Hooks → **Send SMS** → HTTPS URI 에
 `https://<project-ref>.supabase.co/functions/v1/send-sms` 를 넣고 켠다. 이때 같이
 나오는 `v1,whsec_...` 값을 반드시 함수에도 넣어야 한다:
 
@@ -414,8 +420,19 @@ curl -X POST https://<project-ref>.supabase.co/functions/v1/send-sms \
 로그는 대시보드 → Edge Functions → send-sms → Logs 에서 본다. 인증번호와 전화번호
 뒷 4자리는 로그에 남기지 않는다(`010-1234-****` 로 마스킹).
 
-참고: 아직 앱 화면은 이 경로를 쓰지 않는다 — 전화번호 신원 확인은 여전히 QR 페어링이다
-(`## 5. 다음 단계` 1번). 이 함수는 발송 경로만 먼저 붙여 둔 것이다.
+### 앱 쪽 연결
+
+로그인 화면의 "전화번호로 시작하기" → `src/app/phone-login.tsx` 가 이 경로를 쓴다:
+번호 입력 → `signInWithOtp` (→ 훅 → 솔라피 문자) → 인증번호 입력 → `verifyOtp`.
+훅/시크릿이 아직 설정 안 된 프로젝트에서는 "인증번호를 보내지 못했습니다"가 뜬다.
+
+로그인 뒤 프로필 연결은 `bootstrap_oauth_profile` 이 처리한다
+(`supabase/migrations/20260813000024_phone_otp_login.sql`) — 세션에 검증된 번호가
+있으면 키오스크가 그 번호로 만들어 둔 그림자 계정(방문 이력·포인트 포함)을 그대로
+잇는다. 단, 그 번호가 이미 카카오/구글 계정에 페어링돼 있으면 뺏지 않고
+`PHONE_ALREADY_LINKED` 를 던진다 — 화면이 "그 계정으로 로그인하세요"를 안내한다.
+QR 페어링은 그대로 남아 있다(phone-login 안의 "헬스장 QR로 연결하기") — 카카오/구글
+계정에 키오스크 이력을 병합하는 길은 여전히 페어링뿐이다.
 
 ## 4. 로컬에서 DB 테스트하기
 
@@ -449,10 +466,10 @@ select set_config('request.jwt.claim.sub', '<auth.users 의 id>', false);
 
 ## 5. 다음 단계
 
-1. **실제 SMS 인증** — 발송 경로(솔라피 Edge Function)는 `## 3.6` 에 붙여 뒀지만, 앱
-   화면은 아직 그걸 쓰지 않는다. 전화번호 로그인은 여전히 QR 페어링(물리적 근접)으로
-   신원을 대신 확인한다. 로그인 화면에 `signInWithOtp({ phone })` + 인증번호 입력
-   화면을 붙이면 폰 소유 증명이 완성된다
+1. **실제 SMS 인증** — 코드는 끝까지 붙었다(`## 3.6`): 발송(솔라피 Edge Function),
+   로그인 화면(`phone-login.tsx`), 프로필 연결(그림자 계정 잇기)까지. 남은 건 운영
+   설정뿐이다 — 솔라피 시크릿 3개 + 대시보드에서 Send SMS 훅 켜기 +
+   `SEND_SMS_HOOK_SECRET`. 설정 전까지 화면은 "인증번호를 보내지 못했습니다"를 띄운다
 2. **카카오 전화번호 스코프** — 사업자등록 + 카카오 심사를 받으면, 카카오 로그인만으로
    전화번호까지 자동으로 받아 QR 페어링 없이도 매핑이 끝난다. `oauth.ts` 에 훅 지점만
    남겨 뒀다

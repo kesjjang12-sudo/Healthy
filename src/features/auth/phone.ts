@@ -27,6 +27,14 @@ export function formatPhoneNumber(input: string): string {
   return `${digits.slice(0, 3)}-${digits.slice(3, 3 + middleLength)}-${digits.slice(3 + middleLength)}`;
 }
 
+/**
+ * Supabase Auth(signInWithOtp/verifyOtp)가 받는 E.164 형식으로.
+ * 01012345678 → +821012345678. 유효한 국내 번호인지 먼저 확인하고 부를 것.
+ */
+export function toE164(input: string): string {
+  return `+82${toDigits(input).slice(1)}`;
+}
+
 /** 화면에 남의 번호를 그대로 노출하지 않기 위한 마스킹. 예: 010-1234-**** */
 export function maskPhoneNumber(input: string): string {
   const digits = toDigits(input);

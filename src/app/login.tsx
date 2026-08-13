@@ -14,10 +14,10 @@ import { pickHookMessage } from '@/features/content/hooking-copy';
 type Provider = 'kakao' | 'google';
 
 /**
- * 개인 폰 앱의 첫 화면. 로그인 수단 3가지 — 전화번호(QR)는 카카오/구글이 못
- * 주는 전화번호를 QR 페어링으로 잇는 별도의 완전한 로그인 경로다(부속 기능이
- * 아니다). 근력운동 후킹 카피를 여기 크게 한 번 두는 건, 로그인 전 진입
- * 장벽에서 "왜 필요한지"부터 설득하기 위해서다.
+ * 개인 폰 앱의 첫 화면. 로그인 수단 3가지 — 전화번호는 문자 인증(SMS OTP)으로
+ * 로그인하는 별도의 완전한 경로다(부속 기능이 아니다). 헬스장 태블릿 앞이라면
+ * 그 화면에서 QR 페어링으로 갈아탈 수도 있다. 근력운동 후킹 카피를 여기 크게
+ * 한 번 두는 건, 로그인 전 진입 장벽에서 "왜 필요한지"부터 설득하기 위해서다.
  */
 export default function LoginScreen() {
   const router = useRouter();
@@ -103,11 +103,13 @@ export default function LoginScreen() {
           loading={pendingProvider === 'google'}
           disabled={pendingProvider !== null}
         />
+        {/* 문자 인증(SMS OTP) 로그인. 헬스장 태블릿 QR 페어링은 그 화면 안에서
+            이어진다 — 태블릿 앞이 아닌 사람에게는 문자가 유일한 전화번호 경로다. */}
         <PrimaryButton
           label="전화번호로 시작하기"
           variant="quiet"
           size="compact"
-          onPress={() => router.push('/pair-scan')}
+          onPress={() => router.push('/phone-login')}
           disabled={pendingProvider !== null || isTestSigningIn}
         />
         {/* 카카오/구글 심사 전, 페어링할 키오스크가 없을 때 쓰는 임시 테스트

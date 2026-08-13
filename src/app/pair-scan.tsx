@@ -20,9 +20,11 @@ import { parsePairingCode } from '@/features/pairing/qr-payload';
 const CODE_MAX_DIGITS = 6;
 
 /**
- * 로그인 화면에서 "전화번호로 시작하기"를 고르면 오는 화면.
+ * 전화번호 로그인 화면(phone-login)에서 "헬스장 QR로 연결하기"를 고르면 오는 화면.
  * 태블릿(키오스크)이 띄운 QR 을 카메라로 찍거나, 카메라가 어려우면 화면에 뜬
- * 6자리 숫자를 직접 입력해도 된다.
+ * 6자리 숫자를 직접 입력해도 된다. 카카오/구글 계정에 전화번호(키오스크 이력)를
+ * 이어 붙이는 병합도 이 경로다 — 문자 인증은 카카오/구글에 이미 연결된 번호를
+ * 함부로 뺏지 않기 때문(bootstrap_oauth_profile 의 PHONE_ALREADY_LINKED).
  */
 export default function PairScanScreen() {
   const router = useRouter();
