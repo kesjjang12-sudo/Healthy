@@ -68,7 +68,8 @@ export default function EquipmentGuideScreen() {
             기구 사용법
           </Text>
           <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-            부위별로 모아 놨어요. 운동을 누르면 하는 방법과 영상이 나옵니다.
+            부위별로 모아 놨어요. 파란 칸은 기구 없이 하는 운동입니다. 운동을 누르면 하는
+            방법과 영상이 나옵니다.
           </Text>
         </View>
 
@@ -117,24 +118,37 @@ export default function EquipmentGuideScreen() {
 
 function GuideRow({ item, onPress }: { item: GuideEquipment; onPress: () => void }) {
   const title = item.name_ko ?? item.name;
+  // 맨몸 운동은 기구가 차 있어도, 집에서도 되는 "지금 당장 할 수 있는"
+  // 운동이라 파란 면 + 큰 카드로 따로 보이게 한다.
+  const isBodyweight = item.station_kind === '맨몸';
   // "머신 · 체스트 프레스" — 기구 종류와 기구에 붙은 실제 이름이 헬스장에서
   // 그 기구를 찾는 단서가 된다. 우리말 이름과 같으면 종류만 남긴다.
-  const hint = [item.station_kind, item.name_ko && item.name !== item.name_ko ? item.name : null]
-    .filter(Boolean)
-    .join(' · ');
+  const hint = isBodyweight
+    ? '기구 없이 어디서나'
+    : [item.station_kind, item.name_ko && item.name !== item.name_ko ? item.name : null]
+        .filter(Boolean)
+        .join(' · ');
 
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${title}${hint ? `, ${hint}` : ''}. 하는 방법 보기`}
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
+      style={({ pressed }) => [
+        styles.row,
+        isBodyweight && styles.rowBodyweight,
+        pressed && (isBodyweight ? styles.rowBodyweightPressed : styles.rowPressed),
+      ]}>
       <View style={styles.texts}>
-        <Text style={styles.name} maxFontSizeMultiplier={1.3}>
+        <Text
+          style={[styles.name, isBodyweight && styles.nameBodyweight]}
+          maxFontSizeMultiplier={1.3}>
           {title}
         </Text>
         {hint ? (
-          <Text style={styles.hint} maxFontSizeMultiplier={1.3}>
+          <Text
+            style={[styles.hint, isBodyweight && styles.hintBodyweight]}
+            maxFontSizeMultiplier={1.3}>
             {hint}
           </Text>
         ) : null}
@@ -197,6 +211,15 @@ const styles = StyleSheet.create({
   rowPressed: {
     backgroundColor: Colors.surfacePressed,
   },
+  // 맨몸 카드는 한 눈금 크게: 여백을 늘리고 파란 면으로 깐다.
+  rowBodyweight: {
+    backgroundColor: Colors.primaryFaint,
+    paddingVertical: Spacing.xl,
+    minHeight: TouchTarget.min + Spacing.lg,
+  },
+  rowBodyweightPressed: {
+    backgroundColor: '#D5E9FF',
+  },
   texts: {
     gap: 2,
   },
@@ -206,11 +229,18 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.subtitle,
     color: Colors.text,
   },
+  nameBodyweight: {
+    fontSize: FontSize.subtitle + 4,
+  },
   hint: {
     fontSize: FontSize.caption,
     fontWeight: '500',
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
+  },
+  hintBodyweight: {
+    color: Colors.primary,
+    fontWeight: '600',
   },
   centered: {
     alignItems: 'center',

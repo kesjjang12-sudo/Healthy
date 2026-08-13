@@ -60,7 +60,20 @@ export type EquipmentGuideSection = {
  * 유산소만 하러 오는 사람이 가장 많고, 근력 기구가 낯선 사람도 여기서부터
  * 읽기 시작하면 부담이 없다.
  */
-const MUSCLE_ORDER = ['유산소', '가슴', '등', '어깨', '하체', '복부'];
+const MUSCLE_ORDER = ['유산소', '가슴', '등', '어깨', '하체', '복부', '팔'];
+
+/**
+ * 섹션 안 정렬: 맨몸 먼저, 그다음 기구. 맨몸은 기구가 차 있어도·집에서도
+ * 되는 "지금 당장 할 수 있는" 운동이라 목록 앞에서 크게 보여준다.
+ */
+function sortBodyweightFirst(items: GuideEquipment[]): GuideEquipment[] {
+  return [...items].sort((a, b) => {
+    const aBody = a.station_kind === '맨몸' ? 0 : 1;
+    const bBody = b.station_kind === '맨몸' ? 0 : 1;
+    if (aBody !== bBody) return aBody - bBody;
+    return (a.name_ko ?? a.name).localeCompare(b.name_ko ?? b.name, 'ko');
+  });
+}
 
 /**
  * 헬스장의 모든 기구를 부위별 섹션으로 묶어서 돌려준다. 오늘 루틴과
@@ -99,5 +112,5 @@ export async function listEquipmentGuide(aptId: string | null): Promise<Equipmen
       const ib = MUSCLE_ORDER.indexOf(b);
       return (ia === -1 ? MUSCLE_ORDER.length : ia) - (ib === -1 ? MUSCLE_ORDER.length : ib);
     })
-    .map(([muscle, items]) => ({ muscle, items }));
+    .map(([muscle, items]) => ({ muscle, items: sortBodyweightFirst(items) }));
 }
