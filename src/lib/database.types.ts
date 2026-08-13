@@ -156,6 +156,19 @@ export type RoutineItem = {
   /** 유산소 처방 시간(분). 근력 운동이면 null — target_reps 와 동시에 채워지지 않는다. */
   target_duration_minutes: number | null;
   is_completed: boolean;
+  /**
+   * 지난 수행 기록에 근거한 무게 조정 제안. 제안일 뿐 적용은 본인이 누를 때만
+   * 된다. 근거가 없거나(처음 하는 기구) 무게 개념이 없는 운동이면 null.
+   */
+  weight_suggestion: WeightSuggestion | null;
+};
+
+/** weight_suggestion RPC 결과. 올릴지 내릴지와 그 근거 문구. */
+export type WeightSuggestion = {
+  action: 'increase' | 'decrease';
+  current_kg: number;
+  suggested_kg: number;
+  reason: string;
 };
 
 /**
@@ -343,6 +356,10 @@ export type Database = {
       join_gym: {
         Args: { p_apt_id: string };
         Returns: { user_id: string; apt_id: string | null; is_primary: boolean };
+      };
+      apply_weight_suggestion: {
+        Args: { p_equip_id: string; p_weight_kg: number };
+        Returns: { equip_id: string; weight_kg: number };
       };
       list_my_gym_memberships: {
         Args: { p_user_id: string };

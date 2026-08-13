@@ -82,6 +82,21 @@ export async function completeRoutine(
   return { routine: data.routine, pointsAwarded: data.points_awarded };
 }
 
+/**
+ * "올려볼게요" / "조금 내릴게요" 를 눌렀을 때 그 무게를 이 기구의 기준으로 삼는다.
+ *
+ * 제안은 서버가 하지만 적용은 여기서만 일어난다 — 앱이 알아서 올리면 다쳤을 때
+ * 앱의 판단이 되고, 무게가 무거운지는 화면이 아니라 그 사람 몸만 안다.
+ */
+export async function applyWeightSuggestion(equipId: string, weightKg: number): Promise<void> {
+  const { error } = await supabase.rpc('apply_weight_suggestion', {
+    p_equip_id: equipId,
+    p_weight_kg: weightKg,
+  });
+
+  if (error) throw toRoutineError(error);
+}
+
 /** 운동 탭 상단 "DAY_N" 배지용. */
 export async function getVisitStats(userId: string): Promise<VisitStats> {
   const { data, error } = await supabase.rpc('get_visit_stats', { p_user_id: userId });
