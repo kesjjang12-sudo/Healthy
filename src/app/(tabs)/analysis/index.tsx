@@ -4,17 +4,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
-import { AnalysisError, getWorkoutSummary } from '@/features/analysis/api';
+import { AnalysisError, getProgressSummary, getWorkoutSummary } from '@/features/analysis/api';
 import { estimateCalories } from '@/features/analysis/calorie';
+import { attendanceLine, streakLine, volumeLine } from '@/features/analysis/progress';
 import { useAuthSession } from '@/features/auth/auth-session';
-import type { WorkoutSummary } from '@/lib/database.types';
+import type { ProgressSummary, WorkoutSummary } from '@/lib/database.types';
 
 type Period = 'week' | 'month';
 
+const PERIOD_DAYS: Record<Period, number> = { week: 7, month: 30 };
+
 function periodStart(period: Period): Date {
   const now = new Date();
-  const days = period === 'week' ? 7 : 30;
-  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  return new Date(now.getTime() - PERIOD_DAYS[period] * 24 * 60 * 60 * 1000);
 }
 
 /**
@@ -29,13 +31,16 @@ export default function AnalysisTab() {
 
   const [period, setPeriod] = useState<Period>('week');
   const [summary, setSummary] = useState<WorkoutSummary | null>(null);
+  const [progress, setProgress] = useState<ProgressSummary | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setSummary(null);
+    setProgress(null);
     setErrorMessage(null);
 
+    // 둘은 서로를 기다리지 않는다. 하나가 늦어도 다른 하나는 먼저 그린다.
     getWorkoutSummary(user!.id, periodStart(period), new Date())
       .then((result) => {
         if (!cancelled) setSummary(result);
@@ -44,6 +49,14 @@ export default function AnalysisTab() {
         if (cancelled) return;
         setErrorMessage(error instanceof AnalysisError ? error.message : '잠시 후 다시 시도해 주세요.');
       });
+
+    // 진행 상황 칸은 덤이다. 이것만 실패했다고 탭 전체를 에러로 덮으면
+    // 볼 수 있는 숫자까지 못 보게 된다 — 그 칸만 조용히 빠진다.
+    getProgressSummary(user!.id, PERIOD_DAYS[period])
+      .then((result) => {
+        if (!cancelled) setProgress(result);
+      })
+      .catch(() => {});
 
     return () => {
       cancelled = true;
@@ -105,17 +118,22 @@ export default function AnalysisTab() {
         </View>
       ) : (
         <>
-          <View style={styles.hero}>
-            <Text style={styles.heroLabel} maxFontSizeMultiplier={1.2}>
+          {/* 제일 위에 "잘하고 있나"의 답을 둔다. 칼로리는 그 근거지 답이 아니다 —
+              시니어에게 "이번 주 3번 나오셨어요"가 "180kcal"보다 훨씬 잘 읽힌다. */}
+          {progress ? <ProgressCard progress={progress} /> : null}
+
+          <View style={styles.stat}>
+            <Text style={styles.statLabel} maxFontSizeMultiplier={1.2}>
               소모 칼로리(대략)
             </Text>
-            <Text style={styles.heroValue} maxFontSizeMultiplier={1.2}>
+            <Text style={styles.statValue} maxFontSizeMultiplier={1.2}>
               {calories?.toLocaleString('ko-KR')}kcal
             </Text>
-            <Text style={styles.heroSub} maxFontSizeMultiplier={1.3}>
-              {summaryLine}
-            </Text>
           </View>
+
+          <Text style={styles.statNote} maxFontSizeMultiplier={1.3}>
+            {summaryLine}
+          </Text>
 
           {summary.by_muscle.length > 0 ? (
             <View style={styles.section}>
@@ -161,6 +179,47 @@ export default function AnalysisTab() {
         </>
       )}
     </ScrollView>
+  );
+}
+
+/**
+ * "잘하고 있나"에 답하는 칸.
+ *
+ * 큰 숫자 하나(나온 횟수) + 지난 기간과의 비교 + 연속 주. 셋 다 출석 기준이다.
+ */
+function ProgressCard({ progress }: { progress: ProgressSummary }) {
+  const streak = streakLine(progress.streak_weeks);
+  const volume = volumeLine(progress.current);
+
+  return (
+    <View style={styles.hero}>
+      <Text style={styles.heroLabel} maxFontSizeMultiplier={1.2}>
+        최근 {progress.days}일 동안
+      </Text>
+      <Text style={styles.heroValue} maxFontSizeMultiplier={1.2}>
+        {progress.current.attendance_days}
+        <Text style={styles.heroUnit}>번 나오셨어요</Text>
+      </Text>
+
+      <Text
+        style={styles.heroSub}
+        maxFontSizeMultiplier={1.3}
+        accessibilityLiveRegion="polite">
+        {attendanceLine(progress.current, progress.previous, progress.days)}
+      </Text>
+
+      {streak ? (
+        <Text style={styles.streak} maxFontSizeMultiplier={1.3}>
+          {streak}
+        </Text>
+      ) : null}
+
+      {volume ? (
+        <Text style={styles.heroSub} maxFontSizeMultiplier={1.3}>
+          {volume}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
@@ -219,11 +278,54 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontVariant: ['tabular-nums'],
   },
+  heroUnit: {
+    fontSize: FontSize.subtitle,
+    fontWeight: '700',
+    color: Colors.textSecondary,
+  },
   heroSub: {
     fontSize: FontSize.body,
     fontWeight: '600',
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
+    textAlign: 'center',
+  },
+  streak: {
+    fontSize: FontSize.body,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.primary,
+    textAlign: 'center',
+  },
+  stat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.surface,
+  },
+  statLabel: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+  },
+  statValue: {
+    fontSize: FontSize.subtitle,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.subtitle,
+    color: Colors.text,
+    fontVariant: ['tabular-nums'],
+  },
+  statNote: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+    marginTop: -Spacing.md,
   },
   section: {
     gap: Spacing.md,

@@ -87,6 +87,7 @@ QR 페어링(그 헬스장에 물리적으로 가서 3분 안에 스캔해야 �
 | `20260812000022_repair_after_reinstall.sql` | 앱 재설치 후 계정 복구 |
 | `20260812000023_realtime_checkin.sql` | 키오스크 체크인을 폰이 실시간 반영 |
 | `20260812000024_cardio_actual_duration.sql` | 유산소 **실제 수행 시간** 기록 + 분석 집계 분리 |
+| `20260812000025_profile_name_and_progress.sql` | 카카오/구글 이름 가져오기 + `get_progress_summary` |
 
 ### 루틴 생성: 런타임 AI 호출 없음
 
@@ -148,7 +149,7 @@ pain_area_rules 적용 → apt_id 의 보유 기구로 치환 → daily_routines
 | `confirm_gym_membership(p_user_id, p_apt_id, p_make_primary)` | 키오스크 또는 개인 앱 | 주 소속 전환("이 헬스장으로 옮기셨나요?") |
 | `get_pairing_status(p_pairing_code)` | 키오스크(anon, 폴링) | PII 없이 상태(pending/consumed/expired)만 |
 | `complete_pairing(p_pairing_code)` | 개인 앱(authenticated) | QR 페어링 완료, 필요 시 그림자 계정 병합 |
-| `bootstrap_oauth_profile()` | 개인 앱(authenticated) | 카카오/구글 첫 로그인 시 프로필 생성 |
+| `bootstrap_oauth_profile()` | 개인 앱(authenticated) | 카카오/구글 첫 로그인 시 프로필 생성 + 제공자가 준 이름을 `nickname` 에 채움 |
 | `list_my_gym_memberships(p_user_id)` | 개인 앱 | 내가 다닌 헬스장 목록 |
 | `update_profile_data(p_user_id, p_patch)` | 양쪽 | `profile_data` 를 `||` 로 병합 |
 | `generate_daily_routine(p_user_id, p_date?, p_apt_id?)` | 개인 앱 | 하루 루틴 생성 |
@@ -157,6 +158,7 @@ pain_area_rules 적용 → apt_id 의 보유 기구로 치환 → daily_routines
 | `complete_routine(p_routine_id, p_actual_weight_kg?, p_actual_reps?, p_actual_duration_minutes?)` | 개인 앱 | 완료 처리 + 포인트 지급(1건당 10점, 재완료는 중복 지급 안 함). 유산소는 실제 수행 분(1~240)을 함께 받는다 |
 | `get_attendance_days(p_user_id, p_month)` | 개인 앱 | 달력 탭 — 그 달 출석일 |
 | `get_workout_summary(p_user_id, p_from, p_to)` | 개인 앱 | 분석 탭 원시 집계. 근력(세트)과 유산소(분)를 나눠서 준다(칼로리 계산은 클라이언트가 함) |
+| `get_progress_summary(p_user_id, p_days?)` | 개인 앱 | 분석 탭 — 최근 기간 vs 직전 같은 길이 기간 + 연속 출석 주 수 |
 | `get_visit_stats(p_user_id)` | 개인 앱 | 운동 탭 "DAY_N" 배지용 평생 출석일 수 |
 | `get_apartment_leaderboard(p_apt_id, p_limit?)` | 개인 앱 | 같은 단지 랭킹. 닉네임/포인트만, PII 없음 |
 
@@ -237,7 +239,9 @@ npx eas build --profile preview --platform android   # 설치용 .apk
 2. **태블릿에서 새 번호로 체크인**: 처음 보는 번호를 누르면 QR + 6자리 코드가 뜬다
 3. **폰을 개인 앱으로 설정**: 다른 기기(또는 시크릿 창)에서 "제 휴대폰입니다" 선택 →
    로그인 화면에서 **전화번호로 시작하기** → 카메라로 태블릿 QR을 찍거나 코드를 직접 입력
-4. 페어링이 끝나면 설문 4문항 → 최종 확인 → **오늘의 운동** 으로 이동
+4. 페어링이 끝나면 설문 5문항(이름부터) → 최종 확인 → **오늘의 운동** 으로 이동.
+   맨 위에 "○○ 님, 안녕하세요"가 뜨는지 확인한다 — 카카오·구글로 들어오면 이름이
+   이미 채워져 있고, 전화번호로 들어오면 설문 1번에서 직접 받는다
 5. 운동을 눌러 하는 방법·세트를 확인하고, 완료하면 실제로 포인트가 올라가는지 확인
 6. 하단 탭(운동/달력/랭킹/분석/프로필)을 돌아보며 각자 확인
 
@@ -269,7 +273,7 @@ src/
 │       ├── workout/            오늘의 운동 목록 + 기구 상세(세트 진행, 유산소 시간 측정, 완료 저장)
 │       ├── calendar/           출석 달력 + 하루 상세
 │       ├── ranking/            같은 단지 랭킹
-│       ├── analysis/           칼로리 대략치 + 부위별 세트 + 유산소 시간
+│       ├── analysis/           최근 vs 직전 기간 비교 + 칼로리 대략치 + 부위별 세트
 │       └── profile/            닉네임/성별/연령대, 내 헬스장, 로그아웃
 ├── components/                keypad, primary-button, choice-button, routine-card,
 │                               check-mark, tab-bar, calendar-grid, text-field, ...
@@ -282,22 +286,25 @@ src/
 │   ├── onboarding/             문항 정의, profile_data 병합 저장
 │   ├── routine/                루틴 생성/조회/완료, 세트 진행 상태 머신, 유산소 경과 시간
 │   ├── calendar/, ranking/, analysis/    각 탭 API + 순수 계산 함수
-│   └── content/hooking-copy.ts  근력운동 후킹 카피
+│   ├── content/                근력운동 후킹 카피 12종, 완료 멘트, 시간대별 인사말
+│   └── health/                 건강 앱 연동 자리(아직 인터페이스만)
 └── lib/                        supabase 클라이언트, DB 타입, env, RPC 에러 처리
 ```
 
-### 온보딩 설문 (4문항 + 최종 확인)
+### 온보딩 설문 (5문항 + 최종 확인)
 
-로그인 직후 개인 폰에서 받는다. AI 루틴 생성에 **반드시 필요한 값만** 받는다. 전부 큰
-버튼 선택이고 자판 입력이 없다.
+로그인 직후 개인 폰에서 받는다. AI 루틴 생성에 **반드시 필요한 값만** 받는다. 이름을
+빼면 전부 큰 버튼 선택이라 자판을 쓸 일이 없다 — 이름만은 고를 수가 없어서 자판을
+쓰지만, 카카오·구글로 들어오신 분은 이미 채워져 있어 그대로 넘기면 된다.
 
 | # | 문항 | `profile_data` 키 | 선택 |
 | --- | --- | --- | --- |
-| 1 | 성별 | `gender` | 단일 |
-| 2 | 연령대(10대~70대 이상) | `age_group` | 단일 |
-| 3 | 운동 목적 | `goals` | **다중** |
-| 4 | 아프거나 불편한 곳 | `pain_areas` | **다중** (+ "없습니다") |
-| 5 | 최종 확인 | — | 요약 확인 / 항목별 "고치기" |
+| 1 | 어떻게 불러 드릴까요 | `nickname` | 자유 입력(12자) |
+| 2 | 성별 | `gender` | 단일 |
+| 3 | 연령대(10대~70대 이상) | `age_group` | 단일 |
+| 4 | 운동 목적 | `goals` | **다중** |
+| 5 | 아프거나 불편한 곳 | `pain_areas` | **다중** (+ "없습니다") |
+| 6 | 최종 확인 | — | 요약 확인 / 항목별 "고치기" |
 
 **아픈 부위는 반드시 받는다.** 무릎·허리가 안 좋은 분께 그대로 무게를 잡아주면 부상으로
 이어진다. `pain_areas` 는 `undefined`(아직 안 물어봄)와 `[]`("없다"고 답함)를 구분한다.
@@ -307,6 +314,57 @@ src/
 - 잘못 눌러도 마지막 **확인 화면**에서 항목별로 되돌릴 수 있다
 - 중간 답도 그때그때 저장한다. 도중에 나가도 다음 방문 때 **남은 문항부터** 이어서 묻는다
 - 설문 완료 여부는 `profile_data.onboarded_at` 으로 판단한다
+
+### 이름 부르기와 후킹 카피
+
+**이름.** 로그인하면 "○○ 님, 안녕하세요"로 시작한다. 이름은 두 경로로 들어온다.
+
+- 카카오·구글: 로그인할 때 제공자가 표시 이름을 같이 준다. `bootstrap_oauth_profile`
+  이 그걸 `profile_data.nickname` 에 채운다(이메일이 이름 자리에 오면 `@` 앞만, 12자가
+  넘으면 잘라서). **이미 이름이 있으면 덮어쓰지 않는다** — 프로필 탭에서 직접 고친
+  이름이 다음 로그인에 되돌아가면 안 된다
+- 전화번호(QR 페어링): 제공자가 없으니 설문 1번에서 직접 받는다
+
+이름이 비어 있어도 "회원 님"이라고 부르지 않는다. 그렇게 부르면 이름을 넣을 수 있다는
+것 자체를 모른 채 계속 쓰게 된다 — 대신 인사말에서 이름을 빼고, 운동 탭에 "이름 등록하기"
+버튼을 띄운다(설문이 생기기 전에 가입하신 분들을 위한 길이다).
+
+인사말 뒷줄은 시간대(아침·낮·밤)와 방문 이력(첫 방문·두 번째·그 이후)에 따라 달라진다
+(`src/features/content/greeting.ts`).
+
+**후킹 카피.** 근력운동을 해야 하는 이유를 말하는 문구가 셋뿐이면 며칠 만에 외워져서
+눈에 안 들어온다. 열두 개로 늘리고 화면을 열 때마다 무작위로 고른다
+(`src/features/content/hooking-copy.ts`). 운동을 하나 마쳤을 때 띄우는 한마디도 여섯 개를
+돌린다 — 완료 화면은 다시 오게 만들 수 있는 자리라 "저장되었습니다"로 끝내지 않는다.
+
+> 화면 안에서 문구를 저절로 바꾸지는 않는다. 천천히 읽는 분이 많아서 읽는 도중에 글자가
+> 바뀌면 처음부터 다시 읽어야 한다. 대신 앱을 열 때마다, 탭을 옮길 때마다 새로 고른다.
+
+카피에는 **의학적으로 과장된 주장을 넣지 않는다.** 수명이 몇 년 늘어난다거나 병이
+낫는다는 문장은 들어올 수 없다 — 상식 수준이면서 틀려도 사람이 다치지 않는 말만 쓴다.
+
+### 분석 탭 — "내가 잘하고 있나"에 답한다
+
+숫자만 있으면 그게 잘하는 건지 못하는 건지 알 수 없다. 3번이 많은 건지 적은 건지는
+지난번의 나와 비교해야 나온다. 그래서 `get_progress_summary` 가 **최근 N일과 직전 같은
+길이 기간을 나란히** 돌려준다. 화면 맨 위는 이 한 줄이다.
+
+```
+최근 7일 동안  3번 나오셨어요
+지난 7일보다 1번 더 나오셨어요
+2주 연속으로 나오고 계세요
+```
+
+- 기준은 **출석**이다. 완료 개수는 버튼만 눌러도 늘지만 출석은 키오스크 체크인이 있어야
+  남는다(랭킹을 출석 기준으로 바꾼 것과 같은 이유). "이번 주 세 번 나오셨어요"가
+  "3개 완료"보다 정직하고 더 잘 읽히기도 한다
+- 연속은 **주 단위**로 센다. 헬스장은 매일 오는 곳이 아니라 "연속 며칠"은 거의 항상 1로
+  떨어진다. 이번 주에 아직 안 나왔어도 주가 안 끝났으므로 끊긴 걸로 보지 않는다
+- 문장은 나무라지 않는다. 적게 나온 주에 "줄었습니다"라고 쏘아붙이면 그 주에 앱을 안
+  열게 된다 — 사실은 그대로 말하되 다음 행동을 붙인다(`src/features/analysis/progress.ts`)
+- 칼로리는 헤드라인 자리에서 내렸다. 대략치라 판단 기준으로 쓸 수 없고, 시니어에게
+  "180kcal"은 "세 번 나오셨어요"만큼 와닿지 않는다
+- 이 칸만 실패하면 그 칸만 빠진다. 분석 탭 전체를 에러로 덮지 않는다
 
 ### 유산소 기록 — 앱이 재고, 사람이 고친다
 
@@ -401,7 +459,11 @@ psql -h /tmp -p 5433 -U postgres -c "create database fitroutine"
 psql -h /tmp -p 5433 -U postgres -d fitroutine -c "create role anon; create role authenticated;"
 psql -h /tmp -p 5433 -U postgres -d fitroutine -c "
   create schema auth;
-  create table auth.users (id uuid primary key default gen_random_uuid());
+  -- raw_user_meta_data 는 bootstrap_oauth_profile 이 카카오/구글 이름을 꺼내는 칸이다.
+  create table auth.users (
+    id uuid primary key default gen_random_uuid(),
+    raw_user_meta_data jsonb default '{}'::jsonb
+  );
   create or replace function auth.uid() returns uuid language sql stable as
     \$\$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid \$\$;
 "
@@ -430,12 +492,22 @@ select set_config('request.jwt.claim.sub', '<auth.users 의 id>', false);
    찍었는데 로그인이 안 되어 있으면 지금은 그냥 로그인 화면으로 보낸다(`src/app/equip/[qr].tsx`).
    로그인을 마친 뒤 원래 찍었던 QR 로 자동으로 돌아가는 기능은 없다 — 로그인된 상태에서
    앱 안 스캐너(운동 탭 → "기구 QR 찍기")로 찍으면 바로 되니 급하지 않다고 보고 미뤘다
-4. **웨어러블/폰 건강 앱 연동** — `src/features/health/` 에 인터페이스만 만들어 뒀고 실제
-   HealthKit/Health Connect 연동은 안 했다. 네이티브 모듈(`react-native-health`,
-   `react-native-health-connect`) 설치 + `app.json` config plugin 추가 + 네이티브 빌드가
-   필요한데, 이 저장소를 만든 개발 환경은 네이티브 빌드를 실행/검증할 수 없어서 실제
-   패키지를 넣지 않았다 — 잘못 붙이면 다음 실제 빌드에서야 설정 실수가 드러난다.
-   `provider.ts` 상단 주석에 붙이는 순서를 적어 뒀다
+4. **걸음수 · 건강 앱 연동** — `src/features/health/` 에 인터페이스만 만들어 뒀고 실제
+   연동은 안 했다. 붙이는 방법이 두 갈래인데, 어느 쪽을 고르느냐에 따라 테스트 방법이
+   달라져서 정한 뒤에 손대야 한다.
+
+   - **expo-sensors 의 Pedometer** — Expo Go 에 이미 들어 있어 빌드 없이 바로 된다.
+     다만 `getStepCountAsync`(기간 걸음수)는 **iOS 전용**이고, 안드로이드에서는
+     "not supported on Android yet" 을 돌려준다. 안드로이드는 `watchStepCount` 로
+     앱이 켜져 있는 동안만 셀 수 있어서 "오늘 걸음수"가 안 나온다
+   - **HealthKit + Health Connect** — 아이폰·갤럭시 양쪽에서 진짜 "건강 앱" 값을 읽는
+     방법이다. `react-native-health` / `react-native-health-connect` 설치 + `app.json`
+     config plugin + 네이티브 빌드가 필요하고, **Expo Go 로는 테스트가 안 된다**(개발
+     빌드 필수). 이 저장소를 만든 개발 환경은 네이티브 빌드를 실행/검증할 수 없어서
+     실제 패키지를 넣지 않았다 — 잘못 붙이면 다음 실제 빌드에서야 설정 실수가 드러난다
+
+   `provider.ts` 상단 주석에 붙이는 순서를 적어 뒀다. 어느 쪽을 고르든 화면은 이
+   인터페이스만 보고 있어서 그대로 두면 된다.
 5. **운동 시연 영상/이미지** — 지금 기구별 안내는 트레이너가 채우는 텍스트 설명
    (`equipments.description`)과 링크로 여는 외부 영상(`video_url`)뿐이다. 경쟁 앱처럼
    앱 안에서 바로 재생되는 아바타 애니메이션/움짤 시연은 만들지 않았다 — AI 생성

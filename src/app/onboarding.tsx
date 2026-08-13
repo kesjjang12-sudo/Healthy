@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChoiceButton } from '@/components/choice-button';
 import { PrimaryButton } from '@/components/primary-button';
+import { TextField } from '@/components/text-field';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { updateProfileData } from '@/features/onboarding/api';
@@ -90,6 +91,14 @@ function OnboardingFlow({ user }: { user: User }) {
     [saveInBackground],
   );
 
+  /**
+   * 이름은 한 글자 칠 때마다 서버로 보내지 않는다 — 자판을 두드리는 내내
+   * 요청이 나간다. "다음"을 누를 때 handleNext 가 한 번에 저장한다.
+   */
+  const handleTextChange = useCallback((text: string) => {
+    setAnswers((current) => ({ ...current, nickname: text }));
+  }, []);
+
   const handleMultiToggle = useCallback(
     (question: ProfileQuestion, value: string) => {
       setAnswers((current) => {
@@ -111,7 +120,11 @@ function OnboardingFlow({ user }: { user: User }) {
 
   const handleNext = useCallback(
     (question: ProfileQuestion) => {
-      saveInBackground({ [question.key]: answers[question.key] });
+      const value = answers[question.key];
+      // 이름 앞뒤 공백은 여기서 턴다. 저장해 두면 "김철수 님"이 "김철수  님"이 된다.
+      saveInBackground({
+        [question.key]: question.mode === 'text' && typeof value === 'string' ? value.trim() : value,
+      });
       setStepIndex((current) => current + 1);
     },
     [answers, saveInBackground],
@@ -140,6 +153,7 @@ function OnboardingFlow({ user }: { user: User }) {
     try {
       const updated = await updateProfileData(user.id, {
         ...answers,
+        ...(typeof answers.nickname === 'string' ? { nickname: answers.nickname.trim() } : {}),
         onboarded_at: new Date().toISOString(),
       });
       setUser(updated);
@@ -255,48 +269,63 @@ function OnboardingFlow({ user }: { user: User }) {
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
             {question.title}
           </Text>
-          {question.mode === 'multi' ? (
+          {question.mode === 'multi' || question.mode === 'text' ? (
             <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
               {question.helper}
             </Text>
           ) : null}
         </View>
 
-        <View style={styles.options} accessibilityRole="radiogroup">
-          {question.mode === 'multi' && question.noneLabel ? (
-            <ChoiceButton
-              label={question.noneLabel}
-              role="checkbox"
-              selected={isNoneSelected}
-              onPress={() => handleSelectNone(question)}
-              style={styles.optionFull}
-            />
-          ) : null}
+        {question.mode === 'text' ? (
+          <TextField
+            label={question.summaryLabel}
+            value={typeof answers.nickname === 'string' ? answers.nickname : ''}
+            onChangeText={handleTextChange}
+            placeholder={question.placeholder}
+            maxLength={question.maxLength}
+            returnKeyType="done"
+            onSubmitEditing={() => {
+              if (isAnswered(question, answers)) handleNext(question);
+            }}
+          />
+        ) : (
+          <View style={styles.options} accessibilityRole="radiogroup">
+            {question.mode === 'multi' && question.noneLabel ? (
+              <ChoiceButton
+                label={question.noneLabel}
+                role="checkbox"
+                selected={isNoneSelected}
+                onPress={() => handleSelectNone(question)}
+                style={styles.optionFull}
+              />
+            ) : null}
 
-          {question.options.map((option) => (
-            <ChoiceButton
-              key={String(option.value)}
-              label={option.label}
-              caption={option.caption}
-              role={question.mode === 'multi' ? 'checkbox' : 'radio'}
-              selected={
-                question.mode === 'single'
-                  ? answers[question.key] === option.value
-                  : (multiValues?.includes(String(option.value)) ?? false)
-              }
-              onPress={() =>
-                question.mode === 'single'
-                  ? handleSingleSelect(question.key, option.value)
-                  : handleMultiToggle(question, String(option.value))
-              }
-              style={isWide ? styles.optionWide : styles.optionFull}
-            />
-          ))}
-        </View>
+            {question.options.map((option) => (
+              <ChoiceButton
+                key={String(option.value)}
+                label={option.label}
+                caption={option.caption}
+                role={question.mode === 'multi' ? 'checkbox' : 'radio'}
+                selected={
+                  question.mode === 'single'
+                    ? answers[question.key] === option.value
+                    : (multiValues?.includes(String(option.value)) ?? false)
+                }
+                onPress={() =>
+                  question.mode === 'single'
+                    ? handleSingleSelect(question.key, option.value)
+                    : handleMultiToggle(question, String(option.value))
+                }
+                style={isWide ? styles.optionWide : styles.optionFull}
+              />
+            ))}
+          </View>
+        )}
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-        {question.mode === 'multi' ? (
+        {/* 단일 선택만 "다음"이 없다 — 고르는 순간 넘어가기 때문이다. */}
+        {question.mode === 'multi' || question.mode === 'text' ? (
           <PrimaryButton
             label="다음"
             onPress={() => handleNext(question)}

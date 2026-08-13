@@ -235,6 +235,29 @@ export type WorkoutSummary = {
   by_muscle: { target_muscle: string | null; completed_count: number; total_sets: number }[];
 };
 
+/** get_progress_summary 의 한 기간 집계 */
+export type ActivityWindow = {
+  /** 그 기간에 헬스장에 나온 날 수(키오스크 체크인 기준) */
+  attendance_days: number;
+  completed_count: number;
+  /** 근력 세트 합계. 유산소는 빠져 있다 */
+  total_sets: number;
+  /** 유산소 실제 수행 시간 합계(분) */
+  cardio_minutes: number;
+};
+
+/**
+ * 분석 탭 — 최근 기간과 직전 같은 길이 기간을 나란히.
+ * 비교 대상이 있어야 "잘하고 있나"에 답할 수 있다.
+ */
+export type ProgressSummary = {
+  days: number;
+  current: ActivityWindow;
+  previous: ActivityWindow;
+  /** 연속으로 한 번 이상 나온 주 수. 이번 주에 아직 안 나왔어도 끊긴 걸로 보지 않는다 */
+  streak_weeks: number;
+};
+
 export type VisitStats = {
   /** 평생 출석일 수(DAY_N 배지용). 헬스장 구분 없이 센다. */
   total_days: number;
@@ -381,6 +404,10 @@ export type Database = {
       get_workout_summary: {
         Args: { p_user_id: string; p_from: string; p_to: string };
         Returns: WorkoutSummary;
+      };
+      get_progress_summary: {
+        Args: { p_user_id: string; p_days?: number };
+        Returns: ProgressSummary;
       };
       get_visit_stats: {
         Args: { p_user_id: string };

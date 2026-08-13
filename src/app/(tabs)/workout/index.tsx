@@ -9,6 +9,7 @@ import { StrengthHookBanner } from '@/components/strength-hook-banner';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useCheckInListener } from '@/features/attendance/use-checkin-listener';
 import { useAuthSession } from '@/features/auth/auth-session';
+import { pickGreeting } from '@/features/content/greeting';
 import { pickHookMessage } from '@/features/content/hooking-copy';
 import { useDailyRoutine } from '@/features/routine/use-daily-routine';
 import { useVisitStats } from '@/features/routine/use-visit-stats';
@@ -30,6 +31,18 @@ export default function WorkoutTab() {
   const { stats: visitStats, refresh: refreshVisitStats } = useVisitStats(user!.id);
   const hookMessage = useMemo(() => pickHookMessage(), []);
 
+  // 인사말은 출석일 수가 도착하면 한 번 더 고른다("첫 방문이시네요"를 제대로
+  // 띄우려면 그 값이 있어야 한다). 그 뒤로는 이 화면에 있는 동안 안 바뀐다 —
+  // 읽는 도중에 글자가 바뀌면 처음부터 다시 읽게 된다.
+  const greeting = useMemo(
+    () =>
+      pickGreeting({
+        name: user!.profile_data?.nickname,
+        visitDays: visitStats?.total_days ?? null,
+      }),
+    [user, visitStats],
+  );
+
   // 태블릿에서 체크인이 찍히면 여기서 바로 받아 화면을 맞춘다.
   // 루틴까지 다시 부르는 이유: 오늘 어느 헬스장에 체크인했는지에 따라 그
   // 헬스장 기구로 루틴이 짜이기 때문이다(이사 대응).
@@ -50,7 +63,7 @@ export default function WorkoutTab() {
     return () => clearTimeout(timer);
   }, [justCheckedIn]);
 
-  const name = user!.profile_data?.nickname ?? '회원';
+  const name = user!.profile_data?.nickname?.trim() ?? '';
 
   return (
     <View style={styles.screen}>
@@ -62,8 +75,23 @@ export default function WorkoutTab() {
             </Text>
           ) : null}
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-            {name} 님{'\n'}오늘도 나오셨네요
+            {greeting.headline}
           </Text>
+          <Text style={styles.greetingSub} maxFontSizeMultiplier={1.3}>
+            {greeting.sub}
+          </Text>
+
+          {/* 설문이 생기기 전에 가입하신 분들은 이름이 비어 있다. "회원 님"으로
+              계속 부르는 대신 한 번만 권해 본다. */}
+          {name === '' ? (
+            <PrimaryButton
+              label="이름 등록하기"
+              variant="secondary"
+              size="compact"
+              style={styles.nameButton}
+              onPress={() => router.push('/profile')}
+            />
+          ) : null}
         </View>
 
         {justCheckedIn ? (
@@ -186,6 +214,17 @@ const styles = StyleSheet.create({
     lineHeight: FontSize.title * 1.3,
     letterSpacing: LetterSpacing.title,
     color: Colors.text,
+  },
+  greetingSub: {
+    fontSize: FontSize.body,
+    fontWeight: '500',
+    lineHeight: FontSize.body * 1.5,
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+  },
+  nameButton: {
+    alignSelf: 'flex-start',
+    marginTop: Spacing.xs,
   },
   points: {
     flexDirection: 'row',

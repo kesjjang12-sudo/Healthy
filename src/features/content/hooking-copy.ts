@@ -2,9 +2,15 @@
  * 근력운동의 필요성을 짧게 설득하는 카피.
  *
  * 이 세대는 "유산소만 하면 건강해진다"는 인식이 강해서, 앱을 처음 여는
- * 순간부터 "근력도 같이 해야 하는 이유"를 눈에 띄게 말해 둔다. 의학적으로
- * 과장된 주장(예: 정확한 수명 연장 수치)은 넣지 않는다 — 일반적으로 통용되는
- * 상식 수준의 문장만 쓴다.
+ * 순간부터 "근력도 같이 해야 하는 이유"를 눈에 띄게 말해 둔다.
+ *
+ * **의학적으로 과장된 주장은 넣지 않는다.** 수명이 몇 년 늘어난다거나 병이
+ * 낫는다는 식의 문장은 여기 들어올 수 없다 — 일반적으로 통용되는 상식
+ * 수준이면서, 틀려도 사람이 다치지 않는 말만 쓴다. 문구를 늘릴 때도 이
+ * 기준을 지킨다.
+ *
+ * 문구가 셋뿐이면 며칠만 써도 다 외워져서 눈에 안 들어온다. 그래서 열두 개를
+ * 두고 화면을 열 때마다 무작위로 하나를 고른다.
  */
 export type HookMessage = {
   headline: string;
@@ -24,10 +30,80 @@ export const STRENGTH_HOOK_MESSAGES: readonly HookMessage[] = [
     headline: '근력은 지금 시작해도 늘어납니다',
     body: '나이와 상관없이 꾸준히 하면 근력은 붙습니다. 오늘 처음이어도 늦지 않았습니다.',
   },
+  {
+    headline: '넘어지지 않는 힘은 다리에서 나옵니다',
+    body: '발이 걸렸을 때 몸을 다시 세우는 건 허벅지 힘입니다. 다리 운동은 그 순간을 위한 준비입니다.',
+  },
+  {
+    headline: '일주일에 두 번이면 충분합니다',
+    body: '매일 하지 않으셔도 됩니다. 쉬는 날에 근육이 자라기 때문에, 이틀에 한 번이 오히려 낫습니다.',
+  },
+  {
+    headline: '앉았다 일어서기가 편해집니다',
+    body: '의자에서 일어날 때 손으로 짚게 되셨다면 다리 근육이 줄어든 신호입니다. 다시 늘릴 수 있습니다.',
+  },
+  {
+    headline: '근육은 안 쓴 시간에 반응합니다',
+    body: '나이보다 안 쓴 기간이 더 큽니다. 일주일만 누워 있어도 줄고, 다시 쓰면 다시 돌아옵니다.',
+  },
+  {
+    headline: '장바구니가 무거워지셨나요',
+    body: '같은 짐이 무거워졌다면 짐이 는 게 아니라 힘이 준 것입니다. 오늘 한 세트가 그걸 되돌립니다.',
+  },
+  {
+    headline: '무릎이 불편할수록 주변 근육이 필요합니다',
+    body: '허벅지 근육이 받쳐 주면 무릎이 지는 부담이 줄어듭니다. 아픈 곳은 무게를 낮춰서 안전하게 해 드립니다.',
+  },
+  {
+    headline: '10분도 안 한 것보다 낫습니다',
+    body: '오늘 다 못 하셔도 괜찮습니다. 하나만 하고 가셔도 안 나온 날과는 다릅니다.',
+  },
+  {
+    headline: '근육은 저축과 같습니다',
+    body: '지금 모아 두면 몸이 힘들어질 때 꺼내 씁니다. 나중에 급하게 모으기는 어렵습니다.',
+  },
+  {
+    headline: '숨이 차는 건 부끄러운 게 아닙니다',
+    body: '숨이 찬다는 건 심장이 일하고 있다는 뜻입니다. 말은 되고 노래는 안 되는 정도가 딱 좋습니다.',
+  },
 ] as const;
 
-/** 매번 다른 문구가 보이도록. seed 를 안 주면 지금 시각 기준으로 고른다. */
-export function pickHookMessage(seed: number = Date.now()): HookMessage {
-  const index = Math.abs(Math.trunc(seed)) % STRENGTH_HOOK_MESSAGES.length;
-  return STRENGTH_HOOK_MESSAGES[index];
+/**
+ * 운동을 하나 마쳤을 때 띄우는 한마디.
+ *
+ * 완료 화면은 다시 오게 만들 수 있는 자리다. "저장되었습니다"만 뜨면 그냥
+ * 절차가 되지만, 방금 한 일을 알아봐 주면 다음에 한 번 더 누르게 된다.
+ */
+export const COMPLETION_PRAISES: readonly string[] = [
+  '오늘 하나 해내셨습니다.',
+  '몸은 오늘 하신 걸 기억합니다.',
+  '이렇게 쌓이면 어느 날 계단이 편해집니다.',
+  '안 나온 날과는 분명히 다른 하루입니다.',
+  '잘하셨습니다. 다음에도 이 자리에서 뵙겠습니다.',
+  '한 세트씩 늘어난 힘은 없어지지 않습니다.',
+] as const;
+
+/** 배열에서 하나 무작위로. seed 를 주면 같은 값이 나온다(테스트용). */
+function pick<T>(list: readonly T[], seed?: number): T {
+  const index =
+    seed === undefined
+      ? Math.floor(Math.random() * list.length)
+      : Math.abs(Math.trunc(seed)) % list.length;
+
+  return list[Math.min(index, list.length - 1)];
+}
+
+/**
+ * 화면을 열 때마다 다른 문구가 보이도록.
+ *
+ * 화면 안에서 문구를 저절로 바꾸지는 않는다 — 천천히 읽는 분이 많아서, 읽는
+ * 중에 글자가 바뀌면 처음부터 다시 읽어야 한다. 대신 앱을 열 때마다,
+ * 탭을 옮길 때마다 새로 고른다.
+ */
+export function pickHookMessage(seed?: number): HookMessage {
+  return pick(STRENGTH_HOOK_MESSAGES, seed);
+}
+
+export function pickCompletionPraise(seed?: number): string {
+  return pick(COMPLETION_PRAISES, seed);
 }

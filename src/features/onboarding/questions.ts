@@ -7,6 +7,23 @@ type Option<V> = {
   readonly caption?: string;
 };
 
+/**
+ * 자유 입력 문항. 지금은 이름 하나뿐이다.
+ *
+ * 나머지 문항은 전부 버튼인데 이것만 자판을 쓴다 — 이름은 고를 수가 없어서다.
+ * 대신 카카오·구글로 로그인하신 분은 제공자가 준 이름이 이미 채워져 있어
+ * 그대로 두고 넘어가면 된다(`bootstrap_oauth_profile`).
+ */
+type TextQuestion<K extends 'nickname'> = {
+  readonly key: K;
+  readonly mode: 'text';
+  readonly title: string;
+  readonly summaryLabel: string;
+  readonly helper: string;
+  readonly placeholder: string;
+  readonly maxLength: number;
+};
+
 type SingleQuestion<K extends 'gender' | 'age_group', V> = {
   readonly key: K;
   readonly mode: 'single';
@@ -32,10 +49,14 @@ type MultiQuestion<K extends 'goals' | 'pain_areas', V> = {
 };
 
 export type ProfileQuestion =
+  | TextQuestion<'nickname'>
   | SingleQuestion<'gender', Gender>
   | SingleQuestion<'age_group', AgeGroup>
   | MultiQuestion<'goals', Goal>
   | MultiQuestion<'pain_areas', PainArea>;
+
+/** 이름이 이보다 길면 인사말이 두 줄로 밀린다. */
+export const NICKNAME_MAX_LENGTH = 12;
 
 /**
  * 태블릿에서 받는 설문.
@@ -48,6 +69,15 @@ export type ProfileQuestion =
  * 선택지가 적은 것부터 물어 첫 화면에서 막히지 않게 한다.
  */
 export const PROFILE_QUESTIONS: readonly ProfileQuestion[] = [
+  {
+    key: 'nickname',
+    mode: 'text',
+    title: '어떻게 불러 드릴까요?',
+    summaryLabel: '이름',
+    helper: '앱에서 부를 이름입니다. 실명이 아니어도 되고, 성만 적으셔도 됩니다.',
+    placeholder: '예) 김철수',
+    maxLength: NICKNAME_MAX_LENGTH,
+  },
   {
     key: 'gender',
     mode: 'single',
@@ -111,6 +141,8 @@ export const CONFIRM_STEP_INDEX = PROFILE_QUESTIONS.length;
 export function isAnswered(question: ProfileQuestion, values: Partial<ProfileData>): boolean {
   const value = values[question.key];
 
+  // 공백만 친 이름은 답한 걸로 치지 않는다 — "  님, 안녕하세요"가 뜬다.
+  if (question.mode === 'text') return typeof value === 'string' && value.trim() !== '';
   if (question.mode === 'single') return value !== undefined;
   if (!Array.isArray(value)) return false;
 
@@ -129,6 +161,10 @@ export function findFirstUnansweredIndex(values: Partial<ProfileData> | null | u
 /** 최종 확인 화면에 보여줄 답변 문구 */
 export function formatAnswer(question: ProfileQuestion, values: Partial<ProfileData>): string {
   const value = values[question.key];
+
+  if (question.mode === 'text') {
+    return typeof value === 'string' && value.trim() !== '' ? value.trim() : '아직 안 적으셨어요';
+  }
 
   if (question.mode === 'single') {
     return question.options.find((option) => option.value === value)?.label ?? '아직 안 고르셨어요';

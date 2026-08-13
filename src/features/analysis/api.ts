@@ -1,4 +1,4 @@
-import type { WorkoutSummary } from '@/lib/database.types';
+import type { ProgressSummary, WorkoutSummary } from '@/lib/database.types';
 import {
   GENERIC_ERROR_MESSAGE,
   NETWORK_ERROR_MESSAGE,
@@ -35,6 +35,22 @@ export async function getWorkoutSummary(
     p_user_id: userId,
     p_from: toDateKey(from),
     p_to: toDateKey(to),
+  });
+
+  if (error) throw toAnalysisError(error);
+  if (!data) throw new AnalysisError(GENERIC_ERROR_MESSAGE);
+
+  return data;
+}
+
+/**
+ * 최근 p_days 와 직전 같은 길이 기간을 나란히 + 연속 출석 주 수.
+ * 화면은 이 둘을 비교해 "잘하고 있나"를 한 줄로 만든다(progress.ts).
+ */
+export async function getProgressSummary(userId: string, days: number): Promise<ProgressSummary> {
+  const { data, error } = await supabase.rpc('get_progress_summary', {
+    p_user_id: userId,
+    p_days: days,
   });
 
   if (error) throw toAnalysisError(error);

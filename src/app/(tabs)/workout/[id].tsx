@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -7,6 +7,7 @@ import { Keypad } from '@/components/keypad';
 import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
+import { pickCompletionPraise } from '@/features/content/hooking-copy';
 import {
   CARDIO_HOW_TO_STEPS,
   FIRST_TIME_RULE,
@@ -517,6 +518,9 @@ function FinishedView({
   pointsAwarded: number | null;
   saveError: string | null;
 }) {
+  // 화면이 다시 그려질 때마다 문구가 바뀌면 읽던 문장이 사라진다.
+  const praise = useMemo(() => pickCompletionPraise(), []);
+
   return (
     <View style={styles.centeredBlock}>
       <Text style={styles.title} maxFontSizeMultiplier={1.2}>
@@ -527,6 +531,14 @@ function FinishedView({
           ? `${item.name} ${minutes}분을 마치셨습니다.`
           : `${item.name} ${item.target_sets ?? 1}세트를 ${pin}칸으로 마치셨습니다.`}
       </Text>
+      {/* 저장됐다는 사실만 알리고 끝내면 그냥 절차가 된다. 방금 한 일을
+          알아봐 주는 한마디가 다음에 한 번 더 누르게 만든다. */}
+      {saveError ? null : (
+        <Text style={styles.praise} maxFontSizeMultiplier={1.3}>
+          {praise}
+        </Text>
+      )}
+
       {pointsAwarded ? (
         <Text style={styles.pointsEarned} maxFontSizeMultiplier={1.3}>
           +{pointsAwarded}점 적립
@@ -630,6 +642,14 @@ const styles = StyleSheet.create({
   helper: {
     fontSize: FontSize.body,
     fontWeight: '500',
+    lineHeight: FontSize.body * 1.5,
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+  },
+  praise: {
+    fontSize: FontSize.body,
+    fontWeight: '600',
     lineHeight: FontSize.body * 1.5,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
