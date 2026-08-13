@@ -1,17 +1,25 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CheckMark } from '@/components/check-mark';
 import { PrimaryButton } from '@/components/primary-button';
 import { RoutineCard } from '@/components/routine-card';
 import { StrengthHookBanner } from '@/components/strength-hook-banner';
-import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
+import { Colors, FontSize, LetterSpacing, Radius, Spacing, TouchTarget } from '@/constants/theme';
 import { useCheckInListener } from '@/features/attendance/use-checkin-listener';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { pickHookMessage } from '@/features/content/hooking-copy';
+import { setRoutineCourse } from '@/features/routine/api';
 import { useDailyRoutine } from '@/features/routine/use-daily-routine';
 import { useVisitStats } from '@/features/routine/use-visit-stats';
+import type { RoutineCourse } from '@/lib/database.types';
+
+const COURSE_LABELS: Record<RoutineCourse, string> = {
+  short: '짧게',
+  long: '충분히',
+};
 
 /**
  * 운동 탭. 예전엔 태블릿 체크인 직후 뜨던 화면이었지만, 이제 키오스크는
@@ -29,6 +37,36 @@ export default function WorkoutTab() {
   const { result, isLoading, errorMessage, retry } = useDailyRoutine(user!.id);
   const { stats: visitStats, refresh: refreshVisitStats } = useVisitStats(user!.id);
   const hookMessage = useMemo(() => pickHookMessage(), []);
+
+  // 운동을 하나 마치고 돌아오면 상세 화면이 이름과 점수를 붙여 보낸다.
+  // 목록의 완료 표시만으로는 "방금 그게 기록됐다"는 확인이 약하다.
+  const { completed: justCompleted, points: justEarned } = useLocalSearchParams<{
+    completed?: string;
+    points?: string;
+  }>();
+
+  const [courseError, setCourseError] = useState<string | null>(null);
+  const [pendingCourse, setPendingCourse] = useState<RoutineCourse | null>(null);
+
+  const routines = result?.routines ?? [];
+  const doneCount = routines.filter((item) => item.is_completed).length;
+  const allDone = routines.length > 0 && doneCount === routines.length;
+
+  const changeCourse = useCallback(
+    async (course: RoutineCourse) => {
+      setPendingCourse(course);
+      setCourseError(null);
+      try {
+        await setRoutineCourse(course);
+        retry();
+      } catch {
+        setCourseError('코스를 바꾸지 못했습니다. 다시 시도해 주세요.');
+      } finally {
+        setPendingCourse(null);
+      }
+    },
+    [retry],
+  );
 
   // 태블릿에서 체크인이 찍히면 여기서 바로 받아 화면을 맞춘다.
   // 루틴까지 다시 부르는 이유: 오늘 어느 헬스장에 체크인했는지에 따라 그
@@ -77,6 +115,20 @@ export default function WorkoutTab() {
           </View>
         ) : null}
 
+        {/* 방금 마친 운동. 목록의 체크 표시만으로는 "기록됐다"는 확인이
+            약해서, 무엇을 마쳤고 몇 점을 받았는지 한 줄로 되짚어 준다. */}
+        {justCompleted ? (
+          <View style={styles.doneBanner}>
+            <CheckMark size={28} thickness={3} />
+            <Text
+              style={styles.doneBannerText}
+              maxFontSizeMultiplier={1.3}
+              accessibilityLiveRegion="polite">
+              {justCompleted} 완료!{justEarned ? ` +${justEarned}점` : ''}
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.points}>
           <Text style={styles.pointsLabel} maxFontSizeMultiplier={1.2}>
             내 포인트
@@ -107,8 +159,87 @@ export default function WorkoutTab() {
           </View>
         ) : (
           <>
+            {/* 오늘 얼마나 왔는지. 목록만 있으면 몇 개 남았는지 세어야 한다. */}
+            {routines.length > 0 ? (
+              <View style={styles.progress}>
+                <View style={styles.progressHead}>
+                  <Text style={styles.progressLabel} maxFontSizeMultiplier={1.2}>
+                    {allDone ? '오늘 운동 끝!' : '오늘의 진행'}
+                  </Text>
+                  <Text style={styles.progressCount} maxFontSizeMultiplier={1.2}>
+                    {doneCount} / {routines.length}
+                  </Text>
+                </View>
+                <View style={styles.progressTrack}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      allDone && styles.progressFillDone,
+                      { width: `${(doneCount / routines.length) * 100}%` },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.progressHint} maxFontSizeMultiplier={1.3}>
+                  {allDone
+                    ? '오늘 몫을 다 하셨습니다. 스트레칭으로 마무리하세요.'
+                    : result?.estimated_minutes
+                      ? `다 하시면 약 ${result.estimated_minutes}분 걸려요.`
+                      : ''}
+                </Text>
+              </View>
+            ) : null}
+
+            {/* 코스 고르기. 처음 오신 분에게 여덟 가지를 던지면 질리고, 늘
+                오시는 분에게 네 가지는 짧다. 그날 시간에 맞춰 고르게 한다. */}
+            {result && result.course_options.length > 1 ? (
+              <View style={styles.courseSection}>
+                <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
+                  오늘은 얼마나 하실 건가요?
+                </Text>
+                <View style={styles.courseRow}>
+                  {result.course_options.map((option) => {
+                    const selected = result.course === option.course;
+                    return (
+                      <Pressable
+                        key={option.course}
+                        onPress={() => void changeCourse(option.course)}
+                        disabled={pendingCourse !== null}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                        accessibilityLabel={`${COURSE_LABELS[option.course]}, 약 ${option.minutes}분 코스`}
+                        style={({ pressed }) => [
+                          styles.courseCard,
+                          selected && styles.courseCardSelected,
+                          pressed && styles.courseCardPressed,
+                        ]}>
+                        <Text
+                          style={[styles.courseName, selected && styles.courseNameSelected]}
+                          maxFontSizeMultiplier={1.2}>
+                          {COURSE_LABELS[option.course]}
+                        </Text>
+                        <Text
+                          style={[styles.courseMinutes, selected && styles.courseMinutesSelected]}
+                          maxFontSizeMultiplier={1.2}>
+                          약 {option.minutes}분
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {courseError ? (
+                  <Text style={styles.noticeError} maxFontSizeMultiplier={1.3}>
+                    {courseError}
+                  </Text>
+                ) : (
+                  <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
+                    바꾸면 오늘 목록이 바로 다시 짜입니다. 이미 마친 운동은 그대로 남아요.
+                  </Text>
+                )}
+              </View>
+            ) : null}
+
             <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
-              오늘의 운동 {result?.routines.length ?? 0}가지
+              오늘의 운동 {routines.length}가지
             </Text>
 
             {/* 루틴은 "내가 소속된 헬스장에 있는 기구"로만 짜인다. 태블릿에 한
@@ -251,6 +382,113 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.body,
     color: Colors.success,
     textAlign: 'center',
+  },
+  doneBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.md,
+    padding: Spacing.lg,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.successFaint,
+  },
+  doneBannerText: {
+    fontSize: FontSize.body,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.success,
+  },
+  progress: {
+    gap: Spacing.sm,
+    padding: Spacing.xl,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.surface,
+  },
+  progressHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  progressLabel: {
+    fontSize: FontSize.body,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.text,
+  },
+  progressCount: {
+    fontSize: FontSize.subtitle,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.subtitle,
+    color: Colors.primary,
+    fontVariant: ['tabular-nums'],
+  },
+  progressTrack: {
+    height: 14,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.background,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primary,
+  },
+  progressFillDone: {
+    backgroundColor: Colors.success,
+  },
+  progressHint: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+  },
+  courseSection: {
+    gap: Spacing.md,
+  },
+  courseRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  courseCard: {
+    flex: 1,
+    gap: Spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.surface,
+    minHeight: TouchTarget.min,
+  },
+  courseCardSelected: {
+    backgroundColor: Colors.primary,
+  },
+  courseCardPressed: {
+    opacity: 0.85,
+  },
+  courseName: {
+    fontSize: FontSize.subtitle,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.subtitle,
+    color: Colors.text,
+  },
+  courseNameSelected: {
+    color: Colors.textOnPrimary,
+  },
+  courseMinutes: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+  },
+  courseMinutesSelected: {
+    color: Colors.textOnPrimary,
+  },
+  noticeError: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.danger,
   },
   buttonRow: {
     flexDirection: 'row',

@@ -136,23 +136,46 @@ export type KioskEnrollAttempt = {
   attempted_at: string;
 };
 
+/**
+ * 특정 헬스장에 놓인 기구 한 대.
+ *
+ * 운동 설명·부위·영상은 여기 없다 — exercise_catalog 가 갖는다. 이 행이
+ * 답하는 건 "이 단지에 그 운동을 할 기구가 있고, 앞에 이 QR 이 붙어 있다"
+ * 뿐이다. 무게는 같은 운동이라도 기구마다 다를 수 있어 여기서 덮어쓴다.
+ */
 export type Equipment = {
   id: string;
   apt_id: string | null;
   qr_code_val: string;
+  /** 어떤 운동을 하는 기구인지. 이름·설명은 전부 이쪽에 있다. */
+  catalog_id: string | null;
+  /** "2층 창가" 처럼 헬스장 안에서 찾아가는 단서. */
+  location_label: string | null;
+  /** 이 기구의 시작 무게. null 이면 카탈로그 값을 쓴다. */
+  base_weight_kg: number | null;
+  /** 이 기구에서 조절 가능한 최소 단위(kg). null 이면 카탈로그 값을 쓴다. */
+  weight_step_kg: number | null;
+  created_at: string | null;
+};
+
+/**
+ * 운동 그 자체. "체스트 프레스는 이런 운동이고 이렇게 한다"는 헬스장과
+ * 무관한 사실이라 여기 한 번만 둔다. equipments 는 "이 헬스장에 그 운동을 할
+ * 기구가 있다"는 사실과 QR 만 갖는다 — 같은 설명을 단지마다 복사하던 구조를
+ * 갈라낸 결과다.
+ */
+export type ExerciseCatalog = {
+  id: string;
   name: string;
-  /** 운동 이름의 한글 직역. 예: 체스트 프레스 → "가슴 밀기". 없으면 화면에서 생략한다. */
+  /** 운동 이름의 한글 직역. 예: 체스트 프레스 → "가슴 밀기". */
   name_ko: string | null;
-  /** 머신 / 스미스머신 / 케이블 / 맨몸 / 유산소 */
+  /** 머신 / 스미스머신 / 케이블 / 덤벨 / 맨몸 / 유산소 */
   station_kind: string | null;
-  /** 시니어가 이해하기 쉬운 한 줄 설명. 비어 있으면 화면에서 부위명으로 대체한다. */
+  target_muscle: string | null;
   description: string | null;
   why_it_matters: string | null;
-  target_muscle: string | null;
   video_url: string;
-  /** 표준 성인 남성 시작 무게. null 이면 무게 없이 맨몸으로 안내한다 */
   base_weight_kg: number | null;
-  /** 이 기구에서 조절 가능한 최소 단위(kg) */
   weight_step_kg: number;
   created_at: string | null;
 };
@@ -243,9 +266,18 @@ export type EquipmentLookup = {
 };
 
 /** generate_daily_routine RPC 응답 */
+/** 오늘 할 운동의 분량. 짧은 코스는 30분 안팎, 긴 코스는 1시간 안팎이다. */
+export type RoutineCourse = 'short' | 'long';
+
 export type GenerateRoutineResult = {
   routine_date: string;
   template: { gender: string; age_group: number; goals_key: string };
+  /** 지금 적용된 코스. 고른 적이 없으면 'short'. */
+  course: RoutineCourse;
+  /** 오늘 목록을 다 하는 데 걸리는 예상 시간(분). 쉬는 시간과 기구 이동까지 센 값. */
+  estimated_minutes: number;
+  /** 코스 선택 버튼에 붙일 "이 코스는 몇 분짜리인가". 고르기 전에도 알아야 해서 템플릿에서 센다. */
+  course_options: { course: RoutineCourse; minutes: number }[];
   /** 이번 호출로 새로 만들어진 운동 수. 이미 있으면 0 (재호출은 no-op) */
   created: number;
   excluded_by_pain: number;
@@ -366,9 +398,18 @@ export type Database = {
       };
       equipments: {
         Row: Equipment;
-        Insert: Partial<Equipment> & Pick<Equipment, 'qr_code_val' | 'name' | 'video_url'>;
+        Insert: Partial<Equipment> & Pick<Equipment, 'qr_code_val'>;
         Update: Partial<Equipment>;
-        Relationships: [Relationship<'equipments_apt_id_fkey', 'apt_id', 'apartments'>];
+        Relationships: [
+          Relationship<'equipments_apt_id_fkey', 'apt_id', 'apartments'>,
+          Relationship<'equipments_catalog_id_fkey', 'catalog_id', 'exercise_catalog'>,
+        ];
+      };
+      exercise_catalog: {
+        Row: ExerciseCatalog;
+        Insert: Partial<ExerciseCatalog> & Pick<ExerciseCatalog, 'name' | 'video_url'>;
+        Update: Partial<ExerciseCatalog>;
+        Relationships: [];
       };
       daily_routines: {
         Row: DailyRoutine;
@@ -400,8 +441,18 @@ export type Database = {
       };
       generate_daily_routine: {
         // p_apt_id 를 안 주면 유저의 주 소속(users.apt_id)을 쓴다.
-        Args: { p_user_id: string; p_date?: string; p_apt_id?: string };
+        // p_course 를 안 주면 저장된 선택(profile_data.course), 그것도 없으면 'short'.
+        Args: { p_user_id: string; p_date?: string; p_apt_id?: string; p_course?: RoutineCourse };
         Returns: GenerateRoutineResult;
+      };
+      // 코스를 바꾸고 오늘 루틴을 그 자리에서 다시 짠다. 이미 마친 운동은 남는다.
+      set_routine_course: {
+        Args: { p_course: RoutineCourse };
+        Returns: GenerateRoutineResult;
+      };
+      get_exercise_by_catalog_id: {
+        Args: { p_catalog_id: string };
+        Returns: EquipmentLookup;
       };
       get_daily_routine: {
         Args: { p_user_id: string; p_date?: string };

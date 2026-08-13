@@ -1,4 +1,9 @@
-import type { DailyRoutine, GenerateRoutineResult, VisitStats } from '@/lib/database.types';
+import type {
+  DailyRoutine,
+  GenerateRoutineResult,
+  RoutineCourse,
+  VisitStats,
+} from '@/lib/database.types';
 import {
   GENERIC_ERROR_MESSAGE,
   NETWORK_ERROR_MESSAGE,
@@ -57,6 +62,19 @@ export async function loadDailyRoutine(userId: string): Promise<GenerateRoutineR
     p_user_id: userId,
     p_apt_id: checkin?.apt_id ?? undefined,
   });
+
+  if (error) throw toRoutineError(error);
+  if (!data) throw new RoutineError(GENERIC_ERROR_MESSAGE);
+
+  return data;
+}
+
+/**
+ * 코스(짧게 / 충분히)를 바꾸고 오늘 루틴을 그 자리에서 다시 짠다.
+ * "내일부터 적용됩니다" 는 이미 헬스장에 와 있는 사람에게 쓸모가 없다.
+ */
+export async function setRoutineCourse(course: RoutineCourse): Promise<GenerateRoutineResult> {
+  const { data, error } = await supabase.rpc('set_routine_course', { p_course: course });
 
   if (error) throw toRoutineError(error);
   if (!data) throw new RoutineError(GENERIC_ERROR_MESSAGE);

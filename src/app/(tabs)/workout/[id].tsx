@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CheckMark } from '@/components/check-mark';
 import { Keypad } from '@/components/keypad';
 import { PrimaryButton } from '@/components/primary-button';
 import { WeightSuggestionCard } from '@/components/weight-suggestion-card';
@@ -51,6 +52,18 @@ export default function RoutineDetailScreen() {
     else router.replace('/workout');
   }, [router]);
 
+  // 마치고 나가는 길은 그냥 뒤로가기가 아니다. 목록이 방금 무엇을 마쳤는지
+  // 알아야 "○○ 완료! +N점"을 띄울 수 있다.
+  const goBackCompleted = useCallback(
+    (name: string, points: number | null) => {
+      router.replace({
+        pathname: '/workout',
+        params: { completed: name, ...(points ? { points: String(points) } : {}) },
+      });
+    },
+    [router],
+  );
+
   if (isLoading) {
     return (
       <View style={styles.centered}>
@@ -83,20 +96,31 @@ export default function RoutineDetailScreen() {
     );
   }
 
-  return <WorkoutSession item={item} onExit={goBack} onWeightChanged={retry} />;
+  return (
+    <WorkoutSession
+      item={item}
+      onExit={goBack}
+      onExitCompleted={goBackCompleted}
+      onWeightChanged={retry}
+    />
+  );
 }
 
 function WorkoutSession({
   item,
   onExit,
+  onExitCompleted,
   onWeightChanged,
 }: {
   item: RoutineItem;
   onExit: () => void;
+  /** 마치고 나갈 때. 목록이 완료 안내를 띄울 수 있게 무엇을 마쳤는지 넘긴다. */
+  onExitCompleted: (name: string, points: number | null) => void;
   /** 무게를 바꾸면 처방값이 달라지므로 루틴을 다시 불러와야 한다. */
   onWeightChanged: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { user, setUser } = useAuthSession();
   const isCardio = isCardioItem(item);
 
   // 세트 수가 안 정해진 기구는 한 세트짜리로 본다. 유산소도 항상 1세트다
@@ -130,13 +154,19 @@ function WorkoutSession({
       const pinValue = pin === '' ? null : Number(pin);
       const { pointsAwarded: awarded } = await completeRoutine(item.routine_id, pinValue, item.target_reps);
       setPointsAwarded(awarded);
+
+      // 받은 점수를 그 자리에서 합산해 둔다. 서버를 다시 부르면 그만큼
+      // 늦어지고, 그 사이 목록으로 나가면 포인트가 안 오른 것처럼 보인다.
+      if (awarded && user) {
+        setUser({ ...user, total_points: (user.total_points ?? 0) + awarded });
+      }
     } catch (error) {
       setSaveError(error instanceof RoutineError ? error.message : '기록을 저장하지 못했습니다.');
     } finally {
       setIsSaving(false);
       setIsFinished(true);
     }
-  }, [item, pin]);
+  }, [item, pin, user, setUser]);
 
   const body = isFinished ? (
     <FinishedView item={item} pin={pin} pointsAwarded={pointsAwarded} saveError={saveError} />
@@ -172,7 +202,14 @@ function WorkoutSession({
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
         {isFinished ? (
-          <PrimaryButton label="목록으로" onPress={onExit} />
+          <PrimaryButton
+            label="목록으로"
+            onPress={() =>
+              saveError
+                ? onExit()
+                : onExitCompleted(item.name_ko ?? item.name, pointsAwarded)
+            }
+          />
         ) : session.phase === 'ready' ? (
           <>
             <PrimaryButton label={isCardio ? '시작' : '운동 시작'} onPress={() => session.start()} />
@@ -443,8 +480,16 @@ function FinishedView({
 }) {
   return (
     <View style={styles.centeredBlock}>
+      {/* 저장에 실패했으면 축하부터 하면 안 된다 — 기록이 안 남았다는 사실이
+          먼저다. 성공했을 때만 큰 체크 표시를 띄운다. */}
+      {saveError ? null : (
+        <View style={styles.doneMark} accessibilityLabel="완료">
+          <CheckMark size={56} thickness={5} />
+        </View>
+      )}
+
       <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-        수고하셨습니다
+        {saveError ? '기록하지 못했습니다' : '수고하셨습니다'}
       </Text>
       <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
         {isCardioItem(item)
@@ -452,9 +497,11 @@ function FinishedView({
           : `${item.name} ${item.target_sets ?? 1}세트를 ${pin}칸으로 마치셨습니다.`}
       </Text>
       {pointsAwarded ? (
-        <Text style={styles.pointsEarned} maxFontSizeMultiplier={1.3}>
-          +{pointsAwarded}점 적립
-        </Text>
+        <View style={styles.pointsPill}>
+          <Text style={styles.pointsEarned} maxFontSizeMultiplier={1.3}>
+            +{pointsAwarded}점
+          </Text>
+        </View>
       ) : saveError ? (
         <Text style={styles.saveErrorText} maxFontSizeMultiplier={1.3}>
           {saveError}
@@ -583,6 +630,20 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
     textAlign: 'center',
+  },
+  doneMark: {
+    width: 108,
+    height: 108,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.full,
+    backgroundColor: Colors.success,
+  },
+  pointsPill: {
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primaryFaint,
   },
   pointsEarned: {
     fontSize: FontSize.subtitle,

@@ -5,7 +5,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
-import { EquipmentError, getEquipmentByQr } from '@/features/equipment/api';
+import {
+  EquipmentError,
+  getEquipmentByQr,
+  getExerciseByCatalogId,
+} from '@/features/equipment/api';
 import { FIRST_TIME_RULE, HOW_TO_STEPS, WEIGHT_RULE } from '@/features/routine/guidance';
 import type { EquipmentLookup } from '@/lib/database.types';
 
@@ -26,7 +30,13 @@ export default function EquipmentExploreScreen() {
   const insets = useSafeAreaInsets();
   // from=guide 로 오면 QR 을 찍은 게 아니라 "기구 사용법 모아보기" 목록에서
   // 골라 들어온 것이다 — "오늘 루틴에 없는 운동" 경고 대신 QR 안내를 띄운다.
-  const { qr, from } = useLocalSearchParams<{ qr: string; from?: string }>();
+  // catalog 가 있으면 백과사전에서 고른 것이다 — 이 헬스장에 기구가 없는
+  // 맨몸 운동은 QR 자체가 없어서 카탈로그로 찾아야 한다.
+  const { qr, catalog, from } = useLocalSearchParams<{
+    qr: string;
+    catalog?: string;
+    from?: string;
+  }>();
   const fromGuide = from === 'guide';
 
   const [equipment, setEquipment] = useState<EquipmentLookup | null>(null);
@@ -34,13 +44,13 @@ export default function EquipmentExploreScreen() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!qr) return;
+    if (!qr && !catalog) return;
     let cancelled = false;
 
     setIsLoading(true);
     setErrorMessage(null);
 
-    getEquipmentByQr(qr)
+    (catalog ? getExerciseByCatalogId(catalog) : getEquipmentByQr(qr))
       .then((data) => {
         if (!cancelled) setEquipment(data);
       })
@@ -55,7 +65,7 @@ export default function EquipmentExploreScreen() {
     return () => {
       cancelled = true;
     };
-  }, [qr]);
+  }, [qr, catalog]);
 
   const goBack = () => {
     if (router.canGoBack()) router.back();

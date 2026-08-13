@@ -96,9 +96,16 @@ export default function EquipmentGuideScreen() {
                     key={item.id}
                     item={item}
                     onPress={() =>
+                      // QR 이 없는 운동(이 헬스장에 기구가 없는 맨몸 운동)도
+                      // 열려야 해서 카탈로그 id 로 보낸다. 경로에 들어가는
+                      // 값은 자리를 채울 뿐이고, 실제 조회는 catalog 로 한다.
                       router.push({
                         pathname: '/workout/explore/[qr]',
-                        params: { qr: item.qr_code_val, from: 'guide' },
+                        params: {
+                          qr: item.qr_code_val ?? item.id,
+                          catalog: item.id,
+                          from: 'guide',
+                        },
                       })
                     }
                   />
