@@ -45,6 +45,14 @@ export default function WorkoutTab() {
     points?: string;
   }>();
 
+  // 안내는 잠깐만 띄운다. 경로 파라미터는 지우지 않으면 계속 남아서, 나중에
+  // 탭을 다시 열었을 때 방금 마친 것처럼 보인다(체크인 안내와 같은 이유).
+  useEffect(() => {
+    if (!justCompleted) return;
+    const timer = setTimeout(() => router.setParams({ completed: '', points: '' }), 6_000);
+    return () => clearTimeout(timer);
+  }, [justCompleted, router]);
+
   const [courseError, setCourseError] = useState<string | null>(null);
   const [pendingCourse, setPendingCourse] = useState<RoutineCourse | null>(null);
 
