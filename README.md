@@ -342,6 +342,27 @@ src/
 - PKCE 플로우로 카카오/구글 OAuth 를 처리한다 — 인가 코드를 앱이 직접 교환하는 방식이라
   리다이렉트 URL 에 토큰이 그대로 노출되는 implicit flow보다 안전하다
 
+## 3.5 실제 Supabase 에 SQL 적용하기 (자동화)
+
+대시보드 SQL Editor 에 붙여넣을 필요 없이 한 줄로 적용한다:
+
+```bash
+npm run db:check   # 연결 확인
+npm run db:push    # supabase/setup.sql 전체 적용 (몇 번 실행해도 안전)
+node scripts/apply-sql.mjs supabase/migrations/xxx.sql   # 파일 하나만
+```
+
+인증은 환경변수 `SUPABASE_ACCESS_TOKEN`(Supabase 개인 액세스 토큰, `sbp_` 로 시작)
+하나면 된다. 프로젝트는 `.env` 의 `EXPO_PUBLIC_SUPABASE_URL` 로 알아낸다.
+
+- Claude Code(웹) 세션에서 쓰려면: 환경(Environment) 설정 → Environment variables 에
+  `SUPABASE_ACCESS_TOKEN` 을 넣어두면 모든 새 세션이 자동으로 쓸 수 있다.
+- 로컬에서 쓰려면: `.env` 에 `SUPABASE_ACCESS_TOKEN=sbp_...` 한 줄 추가.
+
+⚠️ 이 저장소는 **공개**다. 이 토큰은 Supabase 계정 전체를 다룰 수 있으므로 절대
+커밋하면 안 된다(`.env` 는 gitignore 되어 있다). 토큰 발급:
+https://supabase.com/dashboard/account/tokens
+
 ## 4. 로컬에서 DB 테스트하기
 
 Supabase 프로젝트 없이도 마이그레이션과 RPC 를 검증할 수 있다. `auth.users` 를 참조하는
