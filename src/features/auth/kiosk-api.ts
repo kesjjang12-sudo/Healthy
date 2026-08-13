@@ -1,5 +1,4 @@
 import type { KioskCheckInResult } from '@/lib/database.types';
-import { APT_ID } from '@/lib/env';
 import {
   GENERIC_ERROR_MESSAGE,
   NETWORK_ERROR_MESSAGE,
@@ -49,10 +48,16 @@ function toCheckInError(error: RpcError): CheckInError {
  * 키오스크 출입 체크인. sign_in_with_phone 을 대체한다.
  * 개인정보(이름/포인트/루틴)는 절대 돌아오지 않는다 — user_id, 방문 횟수,
  * 페어링 필요 여부뿐이다.
+ *
+ * aptId 는 이 태블릿이 최초 설정 때 받아 기기에 저장해 둔 값이다. 주민은
+ * 번호만 누르고, "어느 단지 사람인지"는 이 값이 정한다.
  */
-export async function kioskCheckIn(phoneNumber: string): Promise<KioskCheckInResult> {
+export async function kioskCheckIn(
+  aptId: string,
+  phoneNumber: string,
+): Promise<KioskCheckInResult> {
   const { data, error } = await supabase.rpc('kiosk_check_in', {
-    p_apt_id: APT_ID,
+    p_apt_id: aptId,
     p_phone_number: toDigits(phoneNumber),
   });
 

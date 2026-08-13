@@ -45,10 +45,29 @@ export type Apartment = {
   id: string;
   name: string;
   address: string | null;
+  /** 관리사무소가 태블릿 최초 설정 시 입력하는 6자리 단지 코드. 이 값 + PIN 으로 태블릿이 apt_id 를 받아 간다. */
+  enroll_code: string;
   /** crypt() 로 해시된 키오스크 설정 PIN. 클라이언트는 절대 이 값을 직접 읽지 않는다(RPC로만 검증). */
   kiosk_pin_hash: string | null;
   created_at: string | null;
 };
+
+/** 태블릿이 기기에 저장해 두고 체크인마다 쓰는 단지. */
+export type KioskApartment = {
+  apt_id: string;
+  apt_name: string;
+};
+
+/**
+ * resolve_apartment_for_kiosk 응답.
+ *
+ * 다른 RPC 와 달리 실패가 예외가 아니라 status 로 온다 — 실패를 예외로 던지면
+ * 그 호출의 트랜잭션이 롤백되면서 서버가 방금 기록한 "실패 시도"까지 지워져
+ * 무차별 대입 잠금이 아예 작동하지 않는다.
+ */
+export type KioskEnrollmentResult =
+  | ({ status: 'ok' } & KioskApartment)
+  | { status: 'invalid' | 'pin_not_set' | 'locked' };
 
 export type User = {
   id: string;
@@ -85,6 +104,13 @@ export type DevicePairing = {
   consumed_at: string | null;
   consumed_by_auth_user_id: string | null;
   created_at: string | null;
+};
+
+/** 단지 등록 실패 기록. PIN 무차별 대입을 막는 용도로만 쓰고, 성공하면 지워진다. */
+export type KioskEnrollAttempt = {
+  id: string;
+  enroll_code: string;
+  attempted_at: string;
 };
 
 export type Equipment = {
@@ -275,6 +301,12 @@ export type Database = {
           Relationship<'device_pairings_apt_id_fkey', 'apt_id', 'apartments'>,
         ];
       };
+      kiosk_enroll_attempts: {
+        Row: KioskEnrollAttempt;
+        Insert: Partial<KioskEnrollAttempt> & Pick<KioskEnrollAttempt, 'enroll_code'>;
+        Update: Partial<KioskEnrollAttempt>;
+        Relationships: [];
+      };
       equipments: {
         Row: Equipment;
         Insert: Partial<Equipment> & Pick<Equipment, 'qr_code_val' | 'name' | 'video_url'>;
@@ -312,9 +344,14 @@ export type Database = {
         Args: { p_user_id: string; p_date?: string };
         Returns: RoutineItem[];
       };
+      /** @deprecated resolve_apartment_for_kiosk 를 쓸 것. 구버전 앱 호환으로만 남아 있다. */
       verify_kiosk_pin: {
         Args: { p_apt_id: string; p_pin: string };
         Returns: boolean;
+      };
+      resolve_apartment_for_kiosk: {
+        Args: { p_enroll_code: string; p_pin: string };
+        Returns: KioskEnrollmentResult;
       };
       kiosk_check_in: {
         Args: { p_apt_id: string; p_phone_number: string };
