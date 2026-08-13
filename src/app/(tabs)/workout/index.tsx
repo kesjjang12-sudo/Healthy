@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ListRow } from '@/components/list-row';
 import { PrimaryButton } from '@/components/primary-button';
 import { RoutineCard } from '@/components/routine-card';
 import { StrengthHookBanner } from '@/components/strength-hook-banner';
@@ -77,14 +78,14 @@ export default function WorkoutTab() {
           </View>
         ) : null}
 
-        <View style={styles.points}>
-          <Text style={styles.pointsLabel} maxFontSizeMultiplier={1.2}>
-            내 포인트
-          </Text>
-          <Text style={styles.pointsValue} maxFontSizeMultiplier={1.2}>
-            {(user!.total_points ?? 0).toLocaleString('ko-KR')}점
-          </Text>
-        </View>
+        {/* 토스 자산 목록의 한 줄처럼: 타일 + 이름, 값은 오른쪽 끝. */}
+        <ListRow
+          icon="coin"
+          tint="orange"
+          title="내 포인트"
+          value={`${(user!.total_points ?? 0).toLocaleString('ko-KR')}점`}
+          valueTone="primary"
+        />
 
         <StrengthHookBanner message={hookMessage} size="compact" />
 
@@ -131,24 +132,31 @@ export default function WorkoutTab() {
               ))}
             </View>
 
-            <View style={styles.buttonRow}>
-              <PrimaryButton
-                label="기구 QR 찍기"
-                variant="secondary"
-                style={styles.buttonHalf}
+            {/* 토스 "전체" 화면의 서비스 목록처럼: 색 타일 + 제목 + 설명 + 화살표. */}
+            <View style={styles.shortcuts}>
+              <Text style={styles.sectionCaption} maxFontSizeMultiplier={1.2}>
+                이런 것도 할 수 있어요
+              </Text>
+              <ListRow
+                icon="qr"
+                tint="blue"
+                title="기구 QR 찍기"
+                subtitle="목록에 없는 기구도 사용법과 영상을 볼 수 있어요"
+                chevron
                 onPress={() => router.push('/workout/scan')}
               />
-              <PrimaryButton
-                label="스트레칭 보기"
-                variant="secondary"
-                style={styles.buttonHalf}
+              <ListRow
+                icon="play"
+                tint="green"
+                title="스트레칭 보기"
+                subtitle="운동 전후 5분, 다치지 않게 풀어 주세요"
+                chevron
                 onPress={() => router.push('/workout/stretching')}
               />
             </View>
 
             <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-              운동을 누르면 하는 방법이 나옵니다. 오늘 목록에 없는 기구도 앞에 붙은 QR 을
-              찍으면 설명과 영상을 볼 수 있어요. 운동 전후로 스트레칭도 잊지 마세요.
+              운동을 누르면 하는 방법이 나옵니다.
             </Text>
           </>
         )}
@@ -187,34 +195,12 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.title,
     color: Colors.text,
   },
-  points: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.primaryFaint,
-  },
-  pointsLabel: {
-    fontSize: FontSize.caption,
-    fontWeight: '500',
-    letterSpacing: LetterSpacing.body,
-    color: Colors.textSecondary,
-  },
-  pointsValue: {
-    fontSize: FontSize.subtitle,
-    fontWeight: '700',
-    letterSpacing: LetterSpacing.subtitle,
-    color: Colors.primary,
-    fontVariant: ['tabular-nums'],
-  },
+  /** 토스의 "금융 서비스" 같은 회색 섹션 캡션 — 내용보다 조용해야 한다. */
   sectionTitle: {
-    fontSize: FontSize.body,
-    fontWeight: '700',
-    letterSpacing: LetterSpacing.subtitle,
-    color: Colors.text,
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.grey[500],
     marginBottom: -Spacing.sm,
   },
   list: {
@@ -232,12 +218,16 @@ const styles = StyleSheet.create({
     color: Colors.success,
     textAlign: 'center',
   },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
+  shortcuts: {
+    gap: Spacing.xs,
   },
-  buttonHalf: {
-    flex: 1,
+  /** 토스의 "금융 서비스" 같은 회색 섹션 캡션 */
+  sectionCaption: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.grey[500],
+    marginBottom: Spacing.sm,
   },
   notice: {
     padding: Spacing.lg,

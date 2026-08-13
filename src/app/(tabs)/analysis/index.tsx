@@ -210,11 +210,12 @@ const styles = StyleSheet.create({
   section: {
     gap: Spacing.md,
   },
+  /** 토스의 "금융 서비스" 같은 회색 섹션 캡션 — 내용보다 조용해야 한다. */
   sectionTitle: {
-    fontSize: FontSize.body,
-    fontWeight: '700',
-    letterSpacing: LetterSpacing.subtitle,
-    color: Colors.text,
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.grey[500],
   },
   bars: {
     gap: Spacing.md,

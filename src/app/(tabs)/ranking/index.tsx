@@ -66,24 +66,34 @@ export default function RankingTab() {
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
       ) : (
+        // 토스 증권의 보유 종목 목록처럼: 이름은 왼쪽, 값은 오른쪽 끝에 굵게.
+        // 칸을 나누는 카드 없이 흰 바탕에 행만 쌓고, 내 행만 옅은 파랑으로 띄운다.
         <View style={styles.list}>
           {rows.map((row) => (
             <View key={row.rank} style={[styles.row, row.is_me && styles.rowMe]}>
-              <Text
-                style={[styles.rank, row.is_me && styles.rankMe]}
-                maxFontSizeMultiplier={1.2}>
-                {row.rank}
-              </Text>
+              <View style={[styles.rankBadge, row.rank <= 3 && styles.rankBadgeTop]}>
+                <Text
+                  style={[styles.rank, (row.rank <= 3 || row.is_me) && styles.rankTop]}
+                  maxFontSizeMultiplier={1.2}>
+                  {row.rank}
+                </Text>
+              </View>
               <Text
                 style={[styles.nickname, row.is_me && styles.nicknameMe]}
-                maxFontSizeMultiplier={1.3}>
+                maxFontSizeMultiplier={1.3}
+                numberOfLines={1}>
                 {row.is_me ? `${row.nickname} (나)` : row.nickname}
               </Text>
-              <Text
-                style={[styles.points, row.is_me && styles.pointsMe]}
-                maxFontSizeMultiplier={1.2}>
-                {row.attendance_count}일 출석
-              </Text>
+              <View style={styles.valueColumn}>
+                <Text
+                  style={[styles.valueMain, row.is_me && styles.valueMainMe]}
+                  maxFontSizeMultiplier={1.2}>
+                  {row.attendance_count}일
+                </Text>
+                <Text style={styles.valueSub} maxFontSizeMultiplier={1.2}>
+                  출석
+                </Text>
+              </View>
             </View>
           ))}
         </View>
@@ -133,28 +143,39 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   list: {
-    gap: Spacing.sm,
+    gap: Spacing.xs,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.lg,
+    minHeight: 68,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    marginHorizontal: -Spacing.md,
     borderRadius: Radius.md,
-    backgroundColor: Colors.surface,
   },
   rowMe: {
     backgroundColor: Colors.primaryFaint,
   },
+  /** 순위 숫자를 담는 동그라미. 1~3등만 옅은 파랑 면을 깔아 눈에 띄게 한다. */
+  rankBadge: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.full,
+  },
+  rankBadgeTop: {
+    backgroundColor: Colors.primaryFaint,
+  },
   rank: {
-    width: 32,
     fontSize: FontSize.body,
     fontWeight: '700',
     color: Colors.textTertiary,
     fontVariant: ['tabular-nums'],
   },
-  rankMe: {
+  rankTop: {
     color: Colors.primary,
   },
   nickname: {
@@ -168,13 +189,22 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontWeight: '700',
   },
-  points: {
+  valueColumn: {
+    alignItems: 'flex-end',
+    gap: 1,
+  },
+  valueMain: {
     fontSize: FontSize.body,
     fontWeight: '700',
-    color: Colors.textSecondary,
+    color: Colors.text,
     fontVariant: ['tabular-nums'],
   },
-  pointsMe: {
+  valueMainMe: {
     color: Colors.primary,
+  },
+  valueSub: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    color: Colors.textTertiary,
   },
 });
