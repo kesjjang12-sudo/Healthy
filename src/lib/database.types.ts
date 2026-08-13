@@ -22,8 +22,10 @@ export type PainArea = 'knee' | 'lower_back' | 'shoulder' | 'neck' | 'wrist' | '
  * 모든 필드를 optional 로 두고, 읽는 쪽에서 없을 수 있다고 가정한다.
  */
 export type ProfileData = {
-  /** 표시용 이름 */
+  /** 표시용 이름. 변경은 update_nickname RPC 로만 한다(비속어·2주 제한 검사). */
   nickname?: string;
+  /** 마지막 닉네임 변경 시각. 2주 제한의 기준점 — 서버(update_nickname)가 찍는다. */
+  nickname_changed_at?: string;
   gender?: Gender;
   age_group?: AgeGroup;
   height_cm?: number;
@@ -79,6 +81,11 @@ export type User = {
   total_points: number | null;
   role: UserRole | null;
   profile_data: ProfileData;
+  /**
+   * 고객대응용 계정번호("1234-5678"). uuid 는 전화로 불러줄 수 없어서 만든
+   * 사람이 읽을 수 있는 고유 번호다. 서버가 가입 때 자동 발급한다.
+   */
+  support_code: string | null;
   created_at: string | null;
 };
 
@@ -372,6 +379,12 @@ export type Database = {
       update_profile_data: {
         Args: { p_user_id: string; p_patch: Partial<ProfileData> };
         Returns: User;
+      };
+      // 닉네임 전용. 비속어 검사와 "2주에 한 번" 제한(테스트 계정 제외)을
+      // 서버가 지킨다 — update_profile_data 는 nickname 키를 받지 않는다.
+      update_nickname: {
+        Args: { p_nickname: string };
+        Returns: { user: User };
       };
       generate_daily_routine: {
         // p_apt_id 를 안 주면 유저의 주 소속(users.apt_id)을 쓴다.

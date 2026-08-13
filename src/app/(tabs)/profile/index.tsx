@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChoiceButton } from '@/components/choice-button';
@@ -11,6 +11,8 @@ import { GymMembershipError, listMyGymMemberships, makeGymPrimary } from '@/feat
 import { getHealthConnectionStatus } from '@/features/health/provider';
 import { updateProfileData } from '@/features/onboarding/api';
 import { PROFILE_QUESTIONS } from '@/features/onboarding/questions';
+import { NicknameError, updateNickname } from '@/features/profile/api';
+import { copyToClipboard } from '@/lib/clipboard';
 import type { GymMembershipSummary } from '@/lib/database.types';
 import { supabase } from '@/lib/supabase';
 
@@ -32,6 +34,9 @@ export default function ProfileTab() {
 
   const [nickname, setNickname] = useState(user?.profile_data?.nickname ?? '');
   const [isSavingNickname, setIsSavingNickname] = useState(false);
+  const [nicknameNotice, setNicknameNotice] = useState<{ kind: 'error' | 'done'; text: string } | null>(null);
+  const [codeCopied, setCodeCopied] = useState(false);
+  const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [providerLabel, setProviderLabel] = useState<string | null>(null);
   const [memberships, setMemberships] = useState<GymMembershipSummary[] | null>(null);
   const [membershipError, setMembershipError] = useState<string | null>(null);
@@ -67,15 +72,40 @@ export default function ProfileTab() {
 
   const saveNickname = useCallback(async () => {
     setIsSavingNickname(true);
+    setNicknameNotice(null);
     try {
-      const updated = await updateProfileData(user!.id, { nickname: nickname.trim() });
+      const updated = await updateNickname(nickname.trim());
       setUser(updated);
-    } catch {
-      // 저장 실패는 조용히 넘어간다 — 닉네임 하나 때문에 화면을 막을 정도는 아니다.
+      setNicknameNotice({ kind: 'done', text: '닉네임을 바꿨습니다.' });
+    } catch (error) {
+      // 예전엔 조용히 삼켰지만, 이제 서버가 이유(비속어·2주 제한)를 말해 주므로
+      // 그대로 보여준다 — 말없이 안 바뀌면 고장으로 오해한다.
+      setNicknameNotice({
+        kind: 'error',
+        text: error instanceof NicknameError ? error.message : '저장하지 못했습니다. 다시 시도해 주세요.',
+      });
     } finally {
       setIsSavingNickname(false);
     }
-  }, [nickname, user, setUser]);
+  }, [nickname, setUser]);
+
+  const copySupportCode = useCallback(async () => {
+    const code = user?.support_code;
+    if (!code) return;
+
+    const ok = await copyToClipboard(code);
+    if (!ok) return;
+
+    setCodeCopied(true);
+    if (copyResetTimer.current) clearTimeout(copyResetTimer.current);
+    copyResetTimer.current = setTimeout(() => setCodeCopied(false), 2_000);
+  }, [user]);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimer.current) clearTimeout(copyResetTimer.current);
+    };
+  }, []);
 
   const selectGender = useCallback(
     async (value: string | number) => {
@@ -150,6 +180,18 @@ export default function ProfileTab() {
           disabled={nickname.trim() === (user?.profile_data?.nickname ?? '')}
           onPress={() => void saveNickname()}
         />
+        {nicknameNotice ? (
+          <Text
+            style={nicknameNotice.kind === 'error' ? styles.errorText : styles.doneText}
+            maxFontSizeMultiplier={1.3}
+            accessibilityLiveRegion="polite">
+            {nicknameNotice.text}
+          </Text>
+        ) : (
+          <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+            닉네임은 2주에 한 번 바꿀 수 있어요.
+          </Text>
+        )}
       </View>
 
       <View style={styles.section}>
@@ -248,6 +290,28 @@ export default function ProfileTab() {
         ) : null}
       </View>
 
+      {user?.support_code ? (
+        // 고객대응용 계정번호. 문의 전화·채팅에서 "계정번호 알려주세요" 한마디로
+        // 회원을 특정하기 위한 값이라, 눈에 띄게 만들 필요는 없고 찾을 수 있으면 된다.
+        <View style={styles.supportRow}>
+          <Text style={styles.helper} maxFontSizeMultiplier={1.3} selectable>
+            계정번호 {user.support_code}
+          </Text>
+          <Pressable
+            onPress={() => void copySupportCode()}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="계정번호 복사"
+            style={({ pressed }) => [styles.copyChip, pressed && styles.copyChipPressed]}>
+            <Text
+              style={[styles.copyChipLabel, codeCopied && styles.copyChipLabelDone]}
+              maxFontSizeMultiplier={1.3}>
+              {codeCopied ? '복사됨' : '복사'}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       {providerLabel ? (
         <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
           {providerLabel}로 로그인되어 있습니다.
@@ -314,6 +378,35 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: LetterSpacing.body,
     color: Colors.danger,
+  },
+  doneText: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.success,
+  },
+  supportRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  copyChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.surface,
+  },
+  copyChipPressed: {
+    backgroundColor: Colors.surfacePressed,
+  },
+  copyChipLabel: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.primary,
+  },
+  copyChipLabelDone: {
+    color: Colors.success,
   },
   gymList: {
     gap: Spacing.sm,
