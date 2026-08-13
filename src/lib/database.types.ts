@@ -122,9 +122,13 @@ export type Equipment = {
   apt_id: string | null;
   qr_code_val: string;
   name: string;
+  /** "가슴 밀기"처럼 동작으로 읽히는 우리말 이름. 비어 있으면 name 을 그대로 쓴다. */
+  name_ko: string | null;
   /** 시니어가 이해하기 쉬운 한 줄 설명. 비어 있으면 화면에서 부위명으로 대체한다. */
   description: string | null;
   target_muscle: string | null;
+  /** 머신 / 케이블 / 스미스머신 / 맨몸 / 유산소 — 헬스장에서 기구를 찾을 때의 단서 */
+  station_kind: string | null;
   video_url: string;
   /** 표준 성인 남성 시작 무게. null 이면 무게 없이 맨몸으로 안내한다 */
   base_weight_kg: number | null;

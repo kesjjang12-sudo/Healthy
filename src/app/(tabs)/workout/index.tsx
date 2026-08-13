@@ -131,6 +131,12 @@ export default function WorkoutTab() {
               ))}
             </View>
 
+            <PrimaryButton
+              label="기구 사용법 모아보기"
+              variant="secondary"
+              onPress={() => router.push('/workout/guide')}
+            />
+
             <View style={styles.buttonRow}>
               <PrimaryButton
                 label="기구 QR 찍기"
@@ -147,8 +153,9 @@ export default function WorkoutTab() {
             </View>
 
             <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-              운동을 누르면 하는 방법이 나옵니다. 오늘 목록에 없는 기구도 앞에 붙은 QR 을
-              찍으면 설명과 영상을 볼 수 있어요. 운동 전후로 스트레칭도 잊지 마세요.
+              {'운동을 누르면 하는 방법이 나옵니다. 오늘 목록에 없는 기구는 "기구 사용법 ' +
+                '모아보기"에서 부위별로 찾거나, 기구 앞에 붙은 QR 을 찍어서 볼 수 있어요. ' +
+                '운동 전후로 스트레칭도 잊지 마세요.'}
             </Text>
           </>
         )}
