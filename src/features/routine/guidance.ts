@@ -41,6 +41,18 @@ export function isCardioItem(item: RoutineItem): boolean {
 }
 
 /**
+ * 마친 뒤 "핀 몇 칸이었나요?"를 물어도 되는 운동인지.
+ *
+ * 유산소만 예외로 두면 안 된다 — 의자 스쿼트·벽 팔굽혀펴기 같은 맨몸운동도
+ * 꽂을 핀이 없다. 그런 운동에 핀을 물으면 대답할 수 없는 것을 요구하는 셈이라,
+ * 입력이 빌 수밖에 없고 "기록하고 마치기"가 영영 눌리지 않는다.
+ * 무게가 있는 기구 운동일 때만 참이다.
+ */
+export function needsWeightLog(item: RoutineItem): boolean {
+  return !isCardioItem(item) && item.target_weight !== null;
+}
+
+/**
  * 무게 안내.
  *
  * kg 을 단정해서 알려주지 않는다. 같은 10kg 라도 기구마다 핀 칸 수가 다르고,

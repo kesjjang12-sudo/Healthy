@@ -14,6 +14,7 @@ import {
   formatVolume,
   HOW_TO_STEPS,
   isCardioItem,
+  needsWeightLog,
   WEIGHT_RULE,
   weightHint,
 } from '@/features/routine/guidance';
@@ -142,9 +143,11 @@ function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => voi
     <LoggingView item={item} pin={pin} />
   );
 
-  // 유산소는 핀 칸이 없으니 물어볼 게 없다 — 기록 화면에서 키패드를 안 띄우고
-  // 바로 "기록하고 마치기"를 누를 수 있게 한다.
-  const showKeypad = session.phase === 'logging' && !isFinished && !isCardio;
+  // 핀을 꽂을 수 없는 운동(유산소·맨몸)은 물어볼 게 없다 — 키패드를 안 띄우고
+  // 바로 "기록하고 마치기"를 누를 수 있게 한다. 유산소만 예외로 두면 맨몸운동
+  // 차례에서 빈 키패드를 앞에 두고 버튼이 안 눌려 운동을 마칠 수 없다.
+  const logsWeight = needsWeightLog(item);
+  const showKeypad = session.phase === 'logging' && !isFinished && logsWeight;
 
   return (
     <View style={styles.screen}>
@@ -183,7 +186,7 @@ function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => voi
         ) : (
           <PrimaryButton
             label="기록하고 마치기"
-            disabled={!isCardio && pin.length === 0}
+            disabled={logsWeight && pin.length === 0}
             loading={isSaving}
             onPress={() => void finishAndSave()}
           />
@@ -271,9 +274,9 @@ function ReadyView({ item }: { item: RoutineItem }) {
         </View>
       </View>
 
-      {/* 유산소는 무게 개념이 없다 — "하는 방법"에 이미 속도 조절 안내가
-          들어 있으니 무게 안내는 생략한다. */}
-      {isCardio ? null : <WeightGuide item={item} />}
+      {/* 무게가 없는 운동(유산소·맨몸)에는 "한 칸 올리세요" 안내가 맞지 않는다.
+          유산소는 "하는 방법"에 속도 조절 안내가 이미 들어 있다. */}
+      {needsWeightLog(item) ? <WeightGuide item={item} /> : null}
 
       <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
         아프거나 어지러우면 바로 멈추고 관리사무소에 알려주세요.
@@ -376,16 +379,18 @@ function RestingView({
   );
 }
 
-/** 마지막: 근력은 오늘 꽂은 핀을 남기고, 유산소는 물어볼 게 없으니 확인만 */
+/** 마지막: 무게 기구는 오늘 꽂은 핀을 남기고, 핀이 없는 운동은 확인만 */
 function LoggingView({ item, pin }: { item: RoutineItem; pin: string }) {
-  if (isCardioItem(item)) {
+  // 유산소와 맨몸운동은 꽂을 핀이 없다. 없는 걸 물으면 대답을 못 해
+  // 마지막 버튼이 안 눌린다 — 여기서 갈라 주는 게 그 화면의 출구다.
+  if (!needsWeightLog(item)) {
     return (
       <View style={styles.headings}>
         <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-          수고하셨습니다
+          {isCardioItem(item) ? '수고하셨습니다' : `${item.target_sets ?? 1}세트 모두 끝났습니다`}
         </Text>
         <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          아래 버튼을 누르면 오늘 유산소가 기록됩니다.
+          아래 버튼을 누르면 오늘 기록이 저장됩니다.
         </Text>
       </View>
     );
@@ -432,7 +437,9 @@ function FinishedView({
       <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
         {isCardioItem(item)
           ? `${primaryName(item)} ${item.target_duration_minutes}분을 마치셨습니다.`
-          : `${primaryName(item)} ${item.target_sets ?? 1}세트를 ${pin}칸으로 마치셨습니다.`}
+          : needsWeightLog(item)
+            ? `${primaryName(item)} ${item.target_sets ?? 1}세트를 ${pin}칸으로 마치셨습니다.`
+            : `${primaryName(item)} ${item.target_sets ?? 1}세트를 마치셨습니다.`}
       </Text>
       {pointsAwarded ? (
         <Text style={styles.pointsEarned} maxFontSizeMultiplier={1.3}>

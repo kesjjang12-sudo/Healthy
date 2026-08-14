@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,7 +27,7 @@ import { useVisitStats } from '@/features/routine/use-visit-stats';
 export default function WorkoutTab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user } = useAuthSession();
+  const { user, refresh: refreshProfile } = useAuthSession();
   const { result, isLoading, errorMessage, retry } = useDailyRoutine(user!.id);
   const { stats: visitStats, refresh: refreshVisitStats } = useVisitStats(user!.id);
   const hookMessage = useMemo(() => pickHookMessage(), []);
@@ -44,6 +44,22 @@ export default function WorkoutTab() {
   }, [refreshVisitStats, retry]);
 
   useCheckInListener(user!.id, handleCheckIn);
+
+  // 운동을 마치고 돌아오면 이 화면은 그동안 계속 떠 있던 상태다. 다시 불러오지
+  // 않으면 방금 끝낸 운동이 목록에서 여전히 "안 한 것"으로 보이고 포인트도
+  // 그대로라, 저장이 안 된 줄 알고 같은 운동을 또 하게 된다.
+  // 첫 진입은 위 훅들이 이미 불러오므로 건너뛴다.
+  const hasFocusedOnce = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasFocusedOnce.current) {
+        hasFocusedOnce.current = true;
+        return;
+      }
+      retry();
+      void refreshProfile();
+    }, [retry, refreshProfile]),
+  );
 
   // 안내는 잠깐만 띄운다. 계속 남아 있으면 다음에 열었을 때 방금 찍은 것처럼 보인다.
   useEffect(() => {
