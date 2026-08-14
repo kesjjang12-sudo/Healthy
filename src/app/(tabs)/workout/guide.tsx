@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ExercisePhoto } from '@/components/exercise-photo';
 import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing, TouchTarget } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
@@ -146,6 +147,7 @@ function GuideRow({ item, onPress }: { item: GuideEquipment; onPress: () => void
         isBodyweight && styles.rowBodyweight,
         pressed && (isBodyweight ? styles.rowBodyweightPressed : styles.rowPressed),
       ]}>
+      <ExercisePhoto uri={item.image_url} name={title} size="thumb" />
       <View style={styles.texts}>
         <Text
           style={[styles.name, isBodyweight && styles.nameBodyweight]}
@@ -208,7 +210,9 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   row: {
-    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.lg,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.lg,
     borderRadius: Radius.lg,
@@ -228,6 +232,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#D5E9FF',
   },
   texts: {
+    flex: 1,
     gap: 2,
   },
   name: {

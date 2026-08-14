@@ -4,6 +4,7 @@ import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, View } from '
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CheckMark } from '@/components/check-mark';
+import { ExercisePhoto } from '@/components/exercise-photo';
 import { Keypad } from '@/components/keypad';
 import { PrimaryButton } from '@/components/primary-button';
 import { WeightSuggestionCard } from '@/components/weight-suggestion-card';
@@ -245,6 +246,10 @@ function ReadyView({ item, onWeightChanged }: { item: RoutineItem; onWeightChang
 
   return (
     <>
+      {/* 시작 자세 사진을 맨 위에 둔다. 이름과 설명을 읽기 전에 "아, 저
+          기구구나"가 먼저 와야 헬스장에서 찾을 수 있다. */}
+      <ExercisePhoto uri={item.image_url} name={item.name_ko ?? item.name} />
+
       <View style={styles.headings}>
         {item.target_muscle ? (
           <Text style={styles.eyebrow} maxFontSizeMultiplier={1.3}>

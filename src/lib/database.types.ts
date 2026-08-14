@@ -175,6 +175,8 @@ export type ExerciseCatalog = {
   description: string | null;
   why_it_matters: string | null;
   video_url: string;
+  /** 시작 자세 사진. free-exercise-db(퍼블릭 도메인) 사진을 쓰고, 직접 찍은 것이 생기면 갈아 끼운다. */
+  image_url: string | null;
   base_weight_kg: number | null;
   weight_step_kg: number;
   created_at: string | null;
@@ -221,6 +223,8 @@ export type RoutineItem = {
   why_it_matters: string | null;
   target_muscle: string | null;
   video_url: string;
+  /** 시작 자세 사진. 글만으로는 어느 기구인지부터 막힌다. */
+  image_url: string | null;
   qr_code_val: string;
   target_weight: number | null;
   target_sets: number | null;
@@ -260,6 +264,8 @@ export type EquipmentLookup = {
   why_it_matters: string | null;
   target_muscle: string | null;
   video_url: string;
+  /** 시작 자세 사진. 글만으로는 어느 기구인지부터 막힌다. */
+  image_url: string | null;
   qr_code_val: string;
   base_weight_kg: number | null;
   weight_step_kg: number;
