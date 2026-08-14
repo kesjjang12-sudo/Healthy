@@ -62,6 +62,14 @@ export type GuideEquipment = {
   image_url: string | null;
   /** 이 헬스장에 기구가 없는 맨몸 운동은 QR 이 없다. */
   qr_code_val: string | null;
+  /**
+   * 우리 헬스장에 이 기구가 실제로 있는지.
+   *
+   * 목록은 카탈로그(모든 운동) 기준이라 우리 헬스장에 없는 기구도 같이 나온다.
+   * 그걸 구분해 주지 않으면 "있는 줄 알고 갔는데 없는" 일이 생긴다.
+   * 맨몸 운동은 기구가 필요 없으므로 항상 true 다 — 어디서나 할 수 있다.
+   */
+  in_my_gym: boolean;
 };
 
 export type EquipmentGuideSection = {
@@ -122,6 +130,7 @@ export async function listEquipmentGuide(aptId: string | null): Promise<Equipmen
       station_kind: row.station_kind,
       image_url: row.image_url,
       qr_code_val: (mine ?? equipments[0])?.qr_code_val ?? null,
+      in_my_gym: row.station_kind === '맨몸' || Boolean(mine),
     };
 
     const bucket = byMuscle.get(muscle);
