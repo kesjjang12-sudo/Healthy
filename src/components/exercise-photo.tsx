@@ -45,8 +45,12 @@ export function ExercisePhoto({ uri, name, size = 'large', style }: Props) {
   return (
     <Image
       source={{ uri }}
-      style={[styles.base, box, style]}
-      resizeMode="cover"
+      style={[styles.base, box, size === 'large' && styles.largePhoto, style]}
+      // 큰 사진은 자르지 않는다(contain). 원본 대부분이 상자와 같은 3:2 라
+      // 꽉 차고, 비율이 다른 일부(세로·16:9)는 여백이 생기는 대신 동작이
+      // 통째로 보인다. cover 로 자르면 세로 사진은 절반이 날아간다.
+      // 목록 옆 썸네일은 크기가 작아 여백이 더 어색해서 그대로 채운다(cover).
+      resizeMode={size === 'large' ? 'contain' : 'cover'}
       onError={() => setFailed(true)}
       accessibilityRole="image"
       accessibilityLabel={`${name} 시작 자세`}
@@ -60,9 +64,15 @@ const styles = StyleSheet.create({
   },
   large: {
     width: '100%',
-    // 원본이 3:2 라 그 비율을 그대로 둔다. 잘라내면 기구가 화면 밖으로 나간다.
+    // 원본 대부분이 3:2 라 그 비율을 그대로 둔다.
     aspectRatio: 3 / 2,
     borderRadius: Radius.lg,
+  },
+  // 사진이 전부 흰 배경 스튜디오 컷이라, contain 여백도 흰색이어야 사진과
+  // 여백의 경계가 안 보인다. 자리표시(불러오기 실패)에는 쓰지 않는다 —
+  // 흰 상자 속 흰 글자가 된다.
+  largePhoto: {
+    backgroundColor: Colors.background,
   },
   thumb: {
     width: 84,
