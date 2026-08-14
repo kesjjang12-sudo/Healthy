@@ -301,6 +301,29 @@ export type WorkoutSummary = {
   by_muscle: { target_muscle: string | null; completed_count: number; total_sets: number }[];
 };
 
+/** 추이 그래프의 막대 하나. 운동이 없는 구간도 0 으로 채워서 온다. */
+export type TrendPoint = {
+  /** YYYY-MM-DD. 이 막대가 덮는 구간의 첫날 */
+  bucket_start: string;
+  /** YYYY-MM-DD. 하루짜리 막대면 bucket_start 와 같다 */
+  bucket_end: string;
+  completed_count: number;
+  total_sets: number;
+  /** 이 구간에 운동한 날 수. 하루짜리 막대면 0 또는 1 */
+  workout_days: number;
+};
+
+export type WorkoutTrend = {
+  bucket: 'day' | 'week';
+  points: TrendPoint[];
+  completed_count: number;
+  total_sets: number;
+  workout_days: number;
+  /** 직전 같은 길이 구간의 합계. "지난주보다 늘었다"를 말하는 데 쓴다 */
+  previous_total_sets: number;
+  previous_workout_days: number;
+};
+
 export type VisitStats = {
   /** 평생 출석일 수(DAY_N 배지용). 헬스장 구분 없이 센다. */
   total_days: number;
@@ -467,6 +490,10 @@ export type Database = {
       get_workout_summary: {
         Args: { p_user_id: string; p_from: string; p_to: string };
         Returns: WorkoutSummary;
+      };
+      get_workout_trend: {
+        Args: { p_user_id: string; p_from: string; p_to: string; p_bucket?: 'day' | 'week' };
+        Returns: WorkoutTrend;
       };
       get_visit_stats: {
         Args: { p_user_id: string };

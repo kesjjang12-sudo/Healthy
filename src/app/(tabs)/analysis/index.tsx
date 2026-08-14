@@ -4,18 +4,43 @@ import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/primary-button';
+import { TrendChart } from '@/components/trend-chart';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
-import { AnalysisError, getWorkoutSummary } from '@/features/analysis/api';
+import { AnalysisError, getWorkoutSummary, getWorkoutTrend } from '@/features/analysis/api';
 import { estimateCalories } from '@/features/analysis/calorie';
 import { useAuthSession } from '@/features/auth/auth-session';
-import type { WorkoutSummary } from '@/lib/database.types';
+import type { WorkoutSummary, WorkoutTrend } from '@/lib/database.types';
 
 type Period = 'week' | 'month';
 
+/**
+ * 30일이 아니라 28일(4주)인 이유: 30일을 7일씩 자르면 마지막 칸이 이틀짜리가
+ * 되어 그 칸만 막대가 낮게 나온다. 실제로는 덜 한 게 아닌데 "요즘 뜸하다"로
+ * 읽히므로, 칸 길이가 항상 같도록 7의 배수로 끊는다.
+ */
+const PERIODS = {
+  week: { label: '최근 7일', previousLabel: '지난 7일', days: 7, bucket: 'day' },
+  month: { label: '최근 4주', previousLabel: '지난 4주', days: 28, bucket: 'week' },
+} as const;
+
+/** 오늘을 포함해 정확히 days 일. 시작일을 하루라도 어긋나게 잡으면 주 단위가 안 맞는다. */
 function periodStart(period: Period): Date {
-  const now = new Date();
-  const days = period === 'week' ? 7 : 30;
-  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  const start = new Date();
+  start.setDate(start.getDate() - (PERIODS[period].days - 1));
+  return start;
+}
+
+/** 지난 기간과 견줘 한 문장으로. 줄었다고 나무라지 않는다 — 그만두게 만든다. */
+function compareSentence(trend: WorkoutTrend, period: Period): string | null {
+  const diff = trend.total_sets - trend.previous_total_sets;
+  const previousLabel = PERIODS[period].previousLabel;
+
+  if (trend.previous_total_sets === 0) {
+    return trend.total_sets > 0 ? `${previousLabel}에는 기록이 없었어요` : null;
+  }
+  if (diff > 0) return `${previousLabel}보다 ${diff}세트 많아요`;
+  if (diff < 0) return `${previousLabel}보다 ${-diff}세트 적어요`;
+  return `${previousLabel}과 같아요`;
 }
 
 /**
@@ -28,16 +53,26 @@ export default function AnalysisTab() {
 
   const [period, setPeriod] = useState<Period>('week');
   const [summary, setSummary] = useState<WorkoutSummary | null>(null);
+  const [trend, setTrend] = useState<WorkoutTrend | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setSummary(null);
+    setTrend(null);
     setErrorMessage(null);
 
-    getWorkoutSummary(user!.id, periodStart(period), new Date())
-      .then((result) => {
-        if (!cancelled) setSummary(result);
+    const from = periodStart(period);
+    const to = new Date();
+
+    Promise.all([
+      getWorkoutSummary(user!.id, from, to),
+      getWorkoutTrend(user!.id, from, to, PERIODS[period].bucket),
+    ])
+      .then(([summaryResult, trendResult]) => {
+        if (cancelled) return;
+        setSummary(summaryResult);
+        setTrend(trendResult);
       })
       .catch((error) => {
         if (cancelled) return;
@@ -70,13 +105,13 @@ export default function AnalysisTab() {
 
       <View style={styles.periodRow}>
         <PrimaryButton
-          label="최근 7일"
+          label={PERIODS.week.label}
           variant={period === 'week' ? 'primary' : 'secondary'}
           size="compact"
           onPress={() => setPeriod('week')}
         />
         <PrimaryButton
-          label="최근 30일"
+          label={PERIODS.month.label}
           variant={period === 'month' ? 'primary' : 'secondary'}
           size="compact"
           onPress={() => setPeriod('month')}
@@ -87,7 +122,7 @@ export default function AnalysisTab() {
         <Text style={styles.errorText} maxFontSizeMultiplier={1.3} accessibilityLiveRegion="polite">
           {errorMessage}
         </Text>
-      ) : !summary ? (
+      ) : !summary || !trend ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
@@ -103,6 +138,23 @@ export default function AnalysisTab() {
             <Text style={styles.heroSub} maxFontSizeMultiplier={1.3}>
               완료 {summary.completed_count}개 · 총 {summary.total_sets}세트
             </Text>
+          </View>
+
+          {/* 추이가 부위별 분포보다 위에 온다. "얼마나 꾸준한가"가 "어디를
+              많이 했나"보다 먼저 궁금한 정보다. */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
+              운동량 추이
+            </Text>
+            <Text style={styles.trendHeadline} maxFontSizeMultiplier={1.3}>
+              {PERIODS[period].days}일 중 {trend.workout_days}일 나오셨어요
+            </Text>
+            <TrendChart points={trend.points} bucket={trend.bucket} />
+            {compareSentence(trend, period) ? (
+              <Text style={styles.trendCompare} maxFontSizeMultiplier={1.3}>
+                {compareSentence(trend, period)}
+              </Text>
+            ) : null}
           </View>
 
           {summary.by_muscle.length > 0 ? (
@@ -217,6 +269,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: LetterSpacing.body,
     color: Colors.grey[500],
+  },
+  trendHeadline: {
+    fontSize: FontSize.subtitle,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.subtitle,
+    color: Colors.text,
+  },
+  /** 줄었을 때도 같은 색이다. 빨간 글씨로 나무라면 다음 주에 안 온다. */
+  trendCompare: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
   },
   bars: {
     gap: Spacing.md,
