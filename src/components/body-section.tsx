@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/primary-button';
 import { TextField } from '@/components/text-field';
+import { WeightChart } from '@/components/weight-chart';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import {
   BodyError,
@@ -11,13 +12,8 @@ import {
   parseWeightInput,
   sanitizeWeightText,
 } from '@/features/body/api';
+import { formatMonthDay } from '@/features/body/weight-trend';
 import type { BodyStatus } from '@/lib/database.types';
-
-/** 2026-08-14 → 8월 14일 */
-function formatDate(iso: string): string {
-  const [, month, day] = iso.split('-');
-  return `${Number(month)}월 ${Number(day)}일`;
-}
 
 /**
  * 분석 탭의 "내 몸" 섹션. 몸무게를 기록하고 변화를 본다.
@@ -139,6 +135,8 @@ export function BodySection() {
         </Text>
       ) : null}
 
+      <WeightChart logs={status.logs} />
+
       {status.logs.length > 0 ? (
         <View style={styles.logs}>
           {status.logs.slice(0, 8).map((log, index) => {
@@ -147,7 +145,7 @@ export function BodySection() {
             return (
               <View key={log.log_date} style={styles.logRow}>
                 <Text style={styles.logDate} maxFontSizeMultiplier={1.3}>
-                  {formatDate(log.log_date)}
+                  {formatMonthDay(log.log_date)}
                 </Text>
                 <Text style={styles.logWeight} maxFontSizeMultiplier={1.2}>
                   {log.weight_kg}kg
