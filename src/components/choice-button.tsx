@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '@/components/app-text';
 import type { StyleProp, ViewStyle } from 'react-native';
 
 import { CheckMark } from '@/components/check-mark';
