@@ -77,9 +77,6 @@
 **toss 가 main 에 들어가면서 UI 전체(theme.ts, 모든 화면, app-text/ListRow/Icon
 도입)가 바뀌었다** — 아래 브랜치들은 병합 전에 diff 를 다시 볼 것:
 
-- `claude/healthy-conversation-bkg4p8` — 동의 문서화, 유산소 실측, 인사말.
-  ⚠️ 마이그레이션 번호 3개가 main 과 충돌한다(`...000024`, `...000025`,
-  `...000026` 가 각각 다른 내용으로 이미 존재). 병합 시 뒤로 밀 것.
 - `claude/npm-db-check-c0k38z` — 이사 랭킹, 태블릿 단지 기억
 - `claude/sms-function-deploy-secrets-ju9gqa` — 솔라피 OTP (main 의
   phone-login 과 같은 화면을 고쳤다 — 충돌 주의)
@@ -88,7 +85,17 @@
 
 이미 main 에 다 들어간 브랜치(지워도 된다):
 `claude/fitroutine-db-schema-epbb3p`, `claude/github-friend-invite-wrmsh4`,
-`claude/toss-app-ui-ux-design-zikopg`
+`claude/toss-app-ui-ux-design-zikopg`, `claude/healthy-conversation-bkg4p8`
+
+## setup.sql 은 손으로 고치지 않는다
+
+`scripts/build-setup-sql.mjs` 가 `migrations/` + `seed.sql` 을 이어 붙여 만든다.
+마이그레이션을 추가했으면 `node scripts/build-setup-sql.mjs` 를 돌리고 같이
+커밋할 것. `--check` 로 최신인지 검사만 할 수도 있다.
+
+손으로 관리하던 시절에 두 갈래가 각자 마이그레이션을 추가하면 이 파일 하나에서
+충돌이 20곳씩 났고, 실제로 마이그레이션 여러 개가 빠진 채 3천 줄쯤 뒤처져
+있었다. 그 상태의 파일로 빈 DB 를 세우면 그 사람만 다른 스키마를 갖게 된다.
 
 ## 배포 경로가 둘이다 (2026-08-14부터 CI 가 자동으로 한다)
 
