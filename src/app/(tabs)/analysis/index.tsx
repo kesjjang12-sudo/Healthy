@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BodySection } from '@/components/body-section';
 import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { AnalysisError, getWorkoutSummary } from '@/features/analysis/api';
@@ -66,6 +67,8 @@ export default function AnalysisTab() {
       <Text style={styles.title} maxFontSizeMultiplier={1.2}>
         분석
       </Text>
+
+      <BodySection />
 
       <View style={styles.periodRow}>
         <PrimaryButton

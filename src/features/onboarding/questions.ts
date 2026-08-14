@@ -31,19 +31,32 @@ type MultiQuestion<K extends 'goals' | 'pain_areas', V> = {
   readonly options: readonly Option<V>[];
 };
 
+/**
+ * 키·몸무게처럼 선택지가 아니라 숫자를 받는 문항. 값은 question.key 가 아니라
+ * profile_data 의 height_cm / weight_kg 두 칸에 직접 들어간다.
+ */
+type BodyQuestion = {
+  readonly key: 'body';
+  readonly mode: 'body';
+  readonly title: string;
+  readonly summaryLabel: string;
+  readonly helper: string;
+};
+
 export type ProfileQuestion =
   | SingleQuestion<'gender', Gender>
   | SingleQuestion<'age_group', AgeGroup>
+  | BodyQuestion
   | MultiQuestion<'goals', Goal>
   | MultiQuestion<'pain_areas', PainArea>;
 
 /**
- * 태블릿에서 받는 설문.
+ * 신규 회원 설문.
  *
- * 입구 태블릿은 1대뿐이라 문항이 길면 그대로 줄이 된다. 그래서 AI 루틴 생성에
- * 반드시 필요한 것만 남겼다. 키·몸무게는 여기서 묻지 않는다 — 아파트 헬스장은
- * 이웃이 뒤에서 화면을 보는 곳이라 공용 화면에 띄우면 안 된다.
- * 반면 아픈 부위는 무게를 낮출지 판단하는 안전 입력이라 반드시 받아야 한다.
+ * 예전에 키·몸무게를 안 물은 이유는 이 설문이 입구 태블릿(이웃이 뒤에서
+ * 화면을 보는 공용 기기)에서 돌았기 때문이다. 지금은 개인 폰에서 돌므로
+ * 그 근거가 사라졌고, 몸무게는 칼로리 계산과 변화 관리에 바로 쓰여서 받는다.
+ * 아픈 부위는 무게를 낮출지 판단하는 안전 입력이라 반드시 받아야 한다.
  *
  * 선택지가 적은 것부터 물어 첫 화면에서 막히지 않게 한다.
  */
@@ -72,6 +85,13 @@ export const PROFILE_QUESTIONS: readonly ProfileQuestion[] = [
       { value: 60, label: '60대' },
       { value: 70, label: '70대 이상' },
     ],
+  },
+  {
+    key: 'body',
+    mode: 'body',
+    title: '키와 몸무게를 알려주세요',
+    summaryLabel: '키 · 몸무게',
+    helper: '운동 무게와 소모 칼로리 계산에 쓰입니다. 다른 회원에게는 보이지 않아요.',
   },
   {
     key: 'goals',
@@ -109,6 +129,10 @@ export const CONFIRM_STEP_INDEX = PROFILE_QUESTIONS.length;
 
 /** 이 문항에 답을 했는지. 목적은 최소 1개, 아픈 곳은 "없습니다"(빈 배열)도 답으로 친다. */
 export function isAnswered(question: ProfileQuestion, values: Partial<ProfileData>): boolean {
+  if (question.mode === 'body') {
+    return values.height_cm !== undefined && values.weight_kg !== undefined;
+  }
+
   const value = values[question.key];
 
   if (question.mode === 'single') return value !== undefined;
@@ -128,6 +152,13 @@ export function findFirstUnansweredIndex(values: Partial<ProfileData> | null | u
 
 /** 최종 확인 화면에 보여줄 답변 문구 */
 export function formatAnswer(question: ProfileQuestion, values: Partial<ProfileData>): string {
+  if (question.mode === 'body') {
+    if (values.height_cm === undefined || values.weight_kg === undefined) {
+      return '아직 안 적으셨어요';
+    }
+    return `${values.height_cm}cm · ${values.weight_kg}kg`;
+  }
+
   const value = values[question.key];
 
   if (question.mode === 'single') {

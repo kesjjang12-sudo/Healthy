@@ -7,6 +7,7 @@ import { CheckMark } from '@/components/check-mark';
 import { PrimaryButton } from '@/components/primary-button';
 import { RoutineCard } from '@/components/routine-card';
 import { StrengthHookBanner } from '@/components/strength-hook-banner';
+import { WeightNudgeModal } from '@/components/weight-nudge-modal';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing, TouchTarget } from '@/constants/theme';
 import { useCheckInListener } from '@/features/attendance/use-checkin-listener';
 import { useAuthSession } from '@/features/auth/auth-session';
@@ -100,6 +101,8 @@ export default function WorkoutTab() {
 
   return (
     <View style={styles.screen}>
+      {/* 몸무게 기록이 7일 넘게 없으면 하루 한 번 업데이트를 권한다. */}
+      <WeightNudgeModal />
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xxl }]}>
         <View style={styles.headings}>
           {visitStats ? (
