@@ -243,6 +243,28 @@ export type WeightSuggestion = {
   reason: string;
 };
 
+/** 몸무게 기록 한 줄. 하루에 하나만 남는다(같은 날 다시 재면 덮어씀). */
+export type BodyWeightLog = {
+  log_date: string;
+  weight_kg: number;
+};
+
+/**
+ * get_body_status RPC 결과. 기구 무게(WeightSuggestion)와 완전히 다른,
+ * "몸"무게 쪽이다.
+ */
+export type BodyStatus = {
+  height_cm: number | null;
+  /** 기록이 없으면 설문 때 적은 프로필 값. 그것도 없으면 null. */
+  current_weight_kg: number | null;
+  current_log_date: string | null;
+  first_weight_kg: number | null;
+  first_log_date: string | null;
+  /** null = 아직 한 번도 기록 안 함. 업데이트 팝업 판단에 쓴다. */
+  days_since_last_log: number | null;
+  logs: BodyWeightLog[];
+};
+
 /**
  * get_equipment_by_qr RPC 응답. 오늘 처방 여부와 무관하게 QR 로 바로 찾은
  * 기구 정보 — target_weight/sets/reps/is_completed 처럼 "이 사람에게 처방된
@@ -488,6 +510,14 @@ export type Database = {
       apply_weight_suggestion: {
         Args: { p_equip_id: string; p_weight_kg: number };
         Returns: { equip_id: string; weight_kg: number };
+      };
+      get_body_status: {
+        Args: Record<string, never>;
+        Returns: BodyStatus;
+      };
+      log_body_weight: {
+        Args: { p_weight_kg: number; p_height_cm?: number };
+        Returns: BodyStatus;
       };
       list_my_gym_memberships: {
         Args: { p_user_id: string };

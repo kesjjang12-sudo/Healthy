@@ -11,9 +11,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChoiceButton } from '@/components/choice-button';
+import { TextField } from '@/components/text-field';
 import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
+import { logBodyWeight, parseHeightInput, parseWeightInput, sanitizeWeightText } from '@/features/body/api';
 import { updateProfileData } from '@/features/onboarding/api';
 import {
   CONFIRM_STEP_INDEX,
@@ -72,6 +74,15 @@ function OnboardingFlow({ user }: { user: User }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // 키·몸무게는 선택지가 아니라 숫자 입력이라 문자열 상태를 따로 둔다.
+  // ("72.5" 처럼 소수점 입력 중간 상태는 숫자로 못 담는다)
+  const [heightText, setHeightText] = useState(() =>
+    user.profile_data?.height_cm !== undefined ? String(user.profile_data.height_cm) : '',
+  );
+  const [weightText, setWeightText] = useState(() =>
+    user.profile_data?.weight_kg !== undefined ? String(user.profile_data.weight_kg) : '',
+  );
+
   /** 화면을 막지 않으려고 응답은 기다리지 않는다. 실패해도 최종 저장이 전체 값을 다시 보낸다. */
   const saveInBackground = useCallback(
     (patch: Partial<ProfileData>) => {
@@ -117,6 +128,16 @@ function OnboardingFlow({ user }: { user: User }) {
     [answers, saveInBackground],
   );
 
+  const handleBodyNext = useCallback(() => {
+    const height = parseHeightInput(heightText);
+    const weight = parseWeightInput(weightText);
+    if (height === null || weight === null) return;
+
+    setAnswers((current) => ({ ...current, height_cm: height, weight_kg: weight }));
+    saveInBackground({ height_cm: height, weight_kg: weight });
+    setStepIndex((current) => current + 1);
+  }, [heightText, weightText, saveInBackground]);
+
   const handleBack = useCallback(() => {
     setErrorMessage(null);
     setStepIndex((current) => Math.max(0, current - 1));
@@ -142,6 +163,13 @@ function OnboardingFlow({ user }: { user: User }) {
         ...answers,
         onboarded_at: new Date().toISOString(),
       });
+
+      // 설문의 몸무게를 변화 기록의 첫 점으로도 남긴다. 실패해도 가입을 막을
+      // 일은 아니다 — 프로필에는 이미 저장됐고, 기록은 분석 탭에서 다시 남길 수 있다.
+      if (answers.weight_kg !== undefined) {
+        await logBodyWeight(answers.weight_kg, answers.height_cm).catch(() => {});
+      }
+
       setUser(updated);
       router.replace('/workout');
     } catch (error) {
@@ -240,6 +268,8 @@ function OnboardingFlow({ user }: { user: User }) {
   const question = PROFILE_QUESTIONS[stepIndex];
   const multiValues = question.mode === 'multi' ? selectedValues(question, answers) : undefined;
   const isNoneSelected = multiValues?.length === 0;
+  const isBodyStep = question.mode === 'body';
+  const bodyReady = parseHeightInput(heightText) !== null && parseWeightInput(weightText) !== null;
 
   return (
     <View style={styles.screen}>
@@ -255,13 +285,31 @@ function OnboardingFlow({ user }: { user: User }) {
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
             {question.title}
           </Text>
-          {question.mode === 'multi' ? (
+          {question.mode === 'multi' || question.mode === 'body' ? (
             <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
               {question.helper}
             </Text>
           ) : null}
         </View>
 
+        {isBodyStep ? (
+          <View style={styles.bodyFields}>
+            <TextField
+              label="키 (cm)"
+              value={heightText}
+              onChangeText={(text) => setHeightText(text.replace(/\D/g, '').slice(0, 3))}
+              placeholder="165"
+              keyboardType="number-pad"
+            />
+            <TextField
+              label="몸무게 (kg)"
+              value={weightText}
+              onChangeText={(text) => setWeightText(sanitizeWeightText(text))}
+              placeholder="62.5"
+              keyboardType="decimal-pad"
+            />
+          </View>
+        ) : (
         <View style={styles.options} accessibilityRole="radiogroup">
           {question.mode === 'multi' && question.noneLabel ? (
             <ChoiceButton
@@ -273,6 +321,7 @@ function OnboardingFlow({ user }: { user: User }) {
             />
           ) : null}
 
+          {/* isBodyStep 분기의 else 쪽이라 여기서 question 은 선택지 문항으로 좁혀져 있다. */}
           {question.options.map((option) => (
             <ChoiceButton
               key={String(option.value)}
@@ -293,6 +342,7 @@ function OnboardingFlow({ user }: { user: User }) {
             />
           ))}
         </View>
+        )}
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
@@ -302,6 +352,9 @@ function OnboardingFlow({ user }: { user: User }) {
             onPress={() => handleNext(question)}
             disabled={!isAnswered(question, answers)}
           />
+        ) : null}
+        {isBodyStep ? (
+          <PrimaryButton label="다음" onPress={handleBodyNext} disabled={!bodyReady} />
         ) : null}
         {stepIndex > 0 ? (
           <PrimaryButton
@@ -391,6 +444,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.md,
+  },
+  bodyFields: {
+    gap: Spacing.lg,
   },
   optionFull: {
     flexGrow: 1,
