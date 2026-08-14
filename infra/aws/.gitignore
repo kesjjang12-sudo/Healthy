@@ -1,0 +1,9 @@
+# Terraform 작업 파일 — 절대 커밋 금지 (상태 파일에 민감 정보가 들어감)
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+*.tfvars
+
+# 자동 생성되는 SSH 개인키 — 절대 커밋 금지
+*.pem
