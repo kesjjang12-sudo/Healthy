@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -10,6 +10,7 @@ import { PrimaryButton } from '@/components/primary-button';
 import { WeightSuggestionCard } from '@/components/weight-suggestion-card';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
+import { pickRestMessage } from '@/features/content/rest-encouragement';
 import {
   CARDIO_HOW_TO_STEPS,
   FIRST_TIME_RULE,
@@ -22,7 +23,7 @@ import {
 import { RoutineError, completeRoutine } from '@/features/routine/api';
 import { useDailyRoutine } from '@/features/routine/use-daily-routine';
 import { formatRest, useWorkoutSession } from '@/features/routine/use-workout-session';
-import type { RoutineItem } from '@/lib/database.types';
+import type { AgeGroup, RoutineItem } from '@/lib/database.types';
 
 /** 핀 칸은 두 자리를 넘지 않는다. 세 자리를 받으면 kg 과 헷갈린다. */
 const PIN_MAX_DIGITS = 2;
@@ -176,7 +177,13 @@ function WorkoutSession({
   ) : session.phase === 'working' ? (
     <WorkingView item={item} currentSet={session.currentSet} totalSets={totalSets} />
   ) : session.phase === 'resting' ? (
-    <RestingView nextSet={session.currentSet} totalSets={totalSets} seconds={session.restRemaining} />
+    <RestingView
+      nextSet={session.currentSet}
+      totalSets={totalSets}
+      seconds={session.restRemaining}
+      ageGroup={user?.profile_data?.age_group}
+      routineId={item.routine_id}
+    />
   ) : (
     <LoggingView item={item} pin={pin} />
   );
@@ -406,11 +413,23 @@ function RestingView({
   nextSet,
   totalSets,
   seconds,
+  ageGroup,
+  routineId,
 }: {
   nextSet: number;
   totalSets: number;
   seconds: number;
+  ageGroup: AgeGroup | undefined;
+  routineId: string;
 }) {
+  // 운동 + 세트 번호로 고른다. 세트 번호만 쓰면 보통 2~3 뿐이라 문구를 아무리
+  // 넣어도 두세 개만 돌아간다. 남은 초는 넣지 않는다 — 1초마다 바뀌면 읽다가
+  // 놓치고 화면만 산만해진다.
+  const encouragement = useMemo(
+    () => pickRestMessage(ageGroup, routineId, nextSet),
+    [ageGroup, routineId, nextSet],
+  );
+
   return (
     <>
       <Text style={styles.title} maxFontSizeMultiplier={1.2}>
@@ -423,6 +442,15 @@ function RestingView({
         </Text>
         <Text style={styles.heroSub} maxFontSizeMultiplier={1.2}>
           다음은 {nextSet}세트입니다
+        </Text>
+      </View>
+
+      {/* 쉬는 시간은 하루 중 화면을 가만히 보고 있는 유일한 구간이다. 여기서
+          말을 걸어야 읽힌다 — 운동 중에는 읽을 여유가 없고, 끝난 뒤에는 이미
+          마음이 나가 있다. */}
+      <View style={styles.encourageBox}>
+        <Text style={styles.encourageText} maxFontSizeMultiplier={1.3}>
+          {encouragement}
         </Text>
       </View>
 
@@ -596,6 +624,20 @@ const styles = StyleSheet.create({
     lineHeight: FontSize.body * 1.5,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
+  },
+  encourageBox: {
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.primaryFaint,
+  },
+  encourageText: {
+    fontSize: FontSize.body,
+    fontWeight: '600',
+    lineHeight: FontSize.body * 1.5,
+    letterSpacing: LetterSpacing.body,
+    color: Colors.primary,
+    textAlign: 'center',
   },
   subName: {
     fontSize: FontSize.caption,
