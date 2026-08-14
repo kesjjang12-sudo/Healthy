@@ -336,6 +336,39 @@ export type WorkoutTrend = {
   previous_workout_days: number;
 };
 
+/** 공유 카드에 실리는 오늘 운동 한 종목 */
+export type ShareCardExercise = {
+  name: string;
+  name_ko: string | null;
+  target_muscle: string | null;
+  sets: number | null;
+  reps: number | null;
+  /** 유산소면 분, 근력이면 null */
+  duration_minutes: number | null;
+  /** 처방 무게(kg). 맨몸·유산소면 null */
+  weight_kg: number | null;
+};
+
+/** get_workout_share_card 응답. 완료한 운동이 없으면 null 이 온다. */
+export type WorkoutShareCard = {
+  date: string;
+  /** 새벽 / 아침 / 낮 / 저녁 / 밤 — 마친 시각 기준 */
+  part_of_day: string;
+  /** 평생 출석일 수. "312번째 운동"으로 쓴다 */
+  day_count: number;
+  /** 첫 완료부터 마지막 완료까지. 한 종목만 했으면 0 이라 화면에서 숨긴다 */
+  duration_minutes: number;
+  exercise_count: number;
+  total_sets: number;
+  total_reps: number;
+  total_minutes_cardio: number;
+  /** 처방 kg × 세트 × 횟수. 핀 칸 값은 쓰지 않는다 */
+  total_volume_kg: number;
+  points: number;
+  muscles: string[];
+  exercises: ShareCardExercise[];
+};
+
 export type VisitStats = {
   /** 평생 출석일 수(DAY_N 배지용). 헬스장 구분 없이 센다. */
   total_days: number;
@@ -506,6 +539,10 @@ export type Database = {
       get_workout_trend: {
         Args: { p_user_id: string; p_from: string; p_to: string; p_bucket?: 'day' | 'week' };
         Returns: WorkoutTrend;
+      };
+      get_workout_share_card: {
+        Args: { p_user_id: string; p_date?: string };
+        Returns: WorkoutShareCard | null;
       };
       get_visit_stats: {
         Args: { p_user_id: string };

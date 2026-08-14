@@ -1,4 +1,4 @@
-import type { WorkoutSummary, WorkoutTrend } from '@/lib/database.types';
+import type { WorkoutShareCard, WorkoutSummary, WorkoutTrend } from '@/lib/database.types';
 import {
   GENERIC_ERROR_MESSAGE,
   NETWORK_ERROR_MESSAGE,
@@ -67,4 +67,21 @@ export async function getWorkoutTrend(
   if (!data) throw new AnalysisError(GENERIC_ERROR_MESSAGE);
 
   return data;
+}
+
+/**
+ * 오늘 운동 한 장 요약. 완료한 운동이 하나도 없으면 null 을 돌려준다
+ * (오류가 아니다 — 아직 안 한 것뿐이라 화면에서 조용히 넘어가면 된다).
+ */
+export async function getWorkoutShareCard(
+  userId: string,
+  date?: Date,
+): Promise<WorkoutShareCard | null> {
+  const { data, error } = await supabase.rpc('get_workout_share_card', {
+    p_user_id: userId,
+    p_date: date ? toDateKey(date) : undefined,
+  });
+
+  if (error) throw toAnalysisError(error);
+  return data ?? null;
 }

@@ -155,6 +155,14 @@ export default function WorkoutTab() {
                 이런 것도 할 수 있어요
               </Text>
               <ListRow
+                icon="chart"
+                tint="green"
+                title="오늘 운동 카드"
+                subtitle="오늘 한 운동을 한 장으로 모아 자랑할 수 있어요"
+                chevron
+                onPress={() => router.push('/workout/summary')}
+              />
+              <ListRow
                 icon="qr"
                 tint="blue"
                 title="기구 QR 찍기"

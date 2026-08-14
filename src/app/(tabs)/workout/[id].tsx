@@ -84,10 +84,24 @@ export default function RoutineDetailScreen() {
     );
   }
 
-  return <WorkoutSession item={item} onExit={goBack} />;
+  return (
+    <WorkoutSession
+      item={item}
+      onExit={goBack}
+      onShowCard={() => router.push('/workout/summary')}
+    />
+  );
 }
 
-function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => void }) {
+function WorkoutSession({
+  item,
+  onExit,
+  onShowCard,
+}: {
+  item: RoutineItem;
+  onExit: () => void;
+  onShowCard: () => void;
+}) {
   const insets = useSafeAreaInsets();
   const isCardio = isCardioItem(item);
 
@@ -166,7 +180,11 @@ function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => voi
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
         {isFinished ? (
-          <PrimaryButton label="목록으로" onPress={onExit} />
+          <>
+            {/* 방금 끝낸 직후가 가장 뿌듯한 순간이다. 카드를 여기서 바로 연다. */}
+            <PrimaryButton label="오늘 운동 카드 보기" onPress={onShowCard} />
+            <PrimaryButton label="목록으로" variant="secondary" onPress={onExit} />
+          </>
         ) : session.phase === 'ready' ? (
           <>
             <PrimaryButton label={isCardio ? '시작' : '운동 시작'} onPress={() => session.start()} />
@@ -198,7 +216,6 @@ function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => voi
 /** 시작 전: 무엇을 어떻게 하는 운동인지 */
 function ReadyView({ item }: { item: RoutineItem }) {
   const volume = formatVolume(item);
-  const isCardio = isCardioItem(item);
   const equipName = secondaryName(item);
   const place = placeText(item);
 
