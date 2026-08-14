@@ -7,6 +7,23 @@ type Option<V> = {
   readonly caption?: string;
 };
 
+/**
+ * 자유 입력 문항. 지금은 이름 하나뿐이다.
+ *
+ * 나머지 문항은 전부 버튼인데 이것만 자판을 쓴다 — 이름은 고를 수가 없어서다.
+ * 대신 카카오·구글로 로그인하신 분은 제공자가 준 이름이 이미 채워져 있어
+ * 그대로 두고 넘어가면 된다(`bootstrap_oauth_profile`).
+ */
+type TextQuestion<K extends 'nickname'> = {
+  readonly key: K;
+  readonly mode: 'text';
+  readonly title: string;
+  readonly summaryLabel: string;
+  readonly helper: string;
+  readonly placeholder: string;
+  readonly maxLength: number;
+};
+
 type SingleQuestion<K extends 'gender' | 'age_group', V> = {
   readonly key: K;
   readonly mode: 'single';
@@ -44,11 +61,15 @@ type BodyQuestion = {
 };
 
 export type ProfileQuestion =
+  | TextQuestion<'nickname'>
   | SingleQuestion<'gender', Gender>
   | SingleQuestion<'age_group', AgeGroup>
   | BodyQuestion
   | MultiQuestion<'goals', Goal>
   | MultiQuestion<'pain_areas', PainArea>;
+
+/** 이름이 이보다 길면 인사말이 두 줄로 밀린다. */
+export const NICKNAME_MAX_LENGTH = 12;
 
 /**
  * 신규 회원 설문.
@@ -61,6 +82,15 @@ export type ProfileQuestion =
  * 선택지가 적은 것부터 물어 첫 화면에서 막히지 않게 한다.
  */
 export const PROFILE_QUESTIONS: readonly ProfileQuestion[] = [
+  {
+    key: 'nickname',
+    mode: 'text',
+    title: '어떻게 불러 드릴까요?',
+    summaryLabel: '이름',
+    helper: '앱에서 부를 이름입니다. 실명이 아니어도 되고, 성만 적으셔도 됩니다.',
+    placeholder: '예) 김철수',
+    maxLength: NICKNAME_MAX_LENGTH,
+  },
   {
     key: 'gender',
     mode: 'single',
@@ -124,8 +154,24 @@ export const PROFILE_QUESTIONS: readonly ProfileQuestion[] = [
   },
 ] as const;
 
-/** 설문 문항 뒤에 붙는 최종 확인 화면의 인덱스 */
-export const CONFIRM_STEP_INDEX = PROFILE_QUESTIONS.length;
+/**
+ * 이 사람에게 실제로 물어볼 문항.
+ *
+ * 아픈 곳은 건강에 관한 정보라 별도 동의를 받는데, 그 동의를 안 하신 분께는
+ * **묻지도 않아야 한다.** 물어보고 저장만 안 하는 건 동의 없이 수집한 것과
+ * 다르지 않다 — 화면에 띄우는 순간 답을 하시게 된다.
+ */
+export function questionsFor(
+  profile: Partial<ProfileData> | null | undefined,
+): readonly ProfileQuestion[] {
+  const allowsPainAreas = profile?.consent?.pain_areas === true;
+  return PROFILE_QUESTIONS.filter((question) => question.key !== 'pain_areas' || allowsPainAreas);
+}
+
+/** 최종 확인 화면의 인덱스. 문항 수가 사람마다 달라서 목록을 받아 센다. */
+export function confirmStepIndex(questions: readonly ProfileQuestion[]): number {
+  return questions.length;
+}
 
 /** 이 문항에 답을 했는지. 목적은 최소 1개, 아픈 곳은 "없습니다"(빈 배열)도 답으로 친다. */
 export function isAnswered(question: ProfileQuestion, values: Partial<ProfileData>): boolean {
@@ -135,6 +181,8 @@ export function isAnswered(question: ProfileQuestion, values: Partial<ProfileDat
 
   const value = values[question.key];
 
+  // 공백만 친 이름은 답한 걸로 치지 않는다 — "  님, 안녕하세요"가 뜬다.
+  if (question.mode === 'text') return typeof value === 'string' && value.trim() !== '';
   if (question.mode === 'single') return value !== undefined;
   if (!Array.isArray(value)) return false;
 
@@ -146,8 +194,9 @@ export function isAnswered(question: ProfileQuestion, values: Partial<ProfileDat
  * 지난번에 중간에 나갔더라도 남은 문항부터 이어서 물을 수 있다.
  */
 export function findFirstUnansweredIndex(values: Partial<ProfileData> | null | undefined): number {
-  const index = PROFILE_QUESTIONS.findIndex((question) => !isAnswered(question, values ?? {}));
-  return index === -1 ? CONFIRM_STEP_INDEX : index;
+  const questions = questionsFor(values);
+  const index = questions.findIndex((question) => !isAnswered(question, values ?? {}));
+  return index === -1 ? confirmStepIndex(questions) : index;
 }
 
 /** 최종 확인 화면에 보여줄 답변 문구 */
@@ -160,6 +209,10 @@ export function formatAnswer(question: ProfileQuestion, values: Partial<ProfileD
   }
 
   const value = values[question.key];
+
+  if (question.mode === 'text') {
+    return typeof value === 'string' && value.trim() !== '' ? value.trim() : '아직 안 적으셨어요';
+  }
 
   if (question.mode === 'single') {
     return question.options.find((option) => option.value === value)?.label ?? '아직 안 고르셨어요';

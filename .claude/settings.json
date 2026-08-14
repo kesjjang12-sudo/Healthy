@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
+      "mcp__Supabase"
+    ],
+    "deny": [
+      "Bash(rm -rf /*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)"
+    ]
+  }
+}

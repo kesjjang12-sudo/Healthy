@@ -50,6 +50,21 @@ export type ProfileData = {
   privacy_consent_at?: string;
   /** 온보딩 설문 완료 여부 */
   onboarded_at?: string;
+  /**
+   * 마지막으로 받은 동의의 요약.
+   *
+   * 정본은 `user_consents` 테이블이다(동의·철회 이력 전체). 여기 두는 건
+   * 화면이 매번 이력을 조회하지 않고도 "이 사람에게 다시 동의를 받아야 하나"를
+   * 판단하기 위한 사본이다 — 로그인 직후 라우팅에서 쓰기 때문에 왕복을 한 번
+   * 줄이는 게 체감이 크다.
+   */
+  consent?: {
+    /** 동의할 때 보여준 문서/항목 구성의 버전 */
+    version?: string;
+    agreed_at?: string;
+    /** 선택 동의(아픈 곳)에 동의했는지 */
+    pain_areas?: boolean;
+  };
   [key: string]: Json | undefined;
 };
 
@@ -209,6 +224,8 @@ export type DailyRoutine = {
   /** 실제로 꽂은 무게(kg 환산). target_weight 는 처방값, 이건 실제 수행값. complete_routine 이 채운다. */
   actual_weight_kg: number | null;
   actual_reps: number | null;
+  /** 유산소를 실제로 수행한 시간(분). 근력 운동이거나 아직 안 받았으면 null. */
+  actual_duration_minutes: number | null;
   completed_at: string | null;
   points_awarded: number;
   created_at: string | null;
@@ -253,6 +270,11 @@ export type RoutineItem = {
   target_reps: number | null;
   /** 유산소 처방 시간(분). 근력 운동이면 null — target_reps 와 동시에 채워지지 않는다. */
   target_duration_minutes: number | null;
+  /**
+   * 유산소를 실제로 수행한 시간(분). 완료 전이거나 근력 운동이면 null.
+   * 이 컬럼이 생기기 전에 완료한 옛 기록도 null 이다("모른다"는 뜻).
+   */
+  actual_duration_minutes: number | null;
   is_completed: boolean;
   /**
    * 지난 수행 기록에 근거한 무게 조정 제안. 제안일 뿐 적용은 본인이 누를 때만
@@ -373,9 +395,22 @@ export type GymMembershipSummary = {
   left_at: string | null;
 };
 
+/**
+ * 분석 탭 원시 집계. 근력과 유산소는 단위가 달라(세트 vs 분) 섞지 않고 따로 센다.
+ * completed_count 만 둘을 합친 값이다.
+ */
 export type WorkoutSummary = {
+  /** 근력 + 유산소 완료 개수 */
   completed_count: number;
+  /** 근력 완료 개수 */
+  strength_count: number;
+  /** 근력 세트 합계. 유산소 행의 형식상 1세트는 빠져 있다 */
   total_sets: number;
+  /** 유산소 완료 개수 */
+  cardio_count: number;
+  /** 유산소 실제 수행 시간 합계(분). 실제값이 없는 옛 기록은 처방 시간으로 센다 */
+  cardio_minutes: number;
+  /** 근력만. 유산소는 부위별 세트라는 단위 자체가 안 맞아 빠져 있다 */
   by_muscle: { target_muscle: string | null; completed_count: number; total_sets: number }[];
 };
 
@@ -433,6 +468,27 @@ export type WorkoutShareCard = {
   points: number;
   muscles: string[];
   exercises: ShareCardExercise[];
+/** get_progress_summary 의 한 기간 집계 */
+export type ActivityWindow = {
+  /** 그 기간에 헬스장에 나온 날 수(키오스크 체크인 기준) */
+  attendance_days: number;
+  completed_count: number;
+  /** 근력 세트 합계. 유산소는 빠져 있다 */
+  total_sets: number;
+  /** 유산소 실제 수행 시간 합계(분) */
+  cardio_minutes: number;
+};
+
+/**
+ * 분석 탭 — 최근 기간과 직전 같은 길이 기간을 나란히.
+ * 비교 대상이 있어야 "잘하고 있나"에 답할 수 있다.
+ */
+export type ProgressSummary = {
+  days: number;
+  current: ActivityWindow;
+  previous: ActivityWindow;
+  /** 연속으로 한 번 이상 나온 주 수. 이번 주에 아직 안 나왔어도 끊긴 걸로 보지 않는다 */
+  streak_weeks: number;
 };
 
 export type VisitStats = {
@@ -619,7 +675,13 @@ export type Database = {
         Returns: { user: User };
       };
       complete_routine: {
-        Args: { p_routine_id: string; p_actual_weight_kg?: number; p_actual_reps?: number };
+        Args: {
+          p_routine_id: string;
+          p_actual_weight_kg?: number;
+          p_actual_reps?: number;
+          /** 유산소 실제 수행 시간(분). 1~240 을 벗어나면 INVALID_DURATION 으로 거부된다. */
+          p_actual_duration_minutes?: number;
+        };
         Returns: { routine: DailyRoutine; points_awarded: number };
       };
       get_todays_checkin: {
@@ -641,6 +703,25 @@ export type Database = {
       get_workout_share_card: {
         Args: { p_user_id: string; p_date?: string };
         Returns: WorkoutShareCard | null;
+      record_consents: {
+        Args: { p_user_id: string; p_version: string; p_consents: Record<string, boolean> };
+        Returns: { user: User };
+      };
+      revoke_consent: {
+        Args: { p_user_id: string; p_consent_key: string };
+        Returns: { user: User };
+      };
+      get_my_consents: {
+        Args: { p_user_id: string };
+        Returns: Record<string, { agreed: boolean; version: string; recorded_at: string }>;
+      };
+      record_kiosk_consent: {
+        Args: { p_user_id: string; p_version: string };
+        Returns: void;
+      };
+      get_progress_summary: {
+        Args: { p_user_id: string; p_days?: number };
+        Returns: ProgressSummary;
       };
       get_visit_stats: {
         Args: { p_user_id: string };

@@ -1,5 +1,5 @@
 import { Redirect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,16 +7,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChoiceButton } from '@/components/choice-button';
 import { TextField } from '@/components/text-field';
 import { PrimaryButton } from '@/components/primary-button';
+import { TextField } from '@/components/text-field';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { logBodyWeight, parseHeightInput, parseWeightInput, sanitizeWeightText } from '@/features/body/api';
+import { needsConsent } from '@/features/legal/api';
 import { updateProfileData } from '@/features/onboarding/api';
 import {
-  CONFIRM_STEP_INDEX,
+  confirmStepIndex,
   findFirstUnansweredIndex,
   formatAnswer,
   isAnswered,
-  PROFILE_QUESTIONS,
+  questionsFor,
   type ProfileQuestion,
 } from '@/features/onboarding/questions';
 import type { ProfileData, User } from '@/lib/database.types';
@@ -43,6 +45,8 @@ export default function OnboardingScreen() {
 
   if (isRestoring) return null;
   if (!user) return <Redirect href="/login" />;
+  // 아픈 곳을 묻기 전에 동의를 받아야 한다.
+  if (needsConsent(user)) return <Redirect href="/consent" />;
   if (user.profile_data?.onboarded_at) return <Redirect href="/workout" />;
 
   return <OnboardingFlow user={user} />;
@@ -61,6 +65,10 @@ function OnboardingFlow({ user }: { user: User }) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { setUser, signOut } = useAuthSession();
+
+  // 아픈 곳에 동의하지 않으신 분께는 그 문항을 아예 띄우지 않는다.
+  const questions = useMemo(() => questionsFor(user.profile_data), [user.profile_data]);
+  const lastStepIndex = confirmStepIndex(questions);
 
   // 지난번에 중간에 나갔다면 남은 문항부터 이어서 묻는다.
   const [stepIndex, setStepIndex] = useState(() => findFirstUnansweredIndex(user.profile_data));
@@ -95,6 +103,14 @@ function OnboardingFlow({ user }: { user: User }) {
     [saveInBackground],
   );
 
+  /**
+   * 이름은 한 글자 칠 때마다 서버로 보내지 않는다 — 자판을 두드리는 내내
+   * 요청이 나간다. "다음"을 누를 때 handleNext 가 한 번에 저장한다.
+   */
+  const handleTextChange = useCallback((text: string) => {
+    setAnswers((current) => ({ ...current, nickname: text }));
+  }, []);
+
   const handleMultiToggle = useCallback(
     (question: ProfileQuestion, value: string) => {
       setAnswers((current) => {
@@ -116,7 +132,11 @@ function OnboardingFlow({ user }: { user: User }) {
 
   const handleNext = useCallback(
     (question: ProfileQuestion) => {
-      saveInBackground({ [question.key]: answers[question.key] });
+      const value = answers[question.key];
+      // 이름 앞뒤 공백은 여기서 턴다. 저장해 두면 "김철수 님"이 "김철수  님"이 된다.
+      saveInBackground({
+        [question.key]: question.mode === 'text' && typeof value === 'string' ? value.trim() : value,
+      });
       setStepIndex((current) => current + 1);
     },
     [answers, saveInBackground],
@@ -155,6 +175,7 @@ function OnboardingFlow({ user }: { user: User }) {
     try {
       const updated = await updateProfileData(user.id, {
         ...answers,
+        ...(typeof answers.nickname === 'string' ? { nickname: answers.nickname.trim() } : {}),
         onboarded_at: new Date().toISOString(),
       });
 
@@ -174,7 +195,7 @@ function OnboardingFlow({ user }: { user: User }) {
   }, [answers, router, setUser, user.id]);
 
   const isWide = width >= WIDE_LAYOUT_MIN_WIDTH;
-  const isConfirmStep = stepIndex >= CONFIRM_STEP_INDEX;
+  const isConfirmStep = stepIndex >= lastStepIndex;
 
   if (isSubmitting) {
     return (
@@ -190,8 +211,8 @@ function OnboardingFlow({ user }: { user: User }) {
   const progress = (
     <View
       style={styles.progress}
-      accessibilityLabel={`전체 ${CONFIRM_STEP_INDEX + 1}단계 중 ${Math.min(stepIndex, CONFIRM_STEP_INDEX) + 1}번째`}>
-      {[...PROFILE_QUESTIONS, null].map((item, index) => (
+      accessibilityLabel={`전체 ${lastStepIndex + 1}단계 중 ${Math.min(stepIndex, lastStepIndex) + 1}번째`}>
+      {[...questions, null].map((item, index) => (
         <View
           key={item?.key ?? 'confirm'}
           style={[styles.progressSegment, index <= stepIndex && styles.progressSegmentActive]}
@@ -225,7 +246,7 @@ function OnboardingFlow({ user }: { user: User }) {
           </View>
 
           <View style={styles.summary}>
-            {PROFILE_QUESTIONS.map((question, index) => (
+            {questions.map((question, index) => (
               <View key={question.key} style={styles.summaryRow}>
                 <View style={styles.summaryTexts}>
                   <Text style={styles.summaryLabel} maxFontSizeMultiplier={1.3}>
@@ -259,7 +280,7 @@ function OnboardingFlow({ user }: { user: User }) {
     );
   }
 
-  const question = PROFILE_QUESTIONS[stepIndex];
+  const question = questions[stepIndex];
   const multiValues = question.mode === 'multi' ? selectedValues(question, answers) : undefined;
   const isNoneSelected = multiValues?.length === 0;
   const isBodyStep = question.mode === 'body';
@@ -279,13 +300,15 @@ function OnboardingFlow({ user }: { user: User }) {
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
             {question.title}
           </Text>
-          {question.mode === 'multi' || question.mode === 'body' ? (
+          {question.mode === 'multi' || question.mode === 'body' || question.mode === 'text' ? (
             <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
               {question.helper}
             </Text>
           ) : null}
         </View>
 
+        {/* 문항 종류가 셋이다: 키·몸무게(숫자 두 칸), 닉네임(글자 한 칸),
+            나머지(선택지). 순서대로 좁혀 나간다. */}
         {isBodyStep ? (
           <View style={styles.bodyFields}>
             <TextField
@@ -303,44 +326,57 @@ function OnboardingFlow({ user }: { user: User }) {
               keyboardType="decimal-pad"
             />
           </View>
+        ) : question.mode === 'text' ? (
+          <TextField
+            label={question.summaryLabel}
+            value={typeof answers.nickname === 'string' ? answers.nickname : ''}
+            onChangeText={handleTextChange}
+            placeholder={question.placeholder}
+            maxLength={question.maxLength}
+            returnKeyType="done"
+            onSubmitEditing={() => {
+              if (isAnswered(question, answers)) handleNext(question);
+            }}
+          />
         ) : (
-        <View style={styles.options} accessibilityRole="radiogroup">
-          {question.mode === 'multi' && question.noneLabel ? (
-            <ChoiceButton
-              label={question.noneLabel}
-              role="checkbox"
-              selected={isNoneSelected}
-              onPress={() => handleSelectNone(question)}
-              style={styles.optionFull}
-            />
-          ) : null}
+          <View style={styles.options} accessibilityRole="radiogroup">
+            {question.mode === 'multi' && question.noneLabel ? (
+              <ChoiceButton
+                label={question.noneLabel}
+                role="checkbox"
+                selected={isNoneSelected}
+                onPress={() => handleSelectNone(question)}
+                style={styles.optionFull}
+              />
+            ) : null}
 
-          {/* isBodyStep 분기의 else 쪽이라 여기서 question 은 선택지 문항으로 좁혀져 있다. */}
-          {question.options.map((option) => (
-            <ChoiceButton
-              key={String(option.value)}
-              label={option.label}
-              caption={option.caption}
-              role={question.mode === 'multi' ? 'checkbox' : 'radio'}
-              selected={
-                question.mode === 'single'
-                  ? answers[question.key] === option.value
-                  : (multiValues?.includes(String(option.value)) ?? false)
-              }
-              onPress={() =>
-                question.mode === 'single'
-                  ? handleSingleSelect(question.key, option.value)
-                  : handleMultiToggle(question, String(option.value))
-              }
-              style={isWide ? styles.optionWide : styles.optionFull}
-            />
-          ))}
-        </View>
+            {/* 위 두 분기의 else 쪽이라 여기서 question 은 선택지 문항으로 좁혀져 있다. */}
+            {question.options.map((option) => (
+              <ChoiceButton
+                key={String(option.value)}
+                label={option.label}
+                caption={option.caption}
+                role={question.mode === 'multi' ? 'checkbox' : 'radio'}
+                selected={
+                  question.mode === 'single'
+                    ? answers[question.key] === option.value
+                    : (multiValues?.includes(String(option.value)) ?? false)
+                }
+                onPress={() =>
+                  question.mode === 'single'
+                    ? handleSingleSelect(question.key, option.value)
+                    : handleMultiToggle(question, String(option.value))
+                }
+                style={isWide ? styles.optionWide : styles.optionFull}
+              />
+            ))}
+          </View>
         )}
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-        {question.mode === 'multi' ? (
+        {/* 단일 선택만 "다음"이 없다 — 고르는 순간 넘어가기 때문이다. */}
+        {question.mode === 'multi' || question.mode === 'text' ? (
           <PrimaryButton
             label="다음"
             onPress={() => handleNext(question)}

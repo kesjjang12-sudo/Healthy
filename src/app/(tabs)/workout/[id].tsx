@@ -11,6 +11,7 @@ import { PrimaryButton } from '@/components/primary-button';
 import { WeightSuggestionCard } from '@/components/weight-suggestion-card';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
+import { pickCompletionPraise } from '@/features/content/hooking-copy';
 import { pickRestMessage } from '@/features/content/rest-encouragement';
 import {
   FIRST_TIME_RULE,
@@ -24,11 +25,21 @@ import {
 import { RoutineError, completeRoutine } from '@/features/routine/api';
 import { placeText, primaryName, secondaryName } from '@/features/routine/labels';
 import { useDailyRoutine } from '@/features/routine/use-daily-routine';
-import { formatRest, useWorkoutSession } from '@/features/routine/use-workout-session';
+import {
+  elapsedToMinutes,
+  formatClock,
+  useElapsedSeconds,
+  useWorkoutSession,
+} from '@/features/routine/use-workout-session';
 import type { AgeGroup, RoutineItem } from '@/lib/database.types';
 
 /** 핀 칸은 두 자리를 넘지 않는다. 세 자리를 받으면 kg 과 헷갈린다. */
 const PIN_MAX_DIGITS = 2;
+
+/** 유산소 시간은 세 자리까지. 아래 범위와 함께 complete_routine 이 다시 확인한다. */
+const MINUTES_MAX_DIGITS = 3;
+const MINUTES_MIN = 1;
+const MINUTES_MAX = 240;
 
 /**
  * 기구 하나를 처음부터 끝까지 끌고 가는 화면.
@@ -136,15 +147,50 @@ function WorkoutSession({
   const totalSets = item.target_sets ?? 1;
   const session = useWorkoutSession(totalSets);
 
+  // 유산소는 시작~완료 사이를 앱이 잰다. 그 값을 기록 화면에 미리 채워 두고,
+  // 실제와 다르면 고칠 수 있게 한다.
+  const elapsedSeconds = useElapsedSeconds(isCardio && session.phase === 'working');
+  const measuredMinutes = elapsedToMinutes(elapsedSeconds);
+
   const [pin, setPin] = useState('');
+  /** 사람이 직접 고친 분(分). null 이면 아직 안 고쳐서 잰 시간을 그대로 쓴다는 뜻. */
+  const [typedMinutes, setTypedMinutes] = useState<string | null>(null);
   const [isFinished, setIsFinished] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [pointsAwarded, setPointsAwarded] = useState<number | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const handleDigit = useCallback((digit: string) => {
-    setPin((current) => (current.length >= PIN_MAX_DIGITS ? current : `${current}${digit}`));
-  }, []);
+  const minutesText = typedMinutes ?? String(measuredMinutes);
+  const minutesValue = Number(minutesText);
+  const isMinutesValid =
+    minutesText !== '' && minutesValue >= MINUTES_MIN && minutesValue <= MINUTES_MAX;
+
+  const handleDigit = useCallback(
+    (digit: string) => {
+      if (isCardio) {
+        // 첫 숫자를 누르면 잰 시간을 지우고 새로 받는다. 뒤에 붙이면
+        // 8분이 "81분"이 되어 버린다.
+        setTypedMinutes((current) => {
+          const base = current ?? '';
+          return base.length >= MINUTES_MAX_DIGITS ? base : `${base}${digit}`;
+        });
+        return;
+      }
+
+      setPin((current) => (current.length >= PIN_MAX_DIGITS ? current : `${current}${digit}`));
+    },
+    [isCardio],
+  );
+
+  const handleClear = useCallback(() => {
+    if (isCardio) setTypedMinutes('');
+    else setPin('');
+  }, [isCardio]);
+
+  const handleBackspace = useCallback(() => {
+    if (isCardio) setTypedMinutes((current) => (current ?? String(measuredMinutes)).slice(0, -1));
+    else setPin((current) => current.slice(0, -1));
+  }, [isCardio, measuredMinutes]);
 
   const openVideo = useCallback(() => {
     void Linking.openURL(item.video_url).catch(() => {});
@@ -155,12 +201,17 @@ function WorkoutSession({
     setSaveError(null);
 
     try {
+      // 유산소는 실제로 움직인 시간을, 근력은 꽂은 핀 칸을 남긴다.
       // "핀"은 기구마다 실제 kg 이 다른 상대값이라 정확한 kg 은 아니지만,
       // 지금 저장할 수 있는 건 이것뿐이다 — 없는 것보다는 다음 방문 때 참고할
-      // 시작점이 있는 편이 낫다. 실제 횟수를 따로 받지 않으므로 처방 횟수를
-      // 그대로 "실제 수행"으로 기록한다(완료 버튼을 눌렀다는 건 다 했다는 뜻).
-      const pinValue = pin === '' ? null : Number(pin);
-      const { pointsAwarded: awarded } = await completeRoutine(item.routine_id, pinValue, item.target_reps);
+      // 시작점이 있는 편이 낫다. 근력의 실제 횟수는 따로 받지 않으므로 처방
+      // 횟수를 그대로 쓴다(완료 버튼을 눌렀다는 건 다 했다는 뜻).
+      const { pointsAwarded: awarded } = await completeRoutine(
+        item.routine_id,
+        isCardio
+          ? { actualDurationMinutes: minutesValue }
+          : { actualWeightKg: pin === '' ? null : Number(pin), actualReps: item.target_reps },
+      );
       setPointsAwarded(awarded);
 
       // 받은 점수를 그 자리에서 합산해 둔다. 서버를 다시 부르면 그만큼
@@ -174,14 +225,25 @@ function WorkoutSession({
       setIsSaving(false);
       setIsFinished(true);
     }
-  }, [item, pin, user, setUser]);
+  }, [item, isCardio, minutesValue, pin, user, setUser]);
 
   const body = isFinished ? (
-    <FinishedView item={item} pin={pin} pointsAwarded={pointsAwarded} saveError={saveError} />
+    <FinishedView
+      item={item}
+      pin={pin}
+      minutes={minutesValue}
+      pointsAwarded={pointsAwarded}
+      saveError={saveError}
+    />
   ) : session.phase === 'ready' ? (
     <ReadyView item={item} onWeightChanged={onWeightChanged} />
   ) : session.phase === 'working' ? (
-    <WorkingView item={item} currentSet={session.currentSet} totalSets={totalSets} />
+    <WorkingView
+      item={item}
+      currentSet={session.currentSet}
+      totalSets={totalSets}
+      elapsedSeconds={elapsedSeconds}
+    />
   ) : session.phase === 'resting' ? (
     <RestingView
       nextSet={session.currentSet}
@@ -191,12 +253,21 @@ function WorkoutSession({
       routineId={item.routine_id}
     />
   ) : (
-    <LoggingView item={item} pin={pin} />
+    <LoggingView
+      item={item}
+      pin={pin}
+      minutesText={minutesText}
+      measuredMinutes={measuredMinutes}
+      isMinutesValid={isMinutesValid}
+    />
   );
 
   // 핀을 꽂을 수 없는 운동(유산소·맨몸)은 물어볼 게 없다 — 키패드를 안 띄우고
   // 바로 "기록하고 마치기"를 누를 수 있게 한다. 유산소만 예외로 두면 맨몸운동
   // 차례에서 빈 키패드를 앞에 두고 버튼이 안 눌려 운동을 마칠 수 없다.
+  //
+  // 유산소는 대신 실제로 움직인 시간(분)을 받는다 — 그쪽 키패드는 LoggingView 가
+  // 자기 안에서 그린다.
   const logsWeight = needsWeightLog(item);
   const showKeypad = session.phase === 'logging' && !isFinished && logsWeight;
 
@@ -208,11 +279,7 @@ function WorkoutSession({
 
       {showKeypad ? (
         <View style={styles.keypadWrap}>
-          <Keypad
-            onDigit={handleDigit}
-            onClear={() => setPin('')}
-            onBackspace={() => setPin((current) => current.slice(0, -1))}
-          />
+          <Keypad onDigit={handleDigit} onClear={handleClear} onBackspace={handleBackspace} />
         </View>
       ) : null}
 
@@ -249,7 +316,7 @@ function WorkoutSession({
         ) : (
           <PrimaryButton
             label="기록하고 마치기"
-            disabled={logsWeight && pin.length === 0}
+            disabled={isCardio ? !isMinutesValid : logsWeight && pin.length === 0}
             loading={isSaving}
             onPress={() => void finishAndSave()}
           />
@@ -388,17 +455,24 @@ function ReadyView({ item, onWeightChanged }: { item: RoutineItem; onWeightChang
   );
 }
 
-/** 세트 진행 중: 지금 몇 세트인지만 크게. 유산소는 세트 대신 목표 시간을 크게 */
+/** 세트 진행 중: 지금 몇 세트인지만 크게. 유산소는 세트 대신 흐른 시간을 크게 */
 function WorkingView({
   item,
   currentSet,
   totalSets,
+  elapsedSeconds,
 }: {
   item: RoutineItem;
   currentSet: number;
   totalSets: number;
+  elapsedSeconds: number;
 }) {
   if (isCardioItem(item)) {
+    const target = item.target_duration_minutes;
+    // 목표를 채웠는지 알려면 화면에 시계가 보여야 한다. 트레드밀 계기판을
+    // 대신 읽어 주는 셈이다 — 기구마다 표시가 제각각이라 못 찾는 분이 많다.
+    const reachedTarget = target !== null && elapsedSeconds >= target * 60;
+
     return (
       <>
         <Text style={styles.name} maxFontSizeMultiplier={1.2}>
@@ -407,16 +481,25 @@ function WorkingView({
 
         <View style={styles.hero}>
           <Text style={styles.heroLabel} maxFontSizeMultiplier={1.2}>
-            목표 시간
+            지금까지
           </Text>
-          <Text style={styles.heroValue} maxFontSizeMultiplier={1.2}>
-            {item.target_duration_minutes}
-            <Text style={styles.heroUnit}>분</Text>
+          <Text
+            style={styles.heroValue}
+            maxFontSizeMultiplier={1.2}
+            // 1초마다 바뀌는 값이라 소리로 계속 읽어 주면 오히려 방해가 된다.
+            accessibilityLiveRegion="none">
+            {formatClock(elapsedSeconds)}
           </Text>
-          <Text style={styles.heroSub} maxFontSizeMultiplier={1.2}>
-            다 하셨으면 아래 버튼을 눌러주세요
-          </Text>
+          {target !== null ? (
+            <Text style={styles.heroSub} maxFontSizeMultiplier={1.2}>
+              {reachedTarget ? `목표 ${target}분을 채우셨습니다` : `목표 ${target}분`}
+            </Text>
+          ) : null}
         </View>
+
+        <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
+          다 하셨으면 아래 버튼을 눌러주세요. 더 하셔도 괜찮고, 힘들면 먼저 멈추셔도 됩니다.
+        </Text>
       </>
     );
   }
@@ -478,7 +561,7 @@ function RestingView({
 
       <View style={styles.hero}>
         <Text style={styles.heroValue} maxFontSizeMultiplier={1.2} accessibilityLiveRegion="polite">
-          {formatRest(seconds)}
+          {formatClock(seconds)}
         </Text>
         <Text style={styles.heroSub} maxFontSizeMultiplier={1.2}>
           다음은 {nextSet}세트입니다
@@ -503,15 +586,66 @@ function RestingView({
   );
 }
 
-/** 마지막: 무게 기구는 오늘 꽂은 핀을 남기고, 핀이 없는 운동은 확인만 */
-function LoggingView({ item, pin }: { item: RoutineItem; pin: string }) {
-  // 유산소와 맨몸운동은 꽂을 핀이 없다. 없는 걸 물으면 대답을 못 해
-  // 마지막 버튼이 안 눌린다 — 여기서 갈라 주는 게 그 화면의 출구다.
+/** 마지막: 근력은 오늘 꽂은 핀을, 유산소는 실제로 움직인 시간을 남긴다 */
+function LoggingView({
+  item,
+  pin,
+  minutesText,
+  measuredMinutes,
+  isMinutesValid,
+}: {
+  item: RoutineItem;
+  pin: string;
+  minutesText: string;
+  measuredMinutes: number;
+  isMinutesValid: boolean;
+}) {
+  if (isCardioItem(item)) {
+    const edited = minutesText !== String(measuredMinutes);
+
+    return (
+      <>
+        <View style={styles.headings}>
+          <Text style={styles.title} maxFontSizeMultiplier={1.2}>
+            수고하셨습니다
+          </Text>
+          <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+            앱이 잰 시간을 적어 뒀습니다. 실제와 다르면 아래 숫자판으로 고쳐 주세요.
+          </Text>
+        </View>
+
+        <View style={styles.hero}>
+          <Text style={styles.heroValue} maxFontSizeMultiplier={1.2}>
+            {minutesText === '' ? '−' : minutesText}
+            <Text style={styles.heroUnit}>분</Text>
+          </Text>
+          {edited ? (
+            <Text style={styles.heroSub} maxFontSizeMultiplier={1.2}>
+              앱이 잰 시간은 {measuredMinutes}분입니다
+            </Text>
+          ) : null}
+        </View>
+
+        {/* 세 자리를 눌러 240분을 넘겼거나 다 지운 경우. 버튼도 함께 잠긴다. */}
+        {isMinutesValid ? null : (
+          <Text
+            style={styles.saveErrorText}
+            maxFontSizeMultiplier={1.3}
+            accessibilityLiveRegion="polite">
+            {MINUTES_MIN}분에서 {MINUTES_MAX}분 사이로 적어 주세요.
+          </Text>
+        )}
+      </>
+    );
+  }
+
+  // 맨몸운동은 꽂을 핀이 없다. 없는 걸 물으면 대답을 못 해 마지막 버튼이
+  // 안 눌린다 — 여기서 갈라 주는 게 그 화면의 출구다.
   if (!needsWeightLog(item)) {
     return (
       <View style={styles.headings}>
         <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-          {isCardioItem(item) ? '수고하셨습니다' : `${item.target_sets ?? 1}세트 모두 끝났습니다`}
+          {`${item.target_sets ?? 1}세트 모두 끝났습니다`}
         </Text>
         <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
           아래 버튼을 누르면 오늘 기록이 저장됩니다.
@@ -545,14 +679,19 @@ function LoggingView({ item, pin }: { item: RoutineItem; pin: string }) {
 function FinishedView({
   item,
   pin,
+  minutes,
   pointsAwarded,
   saveError,
 }: {
   item: RoutineItem;
   pin: string;
+  minutes: number;
   pointsAwarded: number | null;
   saveError: string | null;
 }) {
+  // 화면이 다시 그려질 때마다 문구가 바뀌면 읽던 문장이 사라진다.
+  const praise = useMemo(() => pickCompletionPraise(), []);
+
   return (
     <View style={styles.centeredBlock}>
       {/* 저장에 실패했으면 축하부터 하면 안 된다 — 기록이 안 남았다는 사실이
@@ -568,11 +707,20 @@ function FinishedView({
       </Text>
       <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
         {isCardioItem(item)
-          ? `${primaryName(item)} ${item.target_duration_minutes}분을 마치셨습니다.`
+          ? // 처방 시간이 아니라 실제로 움직인 시간을 되짚어 준다.
+            `${primaryName(item)} ${minutes}분을 마치셨습니다.`
           : needsWeightLog(item)
             ? `${primaryName(item)} ${item.target_sets ?? 1}세트를 ${pin}칸으로 마치셨습니다.`
             : `${primaryName(item)} ${item.target_sets ?? 1}세트를 마치셨습니다.`}
       </Text>
+      {/* 저장됐다는 사실만 알리고 끝내면 그냥 절차가 된다. 방금 한 일을
+          알아봐 주는 한마디가 다음에 한 번 더 누르게 만든다. */}
+      {saveError ? null : (
+        <Text style={styles.praise} maxFontSizeMultiplier={1.3}>
+          {praise}
+        </Text>
+      )}
+
       {pointsAwarded ? (
         <View style={styles.pointsPill}>
           <Text style={styles.pointsEarned} maxFontSizeMultiplier={1.3}>
@@ -763,6 +911,14 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     borderRadius: Radius.full,
     backgroundColor: Colors.primaryFaint,
+  },
+  praise: {
+    fontSize: FontSize.body,
+    fontWeight: '600',
+    lineHeight: FontSize.body * 1.5,
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+    textAlign: 'center',
   },
   pointsEarned: {
     fontSize: FontSize.subtitle,
