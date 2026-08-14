@@ -8340,32 +8340,39 @@ $$;
 -- 20260814000033_cardio_actual_duration.sql
 -- ═══════════════════════════════════════════════════════════
 
--- 유산소를 "실제로 몇 분 했는지" 로 기록한다.
+-- 유산소를 "처방 시간"이 아니라 "실제로 한 시간"으로 기록한다.
 --
--- 지금까지 유산소는 완료 버튼을 누르면 처방 시간(target_duration_minutes)을
--- 그대로 수행한 것으로 기록했다. 근력의 "처방 횟수 = 실제 수행" 가정을 그대로
--- 가져온 것인데, 유산소에서는 이 가정이 잘 안 맞는다 — 15분 처방을 받고 8분만
--- 걷다 내려오거나, 반대로 걷다 보니 25분을 하는 일이 흔하다. 그걸 전부 15분으로
--- 적어 두면 분석 탭의 숫자가 사실과 달라진다.
+-- 15분을 처방받고 25분을 걸었는데 기록에는 15분만 남으면, 분석 탭의 숫자가
+-- 실제로 한 것보다 늘 적게 나온다. 유산소는 근력과 달리 "정해진 만큼"이 아니라
+-- "그날 몸 되는 만큼" 하는 것이라 이 차이가 크다.
 --
--- 그래서 실제 수행 시간을 따로 받는 칸을 만든다. 폰 앱이 시작~완료 사이를 재서
--- 채워 넣고, 사람이 그 값을 고칠 수 있다.
+-- ⚠️ 이 파일은 2026-08-14 병합 때 다시 쓴 것이다. 원본은 도감 분리(exercise_catalog)
+--    이전에 작성돼서 equipments.name / equipments.description / equipments.target_muscle
+--    을 읽었는데, 그 컬럼들은 지금 존재하지 않는다. 그대로 적용했으면 루틴 조회가
+--    통째로 깨졌다. 그래서 서버의 현재 정의(pg_get_functiondef)를 출발점으로 삼고
+--    유산소 실측에 필요한 것만 얹었다.
+--
+--    CLAUDE.md 의 "같은 함수를 두 갈래가 각자 고치면 조용히 기능이 사라진다"가
+--    바로 이 경우다. 다음에 이 함수들을 고칠 사람도 서버 정의부터 읽을 것.
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 1. 실제 수행 시간을 담을 자리
+-- ─────────────────────────────────────────────────────────────
 
 alter table public.daily_routines
     add column if not exists actual_duration_minutes integer;
 
 comment on column public.daily_routines.actual_duration_minutes is
-    '유산소를 실제로 수행한 시간(분). target_duration_minutes 는 처방값, 이건 실제 수행값. 근력 운동이면 null.';
+    '유산소를 실제로 수행한 시간(분). 근력 운동이거나 아직 안 받았으면 null.';
 
 
 -- ─────────────────────────────────────────────────────────────
--- complete_routine 에 실제 수행 시간을 받는 인자를 추가한다.
+-- 2. 완료 기록에 실제 시간을 받는다
 --
--- 기본값이 있는 인자를 덧붙이기만 하면 3-인자 호출이 두 함수 모두에 걸려
--- "function is not unique" 가 난다. 그래서 옛 시그니처를 지우고 다시 만든다.
+-- 서버가 범위를 다시 확인한다. 화면에서 막아도 값은 클라이언트에서 오고,
+-- 240분(4시간)을 넘는 유산소는 오타로 보는 편이 안전하다.
 -- ─────────────────────────────────────────────────────────────
-
-drop function if exists public.complete_routine(uuid, numeric, integer);
 
 create or replace function public.complete_routine(
     p_routine_id              uuid,
@@ -8381,19 +8388,17 @@ as $$
 declare
     v_routine       public.daily_routines;
     v_owner_auth_id uuid;
-    v_is_cardio     boolean;
-    v_duration      integer;
     -- 완료 1건당 지급 포인트. 지금은 난이도 무관 고정값이고, 나중에 세트·무게
     -- 기준 차등 지급을 붙일 수 있는 자리로 남겨 둔다.
     v_points        constant integer := 10;
-    -- 사람이 실제로 할 수 있는 범위. 폰 앱도 같은 값으로 막지만, 여기서 한 번 더
-    -- 본다 — 잘못 눌린 세 자리(예: 350분)가 그대로 저장되면 분석 탭 숫자가
-    -- 통째로 망가진다.
-    v_min_minutes   constant integer := 1;
-    v_max_minutes   constant integer := 240;
 begin
     if auth.uid() is null then
         raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+
+    if p_actual_duration_minutes is not null
+       and (p_actual_duration_minutes < 1 or p_actual_duration_minutes > 240) then
+        raise exception 'INVALID_DURATION' using errcode = '22023';
     end if;
 
     select * into v_routine from public.daily_routines where id = p_routine_id;
@@ -8413,23 +8418,11 @@ begin
         return jsonb_build_object('routine', to_jsonb(v_routine), 'points_awarded', 0);
     end if;
 
-    v_is_cardio := v_routine.target_duration_minutes is not null;
-
-    if p_actual_duration_minutes is not null
-       and (p_actual_duration_minutes < v_min_minutes or p_actual_duration_minutes > v_max_minutes) then
-        raise exception 'INVALID_DURATION' using errcode = '22023';
-    end if;
-
-    -- 시간은 유산소에만 의미가 있다. 근력 행에 분이 들어오면 버린다.
-    -- 반대로 유산소인데 시간이 안 들어오면 null 로 남긴다 — 처방값을 실제
-    -- 수행값 자리에 베껴 넣으면 "모른다"와 "처방대로 했다"를 구분할 수 없게 된다.
-    v_duration := case when v_is_cardio then p_actual_duration_minutes else null end;
-
     update public.daily_routines
     set is_completed = true,
         actual_weight_kg = p_actual_weight_kg,
         actual_reps = p_actual_reps,
-        actual_duration_minutes = v_duration,
+        actual_duration_minutes = p_actual_duration_minutes,
         completed_at = now(),
         points_awarded = v_points
     where id = p_routine_id
@@ -8441,20 +8434,16 @@ begin
 end;
 $$;
 
-comment on function public.complete_routine(uuid, numeric, integer, integer) is
-    '운동 완료 처리 + 포인트 지급. 개인 앱 전용, 본인 루틴만 완료할 수 있다. 유산소는 실제 수행 시간(분)을 함께 받는다.';
-
-revoke all on function public.complete_routine(uuid, numeric, integer, integer) from public;
-grant execute on function public.complete_routine(uuid, numeric, integer, integer) to authenticated;
-
 
 -- ─────────────────────────────────────────────────────────────
--- 달력에서 지난 날짜를 볼 때도 처방값이 아니라 실제로 한 시간이 보여야 한다.
+-- 3. 루틴 조회에 실제 수행 시간을 실어 준다
+--
+-- 나머지 필드는 서버의 현재 정의 그대로다(도감 필드·사진·기구 위치·무게 제안).
 -- ─────────────────────────────────────────────────────────────
 
 create or replace function public.get_daily_routine(
     p_user_id uuid,
-    p_date    date default current_date
+    p_date date default current_date
 )
 returns jsonb
 language sql
@@ -8463,42 +8452,48 @@ set search_path = public
 as $$
     select coalesce(jsonb_agg(row order by sort_order, name), '[]'::jsonb)
     from (
-        select d.sort_order, e.name, jsonb_build_object(
+        select d.sort_order, cat.name, jsonb_build_object(
             'routine_id', d.id,
+            'catalog_id', cat.id,
             'equip_id', e.id,
-            'name', e.name,
-            'description', e.description,
-            'target_muscle', e.target_muscle,
-            'video_url', e.video_url,
+            'name', cat.name,
+            'name_ko', cat.name_ko,
+            'station_kind', cat.station_kind,
+            'description', cat.description,
+            'why_it_matters', cat.why_it_matters,
+            'how_to_steps', cat.how_to_steps,
+            'form_caution', cat.form_caution,
+            'target_muscle', cat.target_muscle,
+            'video_url', cat.video_url,
+            'image_url', cat.image_url,
             'qr_code_val', e.qr_code_val,
+            'location_label', e.location_label,
             'target_weight', d.target_weight,
             'target_sets', d.target_sets,
             'target_reps', d.target_reps,
             'target_duration_minutes', d.target_duration_minutes,
             'actual_duration_minutes', d.actual_duration_minutes,
-            'is_completed', d.is_completed
+            'is_completed', d.is_completed,
+            'weight_suggestion', case
+                when d.is_completed then null
+                else public.weight_suggestion(p_user_id, e.id)
+            end
         ) as row
         from public.daily_routines d
-        join public.equipments e on e.id = d.equip_id
+        join public.exercise_catalog cat on cat.id = d.catalog_id
+        left join public.equipments e on e.id = d.equip_id
         where d.user_id = p_user_id and d.routine_date = p_date
-    ) rows;
+    ) s;
 $$;
-
-comment on function public.get_daily_routine(uuid, date) is
-    '해당 날짜의 루틴을 기구 정보(쉬운 설명·유산소 처방/실제 시간 포함)와 함께 돌려준다.';
-
-revoke all on function public.get_daily_routine(uuid, date) from public;
-grant execute on function public.get_daily_routine(uuid, date) to anon, authenticated;
 
 
 -- ─────────────────────────────────────────────────────────────
--- 분석 탭: 유산소를 근력과 섞지 않고 따로 집계한다.
+-- 4. 분석 요약에서 근력과 유산소를 갈라 센다
 --
--- 유산소 행은 세트가 1로 들어가 있다(스키마상 세트를 비울 수 없어서 넣은
--- 값이다). 그걸 근력 세트 합계에 그대로 더하면 "총 세트"가 부풀고, 부위별
--- 막대에도 '유산소 1세트' 같은 줄이 생긴다 — 시간으로 한 운동을 세트로
--- 세는 셈이라 둘 다 틀린 숫자다. 그래서 근력 집계에서는 빼고, 유산소는
--- 분(分) 합계로 따로 돌려준다.
+-- 지금까지 completed_count 하나에 둘을 섞어 놓아서, 칼로리 계산이 유산소를
+-- 근력처럼 어림잡고 있었다. 유산소는 실제로 움직인 시간이 있으니 그걸 쓴다.
+-- by_muscle 은 근력만 센다 — 유산소에 부위를 매기면 "다리 운동"으로 잡혀
+-- 부위 분포가 왜곡된다.
 -- ─────────────────────────────────────────────────────────────
 
 create or replace function public.get_workout_summary(p_user_id uuid, p_from date, p_to date)
@@ -8525,13 +8520,13 @@ begin
         raise exception 'FORBIDDEN' using errcode = '42501';
     end if;
 
+    -- 유산소인지는 처방 단위로 가른다(target_duration_minutes 가 있으면 유산소).
+    -- 실제 시간이 없으면 처방 시간으로 대신한다 — 예전 기록에는 실측이 없다.
     select
         count(*),
         count(*) filter (where d.target_duration_minutes is null),
         coalesce(sum(d.target_sets) filter (where d.target_duration_minutes is null), 0),
         count(*) filter (where d.target_duration_minutes is not null),
-        -- 옛 기록(이 마이그레이션 전에 완료한 유산소)은 실제 시간이 비어 있다.
-        -- 그때는 처방 시간으로 대신 센다 — 당시 앱이 그렇게 기록한 것과 같은 값이다.
         coalesce(sum(coalesce(d.actual_duration_minutes, d.target_duration_minutes))
                  filter (where d.target_duration_minutes is not null), 0)
     into v_completed_count, v_strength_count, v_total_sets, v_cardio_count, v_cardio_minutes
@@ -8552,13 +8547,13 @@ begin
     )
     into v_by_muscle
     from (
-        select e.target_muscle, count(*) as completed_count, coalesce(sum(d.target_sets), 0) as total_sets
+        select cat.target_muscle, count(*) as completed_count, coalesce(sum(d.target_sets), 0) as total_sets
         from public.daily_routines d
-        join public.equipments e on e.id = d.equip_id
+        join public.exercise_catalog cat on cat.id = d.catalog_id
         where d.user_id = p_user_id and d.is_completed
-          and d.routine_date between p_from and p_to
           and d.target_duration_minutes is null
-        group by e.target_muscle
+          and d.routine_date between p_from and p_to
+        group by cat.target_muscle
     ) t;
 
     return jsonb_build_object(
@@ -8571,12 +8566,6 @@ begin
     );
 end;
 $$;
-
-comment on function public.get_workout_summary(uuid, date, date) is
-    '기간 내 완료 운동 원시 집계. 근력(개수·세트·부위별)과 유산소(개수·분)를 나눠서 돌려준다. 칼로리 등 가공은 클라이언트가 한다.';
-
-revoke all on function public.get_workout_summary(uuid, date, date) from public;
-grant execute on function public.get_workout_summary(uuid, date, date) to authenticated;
 
 
 -- ═══════════════════════════════════════════════════════════
@@ -8606,8 +8595,9 @@ security definer
 set search_path = public
 as $$
 declare
-    v_user public.users;
-    v_name text;
+    v_user  public.users;
+    v_phone text;
+    v_name  text;
 begin
     if auth.uid() is null then
         raise exception 'AUTH_REQUIRED' using errcode = '42501';
@@ -8616,7 +8606,28 @@ begin
     select * into v_user from public.users where auth_user_id = auth.uid();
 
     if not found then
-        insert into public.users (auth_user_id) values (auth.uid()) returning * into v_user;
+        -- 이 auth 신원으로는 처음이다. 문자 인증으로 들어온 거라면 번호로 기존
+        -- 계정을 찾아본다. 카카오/구글/익명은 phone 클레임이 없어 그냥 건너뛴다.
+        v_phone := public.local_phone_from_e164(nullif(auth.jwt() ->> 'phone', ''));
+
+        if v_phone is not null and v_phone <> '' then
+            select * into v_user from public.users u where u.phone_number = v_phone;
+
+            if found then
+                -- 예전 auth 연결(앱을 지워 못 쓰게 된 익명 계정 등)을 새 것으로
+                -- 갈아끼운다. complete_pairing 이 재연결에서 하는 것과 같은 처리다.
+                update public.users set auth_user_id = auth.uid() where id = v_user.id
+                returning * into v_user;
+            end if;
+        end if;
+    end if;
+
+    if v_user.id is null then
+        -- 정말 처음 보는 사람이다. 번호를 아는 경우(문자 인증) 같이 넣어 둔다 —
+        -- 나중에 태블릿에서 같은 번호로 체크인해도 계정이 갈라지지 않는다.
+        insert into public.users (auth_user_id, phone_number)
+        values (auth.uid(), nullif(v_phone, ''))
+        returning * into v_user;
     end if;
 
     -- 제공자마다 키가 다르다. 카카오는 주로 name/nickname, 구글은 name/full_name.
@@ -8641,9 +8652,18 @@ begin
     -- 화면 한 줄에 들어가야 한다. 긴 이름은 잘라 둔다.
     v_name := left(v_name, 20);
 
-    if v_name is not null and coalesce(btrim(v_user.profile_data->>'nickname'), '') = '' then
+    -- ⚠️ nickname 이 아니라 real_name 에 넣는다.
+    --
+    -- 카카오·구글이 주는 이름은 대개 실명("김철수")이다. nickname 은 단지
+    -- 랭킹에 그대로 노출되는 값이라, 여기에 실명을 채우면 로그인만 했을 뿐인
+    -- 사람의 본명이 이웃들에게 공개된다. 인사말("○○ 님, 안녕하세요")은 본인만
+    -- 보는 화면이므로 real_name 으로 충분하다.
+    --
+    -- 닉네임은 본인이 직접 정하게 두고(update_nickname RPC — 비속어 필터와
+    -- 2주 제한이 걸려 있다), 여기서는 손대지 않는다.
+    if v_name is not null and coalesce(btrim(v_user.profile_data->>'real_name'), '') = '' then
         update public.users
-        set profile_data = profile_data || jsonb_build_object('nickname', v_name)
+        set profile_data = profile_data || jsonb_build_object('real_name', v_name)
         where id = v_user.id
         returning * into v_user;
     end if;
@@ -8653,7 +8673,7 @@ end;
 $$;
 
 comment on function public.bootstrap_oauth_profile() is
-    '카카오/구글 로그인 직후 호출. 처음이면 전화번호 없는 프로필을 만들고, 이름이 비어 있으면 제공자가 준 표시 이름을 채운다.';
+    '카카오/구글/문자 로그인 직후 호출. 번호로 기존 계정을 잇거나 새로 만들고, 실명이 비어 있으면 제공자가 준 표시 이름을 real_name 에 채운다(닉네임은 본인이 정한다).';
 
 revoke all on function public.bootstrap_oauth_profile() from public;
 grant execute on function public.bootstrap_oauth_profile() to authenticated;

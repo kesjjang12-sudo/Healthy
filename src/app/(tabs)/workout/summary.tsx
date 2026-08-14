@@ -94,9 +94,13 @@ export default function WorkoutSummaryScreen() {
 }
 
 function CardBody({ card, nickname }: { card: WorkoutShareCard; nickname?: string }) {
+  // 근력과 유산소는 소모량 계산이 다르다(유산소는 실제로 움직인 시간을 쓴다).
+  // 카드의 exercise_count 에는 유산소도 섞여 있어, 근력 개수는 세트가 남은
+  // 종목 수로 어림한다 — 유산소는 세트를 남기지 않는다.
   const calories = estimateCalories({
-    completedCount: card.exercise_count,
-    totalSets: card.total_sets,
+    strengthCount: card.exercises.filter((e) => e.sets !== null).length,
+    strengthSets: card.total_sets,
+    cardioMinutes: card.total_minutes_cardio,
   });
 
   return (

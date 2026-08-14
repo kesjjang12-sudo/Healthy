@@ -13,7 +13,6 @@ import {
   getWorkoutSummary,
   getWorkoutTrend,
 } from '@/features/analysis/api';
-import { attendanceLine, streakLine } from '@/features/analysis/progress';
 import { estimateCalories } from '@/features/analysis/calorie';
 import { attendanceLine, streakLine, volumeLine } from '@/features/analysis/progress';
 import { useAuthSession } from '@/features/auth/auth-session';

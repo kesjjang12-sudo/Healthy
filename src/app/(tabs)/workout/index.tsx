@@ -86,7 +86,9 @@ export default function WorkoutTab() {
   const greeting = useMemo(
     () =>
       pickGreeting({
-        name: user!.profile_data?.nickname,
+        // 본인만 보는 인사말이라 실명을 쓴다. 닉네임은 랭킹에 노출되는 값이라
+        // 카카오·구글이 준 이름을 거기 채우지 않는다(bootstrap_oauth_profile 참고).
+        name: user!.profile_data?.real_name ?? user!.profile_data?.nickname,
         visitDays: visitStats?.total_days ?? null,
       }),
     [user, visitStats],

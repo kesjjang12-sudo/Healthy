@@ -21,8 +21,9 @@ security definer
 set search_path = public
 as $$
 declare
-    v_user public.users;
-    v_name text;
+    v_user  public.users;
+    v_phone text;
+    v_name  text;
 begin
     if auth.uid() is null then
         raise exception 'AUTH_REQUIRED' using errcode = '42501';
@@ -31,7 +32,28 @@ begin
     select * into v_user from public.users where auth_user_id = auth.uid();
 
     if not found then
-        insert into public.users (auth_user_id) values (auth.uid()) returning * into v_user;
+        -- 이 auth 신원으로는 처음이다. 문자 인증으로 들어온 거라면 번호로 기존
+        -- 계정을 찾아본다. 카카오/구글/익명은 phone 클레임이 없어 그냥 건너뛴다.
+        v_phone := public.local_phone_from_e164(nullif(auth.jwt() ->> 'phone', ''));
+
+        if v_phone is not null and v_phone <> '' then
+            select * into v_user from public.users u where u.phone_number = v_phone;
+
+            if found then
+                -- 예전 auth 연결(앱을 지워 못 쓰게 된 익명 계정 등)을 새 것으로
+                -- 갈아끼운다. complete_pairing 이 재연결에서 하는 것과 같은 처리다.
+                update public.users set auth_user_id = auth.uid() where id = v_user.id
+                returning * into v_user;
+            end if;
+        end if;
+    end if;
+
+    if v_user.id is null then
+        -- 정말 처음 보는 사람이다. 번호를 아는 경우(문자 인증) 같이 넣어 둔다 —
+        -- 나중에 태블릿에서 같은 번호로 체크인해도 계정이 갈라지지 않는다.
+        insert into public.users (auth_user_id, phone_number)
+        values (auth.uid(), nullif(v_phone, ''))
+        returning * into v_user;
     end if;
 
     -- 제공자마다 키가 다르다. 카카오는 주로 name/nickname, 구글은 name/full_name.
@@ -56,9 +78,18 @@ begin
     -- 화면 한 줄에 들어가야 한다. 긴 이름은 잘라 둔다.
     v_name := left(v_name, 20);
 
-    if v_name is not null and coalesce(btrim(v_user.profile_data->>'nickname'), '') = '' then
+    -- ⚠️ nickname 이 아니라 real_name 에 넣는다.
+    --
+    -- 카카오·구글이 주는 이름은 대개 실명("김철수")이다. nickname 은 단지
+    -- 랭킹에 그대로 노출되는 값이라, 여기에 실명을 채우면 로그인만 했을 뿐인
+    -- 사람의 본명이 이웃들에게 공개된다. 인사말("○○ 님, 안녕하세요")은 본인만
+    -- 보는 화면이므로 real_name 으로 충분하다.
+    --
+    -- 닉네임은 본인이 직접 정하게 두고(update_nickname RPC — 비속어 필터와
+    -- 2주 제한이 걸려 있다), 여기서는 손대지 않는다.
+    if v_name is not null and coalesce(btrim(v_user.profile_data->>'real_name'), '') = '' then
         update public.users
-        set profile_data = profile_data || jsonb_build_object('nickname', v_name)
+        set profile_data = profile_data || jsonb_build_object('real_name', v_name)
         where id = v_user.id
         returning * into v_user;
     end if;
@@ -68,7 +99,7 @@ end;
 $$;
 
 comment on function public.bootstrap_oauth_profile() is
-    '카카오/구글 로그인 직후 호출. 처음이면 전화번호 없는 프로필을 만들고, 이름이 비어 있으면 제공자가 준 표시 이름을 채운다.';
+    '카카오/구글/문자 로그인 직후 호출. 번호로 기존 계정을 잇거나 새로 만들고, 실명이 비어 있으면 제공자가 준 표시 이름을 real_name 에 채운다(닉네임은 본인이 정한다).';
 
 revoke all on function public.bootstrap_oauth_profile() from public;
 grant execute on function public.bootstrap_oauth_profile() to authenticated;

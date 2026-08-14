@@ -468,6 +468,8 @@ export type WorkoutShareCard = {
   points: number;
   muscles: string[];
   exercises: ShareCardExercise[];
+};
+
 /** get_progress_summary 의 한 기간 집계 */
 export type ActivityWindow = {
   /** 그 기간에 헬스장에 나온 날 수(키오스크 체크인 기준) */
@@ -703,6 +705,7 @@ export type Database = {
       get_workout_share_card: {
         Args: { p_user_id: string; p_date?: string };
         Returns: WorkoutShareCard | null;
+      };
       record_consents: {
         Args: { p_user_id: string; p_version: string; p_consents: Record<string, boolean> };
         Returns: { user: User };
