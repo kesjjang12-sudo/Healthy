@@ -45,6 +45,23 @@
   `profile_data.real_name`. `update_profile_data` 는 nickname 키를 떼고
   저장한다(닉네임은 update_nickname RPC 전용 — 비속어 필터·2주 제한).
 
+## ⚠️ main 의 마이그레이션 체인이 지금 끊겨 있다 (2026-08-13)
+
+`20260813000008_catalog_lookup` / `000009_catalog_expansion_images` /
+`000010_expose_image_url` 가 `public.exercise_catalog` 를 참조하는데, 그 테이블을
+**만드는 마이그레이션이 main 에 없다**. 만드는 쪽은 미병합 브랜치
+`claude/toss-app-ui-ux-design-zikopg`("운동 도감을 분리한다")에 있다.
+
+라이브 DB 는 이미 그 테이블을 갖고 있어서 운영은 멀쩡하지만, 빈 DB 에
+마이그레이션을 처음부터 돌리면 저 셋이 실패한다. toss-app-ui 브랜치를 병합할 때
+순서를 바로잡을 것.
+
+## 마이그레이션 번호는 먼저 확인하고 붙인다
+
+세션 둘이 같은 날 `...000009` 를 각각 만들어 충돌한 적이 있다. 파일을 만들기 전에
+`git fetch origin && ls supabase/migrations/` 로 origin/main 의 마지막 번호를
+확인하고, 충돌하면 **내 것을 뒤로 민다**(남의 것이 이미 서버에 올라갔을 수 있다).
+
 ## 남은 미병합 브랜치 (2026-08-13 기준)
 
 아래 브랜치의 세션들은 각자 `origin/main` 을 병합하고 위 절차로 배포할 것:
