@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChoiceButton } from '@/components/choice-button';
+import { ListRow } from '@/components/list-row';
 import { PrimaryButton } from '@/components/primary-button';
 import { TextField } from '@/components/text-field';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
@@ -242,33 +244,34 @@ export default function ProfileTab() {
             아직 체크인한 헬스장이 없습니다.
           </Text>
         ) : (
+          // 토스 "전체" 화면의 서비스 목록처럼 색 타일 + 제목 + 보조설명으로 쌓는다.
+          // 지금 다니는 곳만 파란 타일이라 글자를 읽기 전에 구분된다.
           <View style={styles.gymList}>
             {memberships.map((m) => (
-              <View key={m.apt_id} style={styles.gymRow}>
-                <View style={styles.gymTexts}>
-                  <Text
-                    style={[styles.gymName, m.left_at ? styles.gymNameLeft : null]}
-                    maxFontSizeMultiplier={1.3}>
-                    {m.apt_name}
-                  </Text>
-                  <Text style={styles.gymMeta} maxFontSizeMultiplier={1.3}>
-                    {m.is_primary
-                      ? '주 소속'
-                      : m.left_at
-                        ? `이전에 다니던 곳 · 방문 ${m.visit_count}회`
-                        : `방문 ${m.visit_count}회`}
-                  </Text>
-                </View>
-                {!m.is_primary ? (
-                  <PrimaryButton
-                    label={m.left_at ? '다시 다니기' : '주 소속으로'}
-                    variant="quiet"
-                    size="compact"
-                    loading={switchingAptId === m.apt_id}
-                    onPress={() => void switchPrimary(m.apt_id)}
-                  />
-                ) : null}
-              </View>
+              <ListRow
+                key={m.apt_id}
+                icon="building"
+                tint={m.is_primary ? 'blue' : 'grey'}
+                title={m.apt_name}
+                subtitle={
+                  m.is_primary
+                    ? '지금 다니는 곳'
+                    : m.left_at
+                      ? `이전에 다니던 곳 · 방문 ${m.visit_count}회`
+                      : `방문 ${m.visit_count}회`
+                }
+                right={
+                  !m.is_primary ? (
+                    <PrimaryButton
+                      label={m.left_at ? '다시 다니기' : '주 소속으로'}
+                      variant="quiet"
+                      size="compact"
+                      loading={switchingAptId === m.apt_id}
+                      onPress={() => void switchPrimary(m.apt_id)}
+                    />
+                  ) : undefined
+                }
+              />
             ))}
           </View>
         )}
@@ -281,45 +284,44 @@ export default function ProfileTab() {
         {/* getHealthConnectionStatus() 는 지금 항상 'unavailable' 이다(features/health/provider.ts 참고) —
             네이티브 모듈 없이는 실제 연동을 할 수 없어 "준비 중"만 정직하게 보여준다. */}
         {getHealthConnectionStatus() === 'unavailable' ? (
-          <View style={styles.comingSoonBox}>
-            <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-              애플 헬스 · Google Health Connect 연동을 준비하고 있습니다. 연결되면 걸음 수와 활동
-              시간을 자동으로 불러옵니다.
-            </Text>
-          </View>
+          <ListRow
+            icon="heart"
+            tint="red"
+            title="애플 헬스 · Health Connect"
+            subtitle="연결되면 걸음 수와 활동 시간을 자동으로 불러옵니다"
+            value="준비 중"
+            valueTone="secondary"
+          />
         ) : null}
       </View>
 
-      {user?.support_code ? (
-        // 고객대응용 계정번호. 문의 전화·채팅에서 "계정번호 알려주세요" 한마디로
-        // 회원을 특정하기 위한 값이라, 눈에 띄게 만들 필요는 없고 찾을 수 있으면 된다.
-        <View style={styles.supportRow}>
-          <Text style={styles.helper} maxFontSizeMultiplier={1.3} selectable>
-            계정번호 {user.support_code}
-          </Text>
-          <Pressable
-            onPress={() => void copySupportCode()}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel="계정번호 복사"
-            style={({ pressed }) => [styles.copyChip, pressed && styles.copyChipPressed]}>
-            <Text
-              style={[styles.copyChipLabel, codeCopied && styles.copyChipLabelDone]}
-              maxFontSizeMultiplier={1.3}>
-              {codeCopied ? '복사됨' : '복사'}
-            </Text>
-          </Pressable>
-        </View>
-      ) : null}
-
-      {providerLabel ? (
-        <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          {providerLabel}로 로그인되어 있습니다.
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
+          계정
         </Text>
-      ) : null}
 
-      <View style={styles.footer}>
-        <PrimaryButton label="로그아웃" variant="secondary" onPress={() => void signOut()} />
+        {/* 고객대응용 계정번호. 문의 전화·채팅에서 "계정번호 알려주세요" 한마디로
+            회원을 특정하기 위한 값이라, 눈에 띄게 만들 필요는 없고 찾을 수 있으면 된다.
+            행 전체가 복사 버튼이다 — 작은 칩보다 누르기 쉽다. */}
+        {user?.support_code ? (
+          <ListRow
+            icon="person"
+            tint="grey"
+            title="계정번호"
+            subtitle={codeCopied ? '복사했습니다' : '문의할 때 알려주세요. 누르면 복사됩니다'}
+            value={user.support_code}
+            onPress={() => void copySupportCode()}
+            accessibilityLabel={`계정번호 ${user.support_code}, 누르면 복사합니다`}
+          />
+        ) : null}
+        <ListRow
+          icon="logout"
+          tint="grey"
+          title="로그아웃"
+          subtitle={providerLabel ? `${providerLabel}로 로그인되어 있습니다` : undefined}
+          chevron
+          onPress={() => void signOut()}
+        />
       </View>
     </ScrollView>
   );
@@ -348,11 +350,12 @@ const styles = StyleSheet.create({
   section: {
     gap: Spacing.md,
   },
+  /** 토스의 "금융 서비스" 같은 회색 섹션 캡션 — 내용보다 조용해야 한다. */
   sectionTitle: {
-    fontSize: FontSize.body,
-    fontWeight: '700',
-    letterSpacing: LetterSpacing.subtitle,
-    color: Colors.text,
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.grey[500],
   },
   choiceRow: {
     flexDirection: 'row',
@@ -409,40 +412,6 @@ const styles = StyleSheet.create({
     color: Colors.success,
   },
   gymList: {
-    gap: Spacing.sm,
-  },
-  gymRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.lg,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surface,
-  },
-  gymTexts: {
-    flex: 1,
-    gap: 2,
-  },
-  gymName: {
-    fontSize: FontSize.body,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  gymNameLeft: {
-    color: Colors.textSecondary,
-  },
-  gymMeta: {
-    fontSize: FontSize.caption,
-    fontWeight: '500',
-    color: Colors.textSecondary,
-  },
-  comingSoonBox: {
-    padding: Spacing.lg,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surface,
-  },
-  footer: {
-    gap: Spacing.sm,
+    gap: Spacing.xs,
   },
 });

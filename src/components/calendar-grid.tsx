@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '@/components/app-text';
 
 import { Colors, FontSize, Radius, Spacing } from '@/constants/theme';
 import type { CalendarCell } from '@/features/calendar/date-utils';

@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CheckMark } from '@/components/check-mark';
@@ -12,15 +13,16 @@ import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/th
 import { useAuthSession } from '@/features/auth/auth-session';
 import { pickRestMessage } from '@/features/content/rest-encouragement';
 import {
-  CARDIO_HOW_TO_STEPS,
   FIRST_TIME_RULE,
   formatVolume,
-  HOW_TO_STEPS,
+  howToSteps,
   isCardioItem,
+  needsWeightLog,
   WEIGHT_RULE,
   weightHint,
 } from '@/features/routine/guidance';
 import { RoutineError, completeRoutine } from '@/features/routine/api';
+import { placeText, primaryName, secondaryName } from '@/features/routine/labels';
 import { useDailyRoutine } from '@/features/routine/use-daily-routine';
 import { formatRest, useWorkoutSession } from '@/features/routine/use-workout-session';
 import type { AgeGroup, RoutineItem } from '@/lib/database.types';
@@ -104,6 +106,7 @@ export default function RoutineDetailScreen() {
       onExit={goBack}
       onExitCompleted={goBackCompleted}
       onWeightChanged={retry}
+      onShowCard={() => router.push('/workout/summary')}
     />
   );
 }
@@ -113,6 +116,7 @@ function WorkoutSession({
   onExit,
   onExitCompleted,
   onWeightChanged,
+  onShowCard,
 }: {
   item: RoutineItem;
   onExit: () => void;
@@ -120,6 +124,8 @@ function WorkoutSession({
   onExitCompleted: (name: string, points: number | null) => void;
   /** 무게를 바꾸면 처방값이 달라지므로 루틴을 다시 불러와야 한다. */
   onWeightChanged: () => void;
+  /** 방금 끝낸 직후 "오늘 운동 카드"로 보내는 길. */
+  onShowCard: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const { user, setUser } = useAuthSession();
@@ -188,9 +194,11 @@ function WorkoutSession({
     <LoggingView item={item} pin={pin} />
   );
 
-  // 유산소는 핀 칸이 없으니 물어볼 게 없다 — 기록 화면에서 키패드를 안 띄우고
-  // 바로 "기록하고 마치기"를 누를 수 있게 한다.
-  const showKeypad = session.phase === 'logging' && !isFinished && !isCardio;
+  // 핀을 꽂을 수 없는 운동(유산소·맨몸)은 물어볼 게 없다 — 키패드를 안 띄우고
+  // 바로 "기록하고 마치기"를 누를 수 있게 한다. 유산소만 예외로 두면 맨몸운동
+  // 차례에서 빈 키패드를 앞에 두고 버튼이 안 눌려 운동을 마칠 수 없다.
+  const logsWeight = needsWeightLog(item);
+  const showKeypad = session.phase === 'logging' && !isFinished && logsWeight;
 
   return (
     <View style={styles.screen}>
@@ -210,14 +218,19 @@ function WorkoutSession({
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
         {isFinished ? (
-          <PrimaryButton
-            label="목록으로"
-            onPress={() =>
-              saveError
-                ? onExit()
-                : onExitCompleted(item.name_ko ?? item.name, pointsAwarded)
-            }
-          />
+          <>
+            {/* 방금 끝낸 직후가 가장 뿌듯한 순간이다. 카드를 여기서 바로 연다. */}
+            <PrimaryButton label="오늘 운동 카드 보기" onPress={onShowCard} />
+            <PrimaryButton
+              label="목록으로"
+              variant="secondary"
+              onPress={() =>
+                saveError
+                  ? onExit()
+                  : onExitCompleted(item.name_ko ?? item.name, pointsAwarded)
+              }
+            />
+          </>
         ) : session.phase === 'ready' ? (
           <>
             <PrimaryButton label={isCardio ? '시작' : '운동 시작'} onPress={() => session.start()} />
@@ -236,7 +249,7 @@ function WorkoutSession({
         ) : (
           <PrimaryButton
             label="기록하고 마치기"
-            disabled={!isCardio && pin.length === 0}
+            disabled={logsWeight && pin.length === 0}
             loading={isSaving}
             onPress={() => void finishAndSave()}
           />
@@ -249,7 +262,8 @@ function WorkoutSession({
 /** 시작 전: 무엇을 어떻게 하는 운동인지 */
 function ReadyView({ item, onWeightChanged }: { item: RoutineItem; onWeightChanged: () => void }) {
   const volume = formatVolume(item);
-  const isCardio = isCardioItem(item);
+  const equipName = secondaryName(item);
+  const place = placeText(item);
 
   return (
     <>
@@ -263,14 +277,14 @@ function ReadyView({ item, onWeightChanged }: { item: RoutineItem; onWeightChang
             {item.target_muscle} 운동
           </Text>
         ) : null}
+        {/* 목록에서 크게 읽은 그 이름이 그대로 제목이 된다. 기구 이름은 그
+            아래 한 줄 — 기구 앞에서 이름표와 맞춰볼 때만 필요하다. */}
         <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-          {item.name}
+          {primaryName(item)}
         </Text>
-        {/* 외래어 이름 아래에 한글 직역과 종류를 붙인다. "체스트 프레스"가
-            뭔지 모르셔도 "가슴 밀기"는 바로 읽힌다. */}
-        {item.name_ko || item.station_kind ? (
-          <Text style={styles.subName} maxFontSizeMultiplier={1.3}>
-            {[item.name_ko, item.station_kind].filter(Boolean).join('  ·  ')}
+        {equipName ? (
+          <Text style={styles.equipName} maxFontSizeMultiplier={1.3}>
+            기구 이름 {equipName}
           </Text>
         ) : null}
         {/* 기구 이름만으로는 뭘 하는 기구인지 안 와닿는 분이 많다. 설명이
@@ -282,9 +296,23 @@ function ReadyView({ item, onWeightChanged }: { item: RoutineItem; onWeightChang
         ) : null}
       </View>
 
+      {/* 어디로 가야 하는지는 시작 버튼을 누르기 전에 답이 나와야 한다.
+          기구에 붙은 번호표와 같은 숫자를 그대로 크게 적는다. */}
+      {place ? (
+        <View style={styles.placeBox}>
+          <Text style={styles.placeLabel} maxFontSizeMultiplier={1.2}>
+            {item.equip_id === null ? '이 운동은' : '기구 위치'}
+          </Text>
+          <Text style={styles.placeValue} maxFontSizeMultiplier={1.2}>
+            {place}
+          </Text>
+        </View>
+      ) : null}
+
       {/* 지난 기록에 근거한 무게 제안. 시작 버튼을 누르기 전에 보여야 오늘
           것에 반영된다 — 끝난 뒤에 뜨면 다음에나 쓸 얘기가 된다. */}
-      {item.weight_suggestion ? (
+      {/* 맨몸운동은 조절할 기구가 없다(equip_id 가 null) — 무게 제안도 뜻이 없다. */}
+      {item.weight_suggestion && item.equip_id ? (
         <WeightSuggestionCard
           equipId={item.equip_id}
           suggestion={item.weight_suggestion}
@@ -322,7 +350,7 @@ function ReadyView({ item, onWeightChanged }: { item: RoutineItem; onWeightChang
           하는 방법
         </Text>
         <View style={styles.steps}>
-          {(isCardio ? CARDIO_HOW_TO_STEPS : HOW_TO_STEPS).map((step, index) => (
+          {howToSteps(item).map((step: string, index: number) => (
             <View key={step} style={styles.step}>
               <View style={styles.stepBadge}>
                 <Text style={styles.stepNumber} maxFontSizeMultiplier={1.2}>
@@ -337,9 +365,21 @@ function ReadyView({ item, onWeightChanged }: { item: RoutineItem; onWeightChang
         </View>
       </View>
 
-      {/* 유산소는 무게 개념이 없다 — "하는 방법"에 이미 속도 조절 안내가
-          들어 있으니 무게 안내는 생략한다. */}
-      {isCardio ? null : <WeightGuide item={item} />}
+      {/* 그 운동에서 다치는 대표 경로 하나. 순서를 다 읽지 않는 분도 이건 본다. */}
+      {item.form_caution ? (
+        <View style={styles.cautionBox}>
+          <Text style={styles.cautionTitle} maxFontSizeMultiplier={1.2}>
+            이것만은 지켜주세요
+          </Text>
+          <Text style={styles.cautionText} maxFontSizeMultiplier={1.3}>
+            {item.form_caution}
+          </Text>
+        </View>
+      ) : null}
+
+      {/* 무게가 없는 운동(유산소·맨몸)에는 "한 칸 올리세요" 안내가 맞지 않는다.
+          유산소는 "하는 방법"에 속도 조절 안내가 이미 들어 있다. */}
+      {needsWeightLog(item) ? <WeightGuide item={item} /> : null}
 
       <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
         아프거나 어지러우면 바로 멈추고 관리사무소에 알려주세요.
@@ -362,7 +402,7 @@ function WorkingView({
     return (
       <>
         <Text style={styles.name} maxFontSizeMultiplier={1.2}>
-          {item.name}
+          {primaryName(item)}
         </Text>
 
         <View style={styles.hero}>
@@ -384,7 +424,7 @@ function WorkingView({
   return (
     <>
       <Text style={styles.name} maxFontSizeMultiplier={1.2}>
-        {item.name}
+        {primaryName(item)}
       </Text>
 
       <View style={styles.hero}>
@@ -463,16 +503,18 @@ function RestingView({
   );
 }
 
-/** 마지막: 근력은 오늘 꽂은 핀을 남기고, 유산소는 물어볼 게 없으니 확인만 */
+/** 마지막: 무게 기구는 오늘 꽂은 핀을 남기고, 핀이 없는 운동은 확인만 */
 function LoggingView({ item, pin }: { item: RoutineItem; pin: string }) {
-  if (isCardioItem(item)) {
+  // 유산소와 맨몸운동은 꽂을 핀이 없다. 없는 걸 물으면 대답을 못 해
+  // 마지막 버튼이 안 눌린다 — 여기서 갈라 주는 게 그 화면의 출구다.
+  if (!needsWeightLog(item)) {
     return (
       <View style={styles.headings}>
         <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-          수고하셨습니다
+          {isCardioItem(item) ? '수고하셨습니다' : `${item.target_sets ?? 1}세트 모두 끝났습니다`}
         </Text>
         <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          아래 버튼을 누르면 오늘 유산소가 기록됩니다.
+          아래 버튼을 누르면 오늘 기록이 저장됩니다.
         </Text>
       </View>
     );
@@ -526,8 +568,10 @@ function FinishedView({
       </Text>
       <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
         {isCardioItem(item)
-          ? `${item.name} ${item.target_duration_minutes}분을 마치셨습니다.`
-          : `${item.name} ${item.target_sets ?? 1}세트를 ${pin}칸으로 마치셨습니다.`}
+          ? `${primaryName(item)} ${item.target_duration_minutes}분을 마치셨습니다.`
+          : needsWeightLog(item)
+            ? `${primaryName(item)} ${item.target_sets ?? 1}세트를 ${pin}칸으로 마치셨습니다.`
+            : `${primaryName(item)} ${item.target_sets ?? 1}세트를 마치셨습니다.`}
       </Text>
       {pointsAwarded ? (
         <View style={styles.pointsPill}>
@@ -617,6 +661,34 @@ const styles = StyleSheet.create({
     lineHeight: FontSize.title * 1.3,
     letterSpacing: LetterSpacing.title,
     color: Colors.text,
+  },
+  equipName: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textTertiary,
+  },
+  placeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.primaryFaint,
+  },
+  placeLabel: {
+    fontSize: FontSize.body,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+  },
+  placeValue: {
+    fontSize: FontSize.subtitle,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.subtitle,
+    color: Colors.primary,
   },
   description: {
     fontSize: FontSize.body,
@@ -789,6 +861,25 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: FontSize.body,
     fontWeight: '500',
+    lineHeight: FontSize.body * 1.5,
+    letterSpacing: LetterSpacing.body,
+    color: Colors.text,
+  },
+  cautionBox: {
+    gap: Spacing.sm,
+    padding: Spacing.xl,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.dangerFaint,
+  },
+  cautionTitle: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.danger,
+  },
+  cautionText: {
+    fontSize: FontSize.body,
+    fontWeight: '600',
     lineHeight: FontSize.body * 1.5,
     letterSpacing: LetterSpacing.body,
     color: Colors.text,

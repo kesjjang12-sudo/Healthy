@@ -1,4 +1,4 @@
-import type { WorkoutSummary } from '@/lib/database.types';
+import type { WorkoutShareCard, WorkoutSummary, WorkoutTrend } from '@/lib/database.types';
 import {
   GENERIC_ERROR_MESSAGE,
   NETWORK_ERROR_MESSAGE,
@@ -41,4 +41,47 @@ export async function getWorkoutSummary(
   if (!data) throw new AnalysisError(GENERIC_ERROR_MESSAGE);
 
   return data;
+}
+
+/**
+ * 추이 그래프용 시계열. 운동이 없는 구간도 0 으로 채워져서 온다.
+ *
+ * bucket='week' 은 기간이 7의 배수일 때만 받는다 — 30일을 7일씩 자르면
+ * 마지막 칸이 이틀짜리가 되어 그 칸만 낮게 나오고, "요즘 덜 한다"로 잘못
+ * 읽힌다. 그래서 화면은 28일(4주)로 부른다.
+ */
+export async function getWorkoutTrend(
+  userId: string,
+  from: Date,
+  to: Date,
+  bucket: 'day' | 'week',
+): Promise<WorkoutTrend> {
+  const { data, error } = await supabase.rpc('get_workout_trend', {
+    p_user_id: userId,
+    p_from: toDateKey(from),
+    p_to: toDateKey(to),
+    p_bucket: bucket,
+  });
+
+  if (error) throw toAnalysisError(error);
+  if (!data) throw new AnalysisError(GENERIC_ERROR_MESSAGE);
+
+  return data;
+}
+
+/**
+ * 오늘 운동 한 장 요약. 완료한 운동이 하나도 없으면 null 을 돌려준다
+ * (오류가 아니다 — 아직 안 한 것뿐이라 화면에서 조용히 넘어가면 된다).
+ */
+export async function getWorkoutShareCard(
+  userId: string,
+  date?: Date,
+): Promise<WorkoutShareCard | null> {
+  const { data, error } = await supabase.rpc('get_workout_share_card', {
+    p_user_id: userId,
+    p_date: date ? toDateKey(date) : undefined,
+  });
+
+  if (error) throw toAnalysisError(error);
+  return data ?? null;
 }

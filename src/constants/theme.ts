@@ -54,6 +54,22 @@ export const Colors = {
   grey,
 } as const;
 
+/**
+ * 토스처럼 목록 행 왼쪽에 붙는 아이콘 타일의 바탕색. 위에는 항상 흰 아이콘이
+ * 올라간다. 색은 의미가 아니라 "서로 다른 항목"을 구분하는 용도라, 같은
+ * 화면에서 겹치지만 않으면 된다.
+ */
+export const IconTint = {
+  blue: '#3182F6',
+  green: '#00A661',
+  orange: '#FF9200',
+  red: '#F04452',
+  teal: '#00B7B9',
+  grey: grey[400],
+} as const;
+
+export type IconTintName = keyof typeof IconTint;
+
 export const Spacing = {
   xs: 4,
   sm: 8,
@@ -80,6 +96,8 @@ export const FontSize = {
   subtitle: 24,
   /** 버튼 라벨 */
   label: 24,
+  /** 목록에서 가장 먼저 읽혀야 하는 줄 — 쉬운 말로 쓴 운동 이름 */
+  headline: 28,
   /** 화면 제목 */
   title: 34,
   /** 키패드 숫자 */
@@ -105,4 +123,6 @@ export const TouchTarget = {
   cta: 68,
   /** 폰 하단 탭. 88pt 는 태블릿 기준이라 폰 탭바엔 과하다 — iOS HIG 44pt보다는 넉넉하게. */
   tab: 64,
+  /** 토스식 목록 행(폰). 토스는 56pt 안팎이지만 시니어 손가락 기준으로 키웠다. */
+  row: 72,
 } as const;

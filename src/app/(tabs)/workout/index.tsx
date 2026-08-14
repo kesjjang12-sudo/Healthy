@@ -1,9 +1,11 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CheckMark } from '@/components/check-mark';
+import { ListRow } from '@/components/list-row';
 import { PrimaryButton } from '@/components/primary-button';
 import { RoutineCard } from '@/components/routine-card';
 import { StrengthHookBanner } from '@/components/strength-hook-banner';
@@ -34,7 +36,7 @@ const COURSE_LABELS: Record<RoutineCourse, string> = {
 export default function WorkoutTab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user } = useAuthSession();
+  const { user, refresh: refreshProfile } = useAuthSession();
   const { result, isLoading, errorMessage, retry } = useDailyRoutine(user!.id);
   const { stats: visitStats, refresh: refreshVisitStats } = useVisitStats(user!.id);
   const hookMessage = useMemo(() => pickHookMessage(), []);
@@ -90,6 +92,22 @@ export default function WorkoutTab() {
 
   useCheckInListener(user!.id, handleCheckIn);
 
+  // 운동을 마치고 돌아오면 이 화면은 그동안 계속 떠 있던 상태다. 다시 불러오지
+  // 않으면 방금 끝낸 운동이 목록에서 여전히 "안 한 것"으로 보이고 포인트도
+  // 그대로라, 저장이 안 된 줄 알고 같은 운동을 또 하게 된다.
+  // 첫 진입은 위 훅들이 이미 불러오므로 건너뛴다.
+  const hasFocusedOnce = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasFocusedOnce.current) {
+        hasFocusedOnce.current = true;
+        return;
+      }
+      retry();
+      void refreshProfile();
+    }, [retry, refreshProfile]),
+  );
+
   // 안내는 잠깐만 띄운다. 계속 남아 있으면 다음에 열었을 때 방금 찍은 것처럼 보인다.
   useEffect(() => {
     if (!justCheckedIn) return;
@@ -140,14 +158,14 @@ export default function WorkoutTab() {
           </View>
         ) : null}
 
-        <View style={styles.points}>
-          <Text style={styles.pointsLabel} maxFontSizeMultiplier={1.2}>
-            내 포인트
-          </Text>
-          <Text style={styles.pointsValue} maxFontSizeMultiplier={1.2}>
-            {(user!.total_points ?? 0).toLocaleString('ko-KR')}점
-          </Text>
-        </View>
+        {/* 토스 자산 목록의 한 줄처럼: 타일 + 이름, 값은 오른쪽 끝. */}
+        <ListRow
+          icon="coin"
+          tint="orange"
+          title="내 포인트"
+          value={`${(user!.total_points ?? 0).toLocaleString('ko-KR')}점`}
+          valueTone="primary"
+        />
 
         <StrengthHookBanner message={hookMessage} size="compact" />
 
@@ -286,31 +304,47 @@ export default function WorkoutTab() {
               ))}
             </View>
 
-            <PrimaryButton
-              label="기구 사용법 모아보기"
-              variant="secondary"
-              onPress={() => router.push('/workout/guide')}
-            />
-
-            <View style={styles.buttonRow}>
-              <PrimaryButton
-                label="기구 QR 찍기"
-                variant="secondary"
-                style={styles.buttonHalf}
+            {/* 토스 "전체" 화면의 서비스 목록처럼: 색 타일 + 제목 + 설명 + 화살표. */}
+            <View style={styles.shortcuts}>
+              <Text style={styles.sectionCaption} maxFontSizeMultiplier={1.2}>
+                이런 것도 할 수 있어요
+              </Text>
+              <ListRow
+                icon="chart"
+                tint="green"
+                title="오늘 운동 카드"
+                subtitle="오늘 한 운동을 한 장으로 모아 자랑할 수 있어요"
+                chevron
+                onPress={() => router.push('/workout/summary')}
+              />
+              <ListRow
+                icon="dumbbell"
+                tint="teal"
+                title="기구 사용법 모아보기"
+                subtitle="오늘 목록에 없는 기구도 부위별로 찾아볼 수 있어요"
+                chevron
+                onPress={() => router.push('/workout/guide')}
+              />
+              <ListRow
+                icon="qr"
+                tint="blue"
+                title="기구 QR 찍기"
+                subtitle="목록에 없는 기구도 사용법과 영상을 볼 수 있어요"
+                chevron
                 onPress={() => router.push('/workout/scan')}
               />
-              <PrimaryButton
-                label="스트레칭 보기"
-                variant="secondary"
-                style={styles.buttonHalf}
+              <ListRow
+                icon="play"
+                tint="green"
+                title="스트레칭 보기"
+                subtitle="운동 전후 5분, 다치지 않게 풀어 주세요"
+                chevron
                 onPress={() => router.push('/workout/stretching')}
               />
             </View>
 
             <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-              {'운동을 누르면 하는 방법이 나옵니다. 오늘 목록에 없는 기구는 "기구 사용법 ' +
-                '모아보기"에서 부위별로 찾거나, 기구 앞에 붙은 QR 을 찍어서 볼 수 있어요. ' +
-                '운동 전후로 스트레칭도 잊지 마세요.'}
+              운동을 누르면 하는 방법이 나옵니다.
             </Text>
           </>
         )}
@@ -349,34 +383,12 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.title,
     color: Colors.text,
   },
-  points: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.lg,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.primaryFaint,
-  },
-  pointsLabel: {
-    fontSize: FontSize.caption,
-    fontWeight: '500',
-    letterSpacing: LetterSpacing.body,
-    color: Colors.textSecondary,
-  },
-  pointsValue: {
-    fontSize: FontSize.subtitle,
-    fontWeight: '700',
-    letterSpacing: LetterSpacing.subtitle,
-    color: Colors.primary,
-    fontVariant: ['tabular-nums'],
-  },
+  /** 토스의 "금융 서비스" 같은 회색 섹션 캡션 — 내용보다 조용해야 한다. */
   sectionTitle: {
-    fontSize: FontSize.body,
-    fontWeight: '700',
-    letterSpacing: LetterSpacing.subtitle,
-    color: Colors.text,
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.grey[500],
     marginBottom: -Spacing.sm,
   },
   list: {
@@ -501,12 +513,16 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.body,
     color: Colors.danger,
   },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
+  shortcuts: {
+    gap: Spacing.xs,
   },
-  buttonHalf: {
-    flex: 1,
+  /** 토스의 "금융 서비스" 같은 회색 섹션 캡션 */
+  sectionCaption: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.grey[500],
+    marginBottom: Spacing.sm,
   },
   notice: {
     padding: Spacing.lg,

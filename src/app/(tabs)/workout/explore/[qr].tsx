@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ExercisePhoto } from '@/components/exercise-photo';
@@ -11,7 +12,8 @@ import {
   getEquipmentByQr,
   getExerciseByCatalogId,
 } from '@/features/equipment/api';
-import { FIRST_TIME_RULE, HOW_TO_STEPS, WEIGHT_RULE } from '@/features/routine/guidance';
+import { FIRST_TIME_RULE, howToSteps, WEIGHT_RULE } from '@/features/routine/guidance';
+import { primaryName, secondaryName } from '@/features/routine/labels';
 import type { EquipmentLookup } from '@/lib/database.types';
 
 /**
@@ -119,11 +121,18 @@ export default function EquipmentExploreScreen() {
           {equipment.target_muscle ? (
             <Text style={styles.eyebrow} maxFontSizeMultiplier={1.3}>
               {equipment.target_muscle} 운동
+              {equipment.location_label ? ` · ${equipment.location_label}` : ''}
             </Text>
           ) : null}
+          {/* 목록·상세와 같은 규칙: 무슨 동작인지가 제목, 기구 이름은 아래 작게 */}
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-            {equipment.name}
+            {primaryName(equipment)}
           </Text>
+          {secondaryName(equipment) ? (
+            <Text style={styles.equipName} maxFontSizeMultiplier={1.3}>
+              기구 이름 {secondaryName(equipment)}
+            </Text>
+          ) : null}
           {equipment.description ? (
             <Text style={styles.description} maxFontSizeMultiplier={1.3}>
               {equipment.description}
@@ -136,7 +145,7 @@ export default function EquipmentExploreScreen() {
             하는 방법
           </Text>
           <View style={styles.steps}>
-            {HOW_TO_STEPS.map((step, index) => (
+            {howToSteps(equipment).map((step: string, index: number) => (
               <View key={step} style={styles.step}>
                 <View style={styles.stepBadge}>
                   <Text style={styles.stepNumber} maxFontSizeMultiplier={1.2}>
@@ -239,6 +248,12 @@ const styles = StyleSheet.create({
     lineHeight: FontSize.title * 1.3,
     letterSpacing: LetterSpacing.title,
     color: Colors.text,
+  },
+  equipName: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textTertiary,
   },
   description: {
     fontSize: FontSize.body,

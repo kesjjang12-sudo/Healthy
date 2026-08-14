@@ -5,8 +5,8 @@ import { TextTabBar } from '@/components/tab-bar';
 import { useAuthSession } from '@/features/auth/auth-session';
 
 /**
- * 개인 앱의 5개 하단 탭. 이모지·아이콘을 안 쓰는 원칙이라 TextTabBar 로
- * 글자 + 도형 인디케이터만으로 그린다(tab-bar.tsx 참고).
+ * 개인 앱의 5개 하단 탭. 토스처럼 아이콘 + 글자를 세로로 쌓아 그린다.
+ * 아이콘은 폰트 글리프가 아니라 SVG 로 직접 그린 것(tab-bar.tsx, icon.tsx 참고).
  *
  * 로그인/온보딩 여부는 여기서 한 번만 확인한다 — 개별 탭 화면마다
  * 반복하지 않는다.

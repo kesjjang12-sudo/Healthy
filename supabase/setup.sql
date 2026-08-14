@@ -3492,7 +3492,1962 @@ grant execute on function public.kiosk_check_in(uuid, text) to anon, authenticat
 
 
 -- ═══════════════════════════════════════════════════════════
--- seed.sql — 시범단지 + 기구 5대 (테스트용)
+-- 20260812000026_exercise_catalog.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 운동 도감(전체 공용)과 단지별 보유 기구를 분리한다.
+--
+-- 요구사항: "운동 기구들·맨몸운동들 셋팅은 미리 해놓고, 우리 아파트 헬스장에
+-- 있는 것들은 보유중으로 올라와 있고 몇 번 구역에 있다는 표기가 되어야 한다."
+--
+-- 지금까지는 equipments 한 테이블이 "이 운동이 무엇인지"(이름·쉬운 이름·설명·
+-- 영상·왜 중요한지)와 "우리 단지가 그걸 갖고 있는지"를 같이 들고 있었다. 그래서
+--   (1) 단지가 1,000개면 같은 체스트 프레스 설명이 1,000번 복사되고,
+--   (2) 새 단지를 열 때마다 운동 콘텐츠 전체를 다시 넣어야 했다.
+--
+-- 이제 둘로 나눈다:
+--   exercise_catalog  운동 도감. 본사가 미리 등록하는 전체 공용 콘텐츠.
+--                     머신·덤벨·맨몸·유산소 전부 여기 담긴다.
+--   equipments        단지별 보유 기록. "우리 단지에 도감의 이 운동이
+--                     location_label(몇 번 구역)에 있다"만 담당한다.
+--
+-- 루틴 생성은 단지가 보유한 것에서 고르되, 보유가 하나도 없는 부위는 도감의
+-- 맨몸운동으로 대체한다 — 기구가 부족한 단지도 루틴이 비지 않는다.
+--
+-- 이 파일은 운영 DB 에 대시보드로 직접 들어간 변경(routine_template_items.slot,
+-- user_equipment_levels, 무게 제안 RPC)도 같이 저장소로 끌어온다 — 그 기능들
+-- 위에 도감을 얹어야 해서, 여기 없으면 새로 설치한 DB 에서 함수가 깨진다.
+
+-- ─────────────────────────────────────────────────────────────
+-- 0. 운영 DB 드리프트 동기화: slot, user_equipment_levels
+-- ─────────────────────────────────────────────────────────────
+
+-- 같은 부위에 여러 운동을 처방하기 위한 슬롯 번호. 운영 DB 에는 이미 있다.
+alter table public.routine_template_items
+    add column if not exists slot integer not null default 1;
+
+-- 사람별·기구별 현재 사용 무게. "올려볼게요"를 눌렀을 때만 바뀐다.
+create table if not exists public.user_equipment_levels (
+    user_id    uuid not null references public.users(id) on delete cascade,
+    equip_id   uuid not null references public.equipments(id) on delete cascade,
+    weight_kg  integer not null,
+    updated_at timestamptz not null default now(),
+    primary key (user_id, equip_id)
+);
+
+comment on table public.user_equipment_levels is
+    '사람별·기구별 현재 사용 무게. 본인이 "올려볼게요"를 눌렀을 때만 바뀐다. 있으면 템플릿 계산보다 우선한다.';
+
+-- 운영 DB 에서 이 테이블만 RLS 없이 만들어져 anon 키로 아무나 읽고 쓸 수 있었다.
+-- 켜되 본인 행만 다루는 정책을 같이 둔다 — 앱의 무게 제안 RPC 는 security definer
+-- 라 정책과 무관하게 계속 동작한다.
+alter table public.user_equipment_levels enable row level security;
+
+drop policy if exists "own equipment levels" on public.user_equipment_levels;
+create policy "own equipment levels"
+    on public.user_equipment_levels for all
+    using (user_id in (select u.id from public.users u where u.auth_user_id = auth.uid()))
+    with check (user_id in (select u.id from public.users u where u.auth_user_id = auth.uid()));
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 1. 운동 도감
+-- ─────────────────────────────────────────────────────────────
+
+create table if not exists public.exercise_catalog (
+    id             uuid primary key default uuid_generate_v4(),
+    name           varchar(100) unique not null,
+    -- "위에서 당기기"처럼 기구 이름보다 먼저 와닿는 쉬운 말 이름
+    name_ko        varchar(100),
+    -- 머신 / 덤벨 / 맨몸 / 유산소. '맨몸'은 기구가 없어도 처방할 수 있다.
+    station_kind   varchar(20) not null default '머신',
+    target_muscle  varchar(50),
+    description    text,
+    -- 이 운동이 생활에서 왜 중요한지. 시니어 동기부여용 한 단락.
+    why_it_matters text,
+    video_url      text not null,
+    -- 표준 성인 남성 시작 무게. 단지별 기구 사양이 다르면 equipments 쪽
+    -- 같은 이름의 컬럼이 이 값을 덮어쓴다. null 이면 무게 없이 안내한다.
+    base_weight_kg integer,
+    weight_step_kg integer not null default 5,
+    created_at     timestamptz default now()
+);
+
+alter table public.exercise_catalog enable row level security;
+
+-- 운동 이름·설명·영상은 개인정보가 아니다. 기구 QR 조회(get_equipment_by_qr)를
+-- anon 에 연 것과 같은 판단.
+drop policy if exists "exercise catalog is readable" on public.exercise_catalog;
+create policy "exercise catalog is readable"
+    on public.exercise_catalog for select
+    using (true);
+
+-- 기존 equipments 에 있던 콘텐츠를 도감으로 끌어올린다. 이름이 같으면 같은
+-- 운동으로 본다. name_ko 등 확장 컬럼은 운영 DB 에만 있어서(대시보드 직접
+-- 적용) 있는지 확인하고 있을 때만 같이 옮긴다 — 새로 설치한 DB 에는 없다.
+do $$
+begin
+    if exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'equipments' and column_name = 'name_ko'
+    ) then
+        execute $uplift$
+            insert into public.exercise_catalog
+                (name, name_ko, station_kind, target_muscle, description, why_it_matters,
+                 video_url, base_weight_kg, weight_step_kg)
+            select distinct on (e.name)
+                e.name, e.name_ko, coalesce(e.station_kind, '머신'), e.target_muscle,
+                e.description, e.why_it_matters, e.video_url,
+                e.base_weight_kg, coalesce(e.weight_step_kg, 5)
+            from public.equipments e
+            order by e.name, e.created_at
+            on conflict (name) do nothing
+        $uplift$;
+    else
+        insert into public.exercise_catalog
+            (name, station_kind, target_muscle, description, video_url, base_weight_kg, weight_step_kg)
+        select distinct on (e.name)
+            e.name,
+            case when e.target_muscle = '유산소' then '유산소' else '머신' end,
+            e.target_muscle, e.description, e.video_url, e.base_weight_kg,
+            coalesce(e.weight_step_kg, 5)
+        from public.equipments e
+        order by e.name, e.created_at
+        on conflict (name) do nothing;
+    end if;
+end $$;
+
+-- 새로 설치한 DB(도감이 아직 비어 있음)를 위한 기본 콘텐츠. 운영 DB 에는 위
+-- 끌어올리기가 이미 채웠으므로 손대지 않는다 — 이름만 겹치고 내용이 다른
+-- 반쪽짜리 항목을 만들지 않기 위해 "비어 있을 때만" 넣는다.
+-- ⚠️ video_url 은 자리표시자다 — 실서비스 전에 실제 시범 영상으로 교체할 것.
+do $$
+begin
+    if not exists (select 1 from public.exercise_catalog) then
+        insert into public.exercise_catalog
+            (name, name_ko, station_kind, target_muscle, description, video_url, base_weight_kg, weight_step_kg)
+        values
+            ('체스트 프레스', '앞으로 밀기',       '머신', '가슴', '의자에 앉아 손잡이를 앞으로 밀어내는 동작입니다. 가슴 근육을 키웁니다.', 'https://example.com/videos/chest-press.mp4', 20, 5),
+            ('랫 풀다운',     '위에서 당기기',     '머신', '등',   '위에서 손잡이를 아래로 당기는 동작입니다. 등 근육을 키워 굽은 등을 펴는 데 도움됩니다.', 'https://example.com/videos/lat-pulldown.mp4', 25, 5),
+            ('레그 프레스',   '다리로 밀기',       '머신', '하체', '의자에 앉아 발판을 다리로 밀어내는 동작입니다. 허벅지와 엉덩이 근육을 키웁니다.', 'https://example.com/videos/leg-press.mp4', 40, 10),
+            ('숄더 프레스',   '머리 위로 밀기',    '머신', '어깨', '의자에 앉아 손잡이를 머리 위로 밀어올리는 동작입니다. 어깨 근육을 키웁니다.', 'https://example.com/videos/shoulder-press.mp4', 15, 5),
+            ('복부 크런치',   '앉아서 숙이기',     '머신', '복부', '등받이에 기대 앉아 상체를 앞으로 숙이는 동작입니다. 뱃살 관리와 허리 힘에 도움됩니다.', 'https://example.com/videos/ab-crunch.mp4', 10, 5),
+            ('트레드밀',      '걷기 운동',         '유산소', '유산소', '벨트 위에서 걷거나 가볍게 뛰는 운동입니다. 심장과 폐를 튼튼하게 합니다.', 'https://example.com/videos/treadmill.mp4', null, 1),
+            -- 맨몸운동: 기구가 없는 단지를 위한 대체 처방. 시니어가 안전하게
+            -- 할 수 있는 동작으로만 골랐다(눕는 동작보다 의자·벽 짚는 동작 우선).
+            ('의자 스쿼트',          '앉았다 일어서기',      '맨몸', '하체', '의자에 앉았다 일어서기를 천천히 반복하는 운동입니다. 허벅지와 엉덩이 힘을 기릅니다.', 'https://example.com/videos/chair-squat.mp4', null, 5),
+            ('벽 팔굽혀펴기',        '벽 밀기',              '맨몸', '가슴', '벽에 손을 짚고 팔을 굽혔다 펴는 동작입니다. 가슴과 팔 힘을 기릅니다.', 'https://example.com/videos/wall-pushup.mp4', null, 5),
+            ('엎드려 팔다리 들기',   '엎드려 들기',          '맨몸', '등',   '엎드린 채 팔과 다리를 천천히 들어 올리는 동작입니다. 등과 허리 근육을 튼튼하게 합니다.', 'https://example.com/videos/superman.mp4', null, 5),
+            ('의자 옆으로 팔 올리기', '팔 옆으로 들기',      '맨몸', '어깨', '의자에 앉아 양팔을 옆으로 천천히 들어 올리는 동작입니다. 어깨 근육을 기릅니다.', 'https://example.com/videos/seated-lateral-raise.mp4', null, 5),
+            ('누워서 다리 들기',     '다리 들기',            '맨몸', '복부', '바닥에 누워 두 다리를 천천히 들었다 내리는 동작입니다. 뱃심을 기릅니다.', 'https://example.com/videos/leg-raise.mp4', null, 5),
+            ('제자리 걷기',          '제자리 걷기',          '맨몸', '유산소', '제자리에서 팔을 흔들며 걷는 운동입니다. 심장과 폐를 튼튼하게 합니다.', 'https://example.com/videos/march-in-place.mp4', null, 5)
+        on conflict (name) do nothing;
+    end if;
+end $$;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 2. equipments 를 "단지별 보유 기록"으로 바꾼다
+-- ─────────────────────────────────────────────────────────────
+
+alter table public.equipments
+    add column if not exists catalog_id uuid references public.exercise_catalog(id),
+    -- "13번 구역" 같은 위치 라벨. 단지마다 부르는 방식이 달라 자유 문자열로 둔다.
+    add column if not exists location_label varchar(50);
+
+update public.equipments e
+set catalog_id = c.id
+from public.exercise_catalog c
+where e.catalog_id is null and c.name = e.name;
+
+alter table public.equipments alter column catalog_id set not null;
+
+create index if not exists equipments_apt_catalog_idx
+    on public.equipments (apt_id, catalog_id);
+
+comment on column public.equipments.location_label is
+    '헬스장 안 위치 표기. 예: "13번 구역". 없으면 화면에서 위치 줄을 생략한다.';
+
+-- 무게 컬럼 둘은 단지별 보정값으로 남긴다(기구 사양이 단지마다 다르다).
+-- null 이면 도감 기본값을 쓴다. 도감과 같은 값이면 보정이 아니므로 비운다.
+alter table public.equipments alter column weight_step_kg drop not null,
+                              alter column weight_step_kg drop default;
+
+update public.equipments e
+set base_weight_kg = null
+from public.exercise_catalog c
+where e.catalog_id = c.id and e.base_weight_kg is not distinct from c.base_weight_kg;
+
+update public.equipments e
+set weight_step_kg = null
+from public.exercise_catalog c
+where e.catalog_id = c.id and e.weight_step_kg is not distinct from c.weight_step_kg;
+
+comment on column public.equipments.base_weight_kg is
+    '단지별 기구 사양 보정값. null 이면 도감(exercise_catalog)의 기본값을 쓴다.';
+comment on column public.equipments.weight_step_kg is
+    '단지별 기구 사양 보정값(kg 단위). null 이면 도감의 기본값을 쓴다.';
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 3. daily_routines 는 이제 도감을 가리킨다
+--
+-- 맨몸 대체 처방은 equipments 행이 없으므로 equip_id 만으로는 담을 수 없다.
+-- "무슨 운동인지"는 catalog_id 가, "어느 기구로 하는지"는 equip_id 가 맡는다
+-- (기구 없이 하면 null). 기구가 철거돼도 기록이 사라지면 안 되니 cascade 도 푼다.
+-- ─────────────────────────────────────────────────────────────
+
+alter table public.daily_routines
+    add column if not exists catalog_id uuid references public.exercise_catalog(id);
+
+update public.daily_routines d
+set catalog_id = e.catalog_id
+from public.equipments e
+where d.catalog_id is null and e.id = d.equip_id;
+
+alter table public.daily_routines alter column catalog_id set not null;
+
+alter table public.daily_routines
+    drop constraint if exists daily_routines_equip_id_fkey;
+alter table public.daily_routines
+    add constraint daily_routines_equip_id_fkey
+        foreign key (equip_id) references public.equipments(id) on delete set null;
+
+-- 하루에 같은 운동은 한 번만. 기존 (user, equip, date) 유니크를 대체한다.
+drop index if exists daily_routines_user_equip_date_key;
+create unique index if not exists daily_routines_user_catalog_date_key
+    on public.daily_routines (user_id, catalog_id, routine_date);
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 4. 루틴 생성: 보유한 것에서 고르고, 없는 부위만 맨몸으로 대체
+--
+-- 운영 DB 의 최신 로직(슬롯별로 다른 운동, 사람·날짜 해시 로테이션,
+-- user_equipment_levels 무게 우선)을 그대로 유지하면서 도감을 얹었다.
+-- ─────────────────────────────────────────────────────────────
+
+create or replace function public.generate_daily_routine(
+    p_user_id uuid,
+    p_date    date default current_date,
+    p_apt_id  uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_user          public.users;
+    v_target_apt_id uuid;
+    v_gender        text;
+    v_age_group     integer;
+    v_goals_key     text;
+    v_pain_areas    text[];
+    v_template_id   uuid;
+    v_created       integer := 0;
+    v_excluded      integer := 0;
+    v_unmapped      integer := 0;
+begin
+    select * into v_user from public.users u where u.id = p_user_id;
+    if not found then
+        raise exception 'USER_NOT_FOUND' using errcode = 'P0002';
+    end if;
+
+    v_target_apt_id := coalesce(p_apt_id, v_user.apt_id);
+
+    -- 프로필이 비어 있으면 가장 보수적인(=가벼운) 쪽으로 떨어뜨린다.
+    v_gender := coalesce(v_user.profile_data->>'gender', 'female');
+    v_age_group := coalesce((v_user.profile_data->>'age_group')::integer, 70);
+
+    v_goals_key := coalesce(nullif(array_to_string(
+        array(
+            select jsonb_array_elements_text(v_user.profile_data->'goals') order by 1
+        ), '+'), ''), 'health');
+
+    v_pain_areas := case
+        when jsonb_typeof(v_user.profile_data->'pain_areas') = 'array'
+            then array(select jsonb_array_elements_text(v_user.profile_data->'pain_areas'))
+        else '{}'::text[]
+    end;
+
+    select t.id into v_template_id
+    from public.routine_templates t
+    where t.gender = v_gender and t.age_group = v_age_group and t.goals_key = v_goals_key;
+
+    if not found then
+        select t.id into v_template_id
+        from public.routine_templates t
+        where t.gender = v_gender and t.age_group = v_age_group and t.goals_key = 'health';
+    end if;
+
+    if v_template_id is null then
+        raise exception 'ROUTINE_TEMPLATE_NOT_FOUND' using errcode = 'P0002';
+    end if;
+
+    -- 아픈 곳 때문에 통째로 빠진 운동 수
+    select count(*) into v_excluded
+    from public.routine_template_items i
+    where i.template_id = v_template_id
+      and exists (
+          select 1 from public.pain_area_rules r
+          where r.action = 'exclude'
+            and r.target_muscle = i.target_muscle
+            and r.pain_area = any (v_pain_areas)
+      );
+
+    -- 남았지만 보유 기구도 맨몸 대체 운동도 없어서 못 넣은 운동 수
+    select count(*) into v_unmapped
+    from public.routine_template_items i
+    where i.template_id = v_template_id
+      and not exists (
+          select 1 from public.pain_area_rules r
+          where r.action = 'exclude'
+            and r.target_muscle = i.target_muscle
+            and r.pain_area = any (v_pain_areas)
+      )
+      and not exists (
+          select 1
+          from public.exercise_catalog cat
+          left join public.equipments e
+            on e.catalog_id = cat.id and e.apt_id = v_target_apt_id
+          where cat.target_muscle = i.target_muscle
+            and (cat.station_kind = '맨몸' or e.id is not null)
+      );
+
+    with candidate as (
+        select
+            i.target_muscle,
+            i.slot,
+            i.sets,
+            i.reps,
+            i.weight_ratio,
+            i.sort_order,
+            i.duration_minutes,
+            -- derate 규칙이 여러 개 걸리면 가장 낮은 배율을 쓴다.
+            -- 유산소 항목(weight_ratio null)은 무게 배율이 의미가 없으니 그대로 null 로 둔다.
+            case
+                when i.weight_ratio is null then null
+                else coalesce((
+                    select min(r.weight_multiplier)
+                    from public.pain_area_rules r
+                    where r.action = 'derate'
+                      and r.target_muscle = i.target_muscle
+                      and r.pain_area = any (v_pain_areas)
+                ), 1.0)
+            end as derate
+        from public.routine_template_items i
+        where i.template_id = v_template_id
+          and not exists (
+              select 1 from public.pain_area_rules r
+              where r.action = 'exclude'
+                and r.target_muscle = i.target_muscle
+                and r.pain_area = any (v_pain_areas)
+          )
+    ),
+    -- 이 단지에서 고를 수 있는 선택지.
+    -- 우선순위 0: 단지가 보유한 것(머신·덤벨·맨몸 구역 전부).
+    -- 우선순위 1: 보유 행이 없는 도감의 맨몸운동 — 그 부위에 보유가 하나도
+    --             없을 때만 대체로 쓴다(best 조인이 걸러 준다).
+    options as (
+        select
+            e.id as equip_id,
+            cat.id as catalog_id,
+            cat.target_muscle,
+            coalesce(e.base_weight_kg, cat.base_weight_kg) as base_weight_kg,
+            coalesce(e.weight_step_kg, cat.weight_step_kg) as weight_step_kg,
+            0 as priority,
+            hashtext(e.id::text || p_user_id::text || p_date::text) & 2147483647 as h
+        from public.equipments e
+        join public.exercise_catalog cat on cat.id = e.catalog_id
+        where e.apt_id = v_target_apt_id
+        union all
+        select
+            null::uuid,
+            cat.id,
+            cat.target_muscle,
+            cat.base_weight_kg,
+            cat.weight_step_kg,
+            1,
+            hashtext(cat.id::text || p_user_id::text || p_date::text) & 2147483647
+        from public.exercise_catalog cat
+        where cat.station_kind = '맨몸'
+          and not exists (
+              select 1 from public.equipments e2
+              where e2.apt_id = v_target_apt_id and e2.catalog_id = cat.id
+          )
+    ),
+    best as (
+        select target_muscle, min(priority) as priority
+        from options
+        group by target_muscle
+    ),
+    -- 부위별로 순서를 정해 둔다. 순서는 (사람+날짜+운동) 해시라 사람마다 다르게
+    -- 흩어지고(동선 분산), 같은 사람·같은 날이면 늘 같다.
+    ranked as (
+        select
+            o.*,
+            row_number() over (partition by o.target_muscle order by o.h) as rn,
+            count(*) over (partition by o.target_muscle) as total
+        from options o
+        join best b on b.target_muscle = o.target_muscle and o.priority = b.priority
+    ),
+    matched as (
+        select c.*, r.equip_id, r.catalog_id, r.base_weight_kg, r.weight_step_kg
+        from candidate c
+        -- 슬롯 순서대로 다른 운동을 준다. 선택지 수보다 슬롯이 많으면 앞으로
+        -- 돌아간다(나머지 연산) — 그 경우 중복이 생겨 뒤엣것이 빠지는데,
+        -- 선택지가 부족한 단지에서는 그게 맞는 결과다.
+        join ranked r
+          on r.target_muscle = c.target_muscle
+         and r.rn = ((c.slot - 1) % r.total) + 1
+    ),
+    saved as (
+        insert into public.daily_routines
+            (user_id, catalog_id, equip_id, routine_date, target_weight, target_sets,
+             target_reps, target_duration_minutes, sort_order)
+        select
+            p_user_id,
+            m.catalog_id,
+            m.equip_id,
+            p_date,
+            -- 본인이 "올려볼게요"로 정한 무게가 있으면 그게 우선이다.
+            coalesce(
+                (select l.weight_kg from public.user_equipment_levels l
+                  where l.user_id = p_user_id and l.equip_id = m.equip_id),
+                case
+                    when m.base_weight_kg is null or m.weight_ratio is null then null
+                    -- 기구 조절 단위로 내림한다. 반올림하면 계산된 무게보다 무거워질
+                    -- 수 있는데, 시니어에게는 가벼운 쪽이 틀리는 방향으로 안전하다.
+                    else greatest(
+                        m.weight_step_kg,
+                        (floor(m.base_weight_kg * m.weight_ratio * m.derate / m.weight_step_kg)
+                            * m.weight_step_kg)::integer
+                    )
+                end
+            ),
+            m.sets,
+            m.reps,
+            m.duration_minutes,
+            m.sort_order
+        from matched m
+        order by m.sort_order
+        on conflict (user_id, catalog_id, routine_date) do nothing
+        returning 1
+    )
+    select count(*) into v_created from saved;
+
+    return jsonb_build_object(
+        'routine_date', p_date,
+        'template', jsonb_build_object(
+            'gender', v_gender, 'age_group', v_age_group, 'goals_key', v_goals_key
+        ),
+        'created', v_created,
+        'excluded_by_pain', v_excluded,
+        'missing_equipment', v_unmapped,
+        'needs_trainer_review',
+            (v_created = 0 and v_excluded > 0) or coalesce(array_length(v_pain_areas, 1), 0) >= 3,
+        'routines', public.get_daily_routine(p_user_id, p_date)
+    );
+end;
+$$;
+
+comment on function public.generate_daily_routine(uuid, date, uuid) is
+    '템플릿 + 아픈 곳 규칙 + 운동 도감으로 하루 루틴을 만든다. 단지 보유분에서 로테이션하고, 보유가 없는 부위만 맨몸운동으로 대체한다.';
+
+revoke all on function public.generate_daily_routine(uuid, date, uuid) from public;
+grant execute on function public.generate_daily_routine(uuid, date, uuid) to anon, authenticated;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 5. 무게 제안 RPC (운영 DB 드리프트 동기화 + 도감 기본값 반영)
+-- ─────────────────────────────────────────────────────────────
+
+create or replace function public.weight_suggestion(p_user_id uuid, p_equip_id uuid)
+returns jsonb
+language plpgsql
+stable security definer
+set search_path = public
+as $$
+declare
+    v_step        integer;
+    v_current     integer;
+    v_recent      record;
+    v_easy_count  integer;
+begin
+    select coalesce(e.weight_step_kg, cat.weight_step_kg) into v_step
+    from public.equipments e
+    join public.exercise_catalog cat on cat.id = e.catalog_id
+    where e.id = p_equip_id;
+
+    if v_step is null then
+        return null;
+    end if;
+
+    -- 지금 이 사람의 무게. 저장된 게 없으면 가장 최근 처방값을 본다.
+    select l.weight_kg into v_current
+    from public.user_equipment_levels l
+    where l.user_id = p_user_id and l.equip_id = p_equip_id;
+
+    if v_current is null then
+        select d.target_weight into v_current
+        from public.daily_routines d
+        where d.user_id = p_user_id and d.equip_id = p_equip_id and d.target_weight is not null
+        order by d.routine_date desc
+        limit 1;
+    end if;
+
+    -- 무게 개념이 없는 운동(맨몸·유산소)은 제안하지 않는다.
+    if v_current is null then
+        return null;
+    end if;
+
+    -- 가장 최근 완료 기록
+    select d.actual_reps, d.target_reps, d.actual_weight_kg, d.target_weight
+    into v_recent
+    from public.daily_routines d
+    where d.user_id = p_user_id
+      and d.equip_id = p_equip_id
+      and d.is_completed
+      and d.actual_reps is not null
+      and d.target_reps is not null
+    order by d.completed_at desc nulls last
+    limit 1;
+
+    if not found then
+        return null;   -- 아직 해 본 적이 없으면 조정할 근거가 없다.
+    end if;
+
+    -- 먼저 "무리하고 있는가"를 본다. 목표의 70% 도 못 채웠으면 무게가 버겁다.
+    -- 올리는 제안보다 이걸 먼저 보는 이유는, 못 따라가는 사람은 무게를 스스로
+    -- 낮추지 않고 그냥 그만두기 때문이다.
+    if v_recent.actual_reps < ceil(v_recent.target_reps * 0.7) then
+        return jsonb_build_object(
+            'action', 'decrease',
+            'current_kg', v_current,
+            'suggested_kg', greatest(v_step, v_current - v_step),
+            'reason', format('지난번에 목표 %s회 중 %s회를 하셨어요. 무게가 조금 버거우신 것 같습니다.',
+                             v_recent.target_reps, v_recent.actual_reps)
+        );
+    end if;
+
+    -- 올리는 쪽은 더 보수적으로 본다 — 연속 2회 목표를 다 채웠을 때만.
+    -- 한 번 잘했다고 바로 올리면 컨디션 좋은 날 하나로 무게가 올라간다.
+    select count(*) into v_easy_count
+    from (
+        select d.actual_reps, d.target_reps
+        from public.daily_routines d
+        where d.user_id = p_user_id
+          and d.equip_id = p_equip_id
+          and d.is_completed
+          and d.actual_reps is not null
+          and d.target_reps is not null
+        order by d.completed_at desc nulls last
+        limit 2
+    ) s
+    where s.actual_reps >= s.target_reps;
+
+    if v_easy_count >= 2 then
+        return jsonb_build_object(
+            'action', 'increase',
+            'current_kg', v_current,
+            'suggested_kg', v_current + v_step,
+            'reason', format('최근 두 번 모두 목표 %s회를 다 채우셨어요.', v_recent.target_reps)
+        );
+    end if;
+
+    return null;
+end;
+$$;
+
+comment on function public.weight_suggestion(uuid, uuid) is
+    '최근 완료 기록을 근거로 무게 올리기/내리기를 제안한다. 근거가 없으면 null.';
+
+revoke all on function public.weight_suggestion(uuid, uuid) from public;
+grant execute on function public.weight_suggestion(uuid, uuid) to anon, authenticated;
+
+
+create or replace function public.apply_weight_suggestion(p_equip_id uuid, p_weight_kg integer)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_user_id uuid;
+    v_step    integer;
+begin
+    if auth.uid() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+
+    select u.id into v_user_id from public.users u where u.auth_user_id = auth.uid();
+    if not found then
+        raise exception 'USER_NOT_FOUND' using errcode = 'P0002';
+    end if;
+
+    select coalesce(e.weight_step_kg, cat.weight_step_kg) into v_step
+    from public.equipments e
+    join public.exercise_catalog cat on cat.id = e.catalog_id
+    where e.id = p_equip_id;
+    if not found then
+        raise exception 'EQUIPMENT_NOT_FOUND' using errcode = 'P0002';
+    end if;
+
+    -- 화면에서 온 값이라도 그대로 믿지 않는다. 0 이나 음수, 터무니없는 값이
+    -- 들어오면 다음 처방이 통째로 이상해진다.
+    if p_weight_kg is null or p_weight_kg < v_step or p_weight_kg > 500 then
+        raise exception 'INVALID_WEIGHT' using errcode = '22023';
+    end if;
+
+    insert into public.user_equipment_levels (user_id, equip_id, weight_kg)
+    values (v_user_id, p_equip_id, p_weight_kg)
+    on conflict (user_id, equip_id)
+    do update set weight_kg = excluded.weight_kg, updated_at = now();
+
+    -- 오늘 이미 만들어진 처방도 같이 고친다. 안 그러면 "올릴게요"를 눌렀는데
+    -- 오늘 화면에는 옛 무게가 그대로 떠서 눌린 게 맞나 싶어진다.
+    -- 이미 완료한 기록은 건드리지 않는다 — 그건 실제로 한 일이다.
+    update public.daily_routines
+    set target_weight = p_weight_kg
+    where user_id = v_user_id
+      and equip_id = p_equip_id
+      and routine_date = (now() at time zone 'Asia/Seoul')::date
+      and not is_completed;
+
+    return jsonb_build_object('equip_id', p_equip_id, 'weight_kg', p_weight_kg);
+end;
+$$;
+
+comment on function public.apply_weight_suggestion(uuid, integer) is
+    '무게 제안을 수락해 사람별·기구별 무게를 저장하고, 오늘의 미완료 처방에도 반영한다.';
+
+revoke all on function public.apply_weight_suggestion(uuid, integer) from public;
+grant execute on function public.apply_weight_suggestion(uuid, integer) to authenticated;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 6. 조회: 콘텐츠는 도감에서, 위치·QR 은 보유 기록에서
+-- ─────────────────────────────────────────────────────────────
+
+create or replace function public.get_daily_routine(
+    p_user_id uuid,
+    p_date    date default current_date
+)
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+    select coalesce(jsonb_agg(row order by sort_order, name), '[]'::jsonb)
+    from (
+        select d.sort_order, cat.name, jsonb_build_object(
+            'routine_id', d.id,
+            'catalog_id', cat.id,
+            -- 기구 없이 하는 처방이면 null — 화면은 이걸로 "맨몸"을 안다.
+            'equip_id', e.id,
+            'name', cat.name,
+            'name_ko', cat.name_ko,
+            'station_kind', cat.station_kind,
+            'description', cat.description,
+            'why_it_matters', cat.why_it_matters,
+            'target_muscle', cat.target_muscle,
+            'video_url', cat.video_url,
+            'qr_code_val', e.qr_code_val,
+            'location_label', e.location_label,
+            'target_weight', d.target_weight,
+            'target_sets', d.target_sets,
+            'target_reps', d.target_reps,
+            'target_duration_minutes', d.target_duration_minutes,
+            'is_completed', d.is_completed,
+            -- 이미 한 운동에는 제안을 띄우지 않는다. 오늘 할 일이 아니라
+            -- 다음에 할 얘기라서, 끝난 항목에 뜨면 되돌리라는 말로 읽힌다.
+            'weight_suggestion', case
+                when d.is_completed then null
+                else public.weight_suggestion(p_user_id, e.id)
+            end
+        ) as row
+        from public.daily_routines d
+        join public.exercise_catalog cat on cat.id = d.catalog_id
+        left join public.equipments e on e.id = d.equip_id
+        where d.user_id = p_user_id and d.routine_date = p_date
+    ) s;
+$$;
+
+comment on function public.get_daily_routine(uuid, date) is
+    '해당 날짜의 루틴을 도감 콘텐츠와 기구 위치(location_label), 무게 제안까지 합쳐 돌려준다.';
+
+revoke all on function public.get_daily_routine(uuid, date) from public;
+grant execute on function public.get_daily_routine(uuid, date) to anon, authenticated;
+
+
+create or replace function public.get_equipment_by_qr(
+    p_qr_code text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_result jsonb;
+begin
+    select jsonb_build_object(
+        'id', e.id,
+        'catalog_id', cat.id,
+        'name', cat.name,
+        'name_ko', cat.name_ko,
+        'station_kind', cat.station_kind,
+        'description', cat.description,
+        'why_it_matters', cat.why_it_matters,
+        'target_muscle', cat.target_muscle,
+        'video_url', cat.video_url,
+        'qr_code_val', e.qr_code_val,
+        'location_label', e.location_label,
+        'base_weight_kg', coalesce(e.base_weight_kg, cat.base_weight_kg),
+        'weight_step_kg', coalesce(e.weight_step_kg, cat.weight_step_kg)
+    )
+    into v_result
+    from public.equipments e
+    join public.exercise_catalog cat on cat.id = e.catalog_id
+    where e.qr_code_val = p_qr_code;
+
+    if v_result is null then
+        raise exception 'EQUIPMENT_NOT_FOUND' using errcode = 'P0002';
+    end if;
+
+    return v_result;
+end;
+$$;
+
+comment on function public.get_equipment_by_qr(text) is
+    'QR 코드 값으로 기구를 바로 찾는다. 도감 콘텐츠에 위치(location_label)를 합쳐 준다.
+    처방 정보(목표 무게·세트·완료 기록)는 포함하지 않는다.';
+
+revoke all on function public.get_equipment_by_qr(text) from public;
+grant execute on function public.get_equipment_by_qr(text) to anon, authenticated;
+
+
+-- 분석 탭 부위별 집계도 도감 기준으로 바꾼다 — 맨몸 대체 처방(equip_id null)도
+-- 집계에 잡혀야 한다.
+create or replace function public.get_workout_summary(p_user_id uuid, p_from date, p_to date)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_owner_auth_id  uuid;
+    v_completed_count integer;
+    v_total_sets      integer;
+    v_by_muscle       jsonb;
+begin
+    if auth.uid() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+
+    select auth_user_id into v_owner_auth_id from public.users where id = p_user_id;
+    if not found or v_owner_auth_id is distinct from auth.uid() then
+        raise exception 'FORBIDDEN' using errcode = '42501';
+    end if;
+
+    select count(*), coalesce(sum(d.target_sets), 0)
+    into v_completed_count, v_total_sets
+    from public.daily_routines d
+    where d.user_id = p_user_id and d.is_completed
+      and d.routine_date between p_from and p_to;
+
+    select coalesce(
+        jsonb_agg(
+            jsonb_build_object(
+                'target_muscle', t.target_muscle,
+                'completed_count', t.completed_count,
+                'total_sets', t.total_sets
+            )
+            order by t.total_sets desc
+        ),
+        '[]'::jsonb
+    )
+    into v_by_muscle
+    from (
+        select cat.target_muscle, count(*) as completed_count, coalesce(sum(d.target_sets), 0) as total_sets
+        from public.daily_routines d
+        join public.exercise_catalog cat on cat.id = d.catalog_id
+        where d.user_id = p_user_id and d.is_completed
+          and d.routine_date between p_from and p_to
+        group by cat.target_muscle
+    ) t;
+
+    return jsonb_build_object(
+        'completed_count', v_completed_count,
+        'total_sets', v_total_sets,
+        'by_muscle', v_by_muscle
+    );
+end;
+$$;
+
+comment on function public.get_workout_summary(uuid, date, date) is
+    '기간 내 완료 운동 원시 집계(완료 개수, 총 세트, 부위별). 부위는 운동 도감 기준.';
+
+revoke all on function public.get_workout_summary(uuid, date, date) from public;
+grant execute on function public.get_workout_summary(uuid, date, date) to authenticated;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 7. 계정 병합의 루틴 중복 제거 기준도 catalog_id 로 바꾼다
+--
+-- equip_id 는 이제 맨몸 대체 처방에서 null 이라, equip_id 로 비교하면
+-- null = null 이 거짓이 되어 중복이 살아남고, 이어지는 user_id 이관이
+-- (user, catalog, date) 유니크에 걸려 병합이 통째로 실패한다.
+-- ─────────────────────────────────────────────────────────────
+
+create or replace function public.complete_pairing(p_pairing_code text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_pairing                    public.device_pairings;
+    v_candidate                  public.users;
+    v_existing                   public.users;
+    v_membership                 public.user_gym_memberships%rowtype;
+    v_candidate_primary_apt_id   uuid;
+    v_candidate_phone            varchar(20);
+    v_existing_is_placeholder    boolean;
+    v_final_user                 public.users;
+begin
+    if auth.uid() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+
+    select * into v_pairing from public.device_pairings where pairing_code = p_pairing_code;
+
+    if not found then
+        raise exception 'PAIRING_NOT_FOUND' using errcode = 'P0002';
+    end if;
+    if v_pairing.consumed_at is not null then
+        raise exception 'PAIRING_ALREADY_USED' using errcode = 'P0005';
+    end if;
+    if v_pairing.expires_at < now() then
+        raise exception 'PAIRING_EXPIRED' using errcode = 'P0006';
+    end if;
+
+    select * into v_candidate from public.users where id = v_pairing.candidate_user_id;
+
+    if v_candidate is null then
+        raise exception 'PAIRING_NOT_FOUND' using errcode = 'P0002';
+    end if;
+
+    select * into v_existing from public.users where auth_user_id = auth.uid();
+
+    if v_existing is null then
+        -- 이 폰에 아직 프로필이 없다. 후보 계정에 그대로 붙인다.
+        -- 후보가 다른 auth 에 물려 있었다면(폰을 지웠다 다시 깐 경우) 그 죽은
+        -- 연결을 새 것으로 갈아끼운다 — 어차피 그 익명 계정으로는 아무도 다시
+        -- 로그인할 수 없다.
+        update public.users set auth_user_id = auth.uid() where id = v_candidate.id
+        returning * into v_final_user;
+
+    elsif v_existing.id = v_candidate.id then
+        -- 이미 페어링된 코드를 다시 스캔한 경우. no-op.
+        v_final_user := v_existing;
+
+    else
+        -- 앱을 다시 깔면서 부팅 때 만들어진 껍데기인지 본다. 전화번호도 없고
+        -- 설문도 안 했고 포인트도 없고 다닌 헬스장도 없으면 버려도 되는 행이다.
+        v_existing_is_placeholder :=
+            v_existing.phone_number is null
+            and coalesce(v_existing.total_points, 0) = 0
+            and (v_existing.profile_data->>'onboarded_at') is null
+            and not exists (
+                select 1 from public.user_gym_memberships where user_id = v_existing.id
+            );
+
+        if v_existing_is_placeholder then
+            -- 껍데기를 지우고 진짜 계정에 이 폰을 연결한다. 포인트·설문·출석이
+            -- 전부 원래 자리에 그대로 남으므로 옮길 것이 없다.
+            delete from public.users where id = v_existing.id;
+
+            update public.users set auth_user_id = auth.uid() where id = v_candidate.id
+            returning * into v_final_user;
+        else
+            -- 원래의 병합 시나리오: 카카오/구글로 쓰던 진짜 계정(v_existing)이
+            -- 키오스크가 번호로 만든 그림자 계정(v_candidate)을 흡수한다.
+            v_candidate_phone := v_candidate.phone_number;
+
+            select apt_id into v_candidate_primary_apt_id
+                from public.user_gym_memberships
+                where user_id = v_candidate.id and is_primary;
+
+            for v_membership in
+                select * from public.user_gym_memberships where user_id = v_candidate.id
+            loop
+                if exists (
+                    select 1 from public.user_gym_memberships
+                    where user_id = v_existing.id and apt_id = v_membership.apt_id
+                ) then
+                    update public.user_gym_memberships
+                    set visit_count = visit_count + v_membership.visit_count,
+                        first_checked_in_at = least(first_checked_in_at, v_membership.first_checked_in_at),
+                        last_checked_in_at = greatest(last_checked_in_at, v_membership.last_checked_in_at)
+                    where user_id = v_existing.id and apt_id = v_membership.apt_id;
+
+                    delete from public.user_gym_memberships where id = v_membership.id;
+                else
+                    update public.user_gym_memberships
+                    set user_id = v_existing.id, is_primary = false
+                    where id = v_membership.id;
+                end if;
+            end loop;
+
+            if v_candidate_primary_apt_id is not null
+               and not exists (
+                   select 1 from public.user_gym_memberships where user_id = v_existing.id and is_primary
+               )
+            then
+                update public.user_gym_memberships set is_primary = true
+                    where user_id = v_existing.id and apt_id = v_candidate_primary_apt_id;
+                update public.users set apt_id = v_candidate_primary_apt_id where id = v_existing.id;
+            end if;
+
+            update public.attendance_logs set user_id = v_existing.id where user_id = v_candidate.id;
+
+            delete from public.daily_routines d
+            where d.user_id = v_candidate.id
+              and exists (
+                  select 1 from public.daily_routines d2
+                  where d2.user_id = v_existing.id
+                    and d2.catalog_id = d.catalog_id
+                    and d2.routine_date = d.routine_date
+              );
+            update public.daily_routines set user_id = v_existing.id where user_id = v_candidate.id;
+
+            -- 포인트는 두 쪽을 합친다. 예전엔 아예 옮기지 않아서 그림자 계정에
+            -- 쌓인 포인트가 병합될 때마다 사라졌다.
+            update public.users
+            set total_points = coalesce(total_points, 0) + coalesce(v_candidate.total_points, 0)
+            where id = v_existing.id;
+
+            -- 설문을 아직 안 한 계정이면 그림자 쪽 답변을 물려받는다.
+            -- 이미 답한 계정의 답을 덮어쓰지는 않는다.
+            if (v_existing.profile_data->>'onboarded_at') is null
+               and (v_candidate.profile_data->>'onboarded_at') is not null
+            then
+                update public.users set profile_data = v_candidate.profile_data
+                where id = v_existing.id;
+            end if;
+
+            delete from public.users where id = v_candidate.id;
+
+            if v_existing.phone_number is null then
+                update public.users set phone_number = v_candidate_phone where id = v_existing.id;
+            end if;
+
+            select * into v_final_user from public.users where id = v_existing.id;
+        end if;
+    end if;
+
+    update public.device_pairings
+    set consumed_at = now(), consumed_by_auth_user_id = auth.uid()
+    where id = v_pairing.id;
+
+    return jsonb_build_object('user', to_jsonb(v_final_user));
+end;
+$$;
+
+comment on function public.complete_pairing(text) is
+    'QR/코드 페어링 완료. 루틴 중복 제거 기준이 catalog_id 다(맨몸 대체 처방은 equip_id 가 null 이라서).';
+
+revoke all on function public.complete_pairing(text) from public;
+grant execute on function public.complete_pairing(text) to authenticated;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 8. 콘텐츠 컬럼을 equipments 에서 걷어낸다
+--
+-- 위 함수들이 전부 도감을 읽게 된 뒤에 지워야 순서가 안전하다. 남는 컬럼:
+-- id, apt_id, catalog_id, qr_code_val, location_label,
+-- base_weight_kg·weight_step_kg(단지별 보정), created_at.
+-- ─────────────────────────────────────────────────────────────
+
+alter table public.equipments
+    drop column if exists name,
+    drop column if exists name_ko,
+    drop column if exists station_kind,
+    drop column if exists description,
+    drop column if exists why_it_matters,
+    drop column if exists target_muscle,
+    drop column if exists video_url;
+
+comment on table public.exercise_catalog is
+    '운동 도감(전체 공용). 머신·덤벨·맨몸·유산소 운동의 이름·설명·영상·기본 무게를 미리 등록해 둔다.';
+comment on table public.equipments is
+    '단지별 보유 기구. "이 단지에 도감의 이 운동 기구가 몇 번 구역에 있다"만 담는다.';
+
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260814000027_workout_trend.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 분석 탭에 "추이" 그래프를 붙이기 위한 시계열 집계.
+--
+-- 기존 get_workout_summary 는 기간 전체를 한 덩어리로 합쳐서 준다. 그래서
+-- "이번 기간에 40세트 했다"는 알 수 있어도 "지난주보다 늘었는지, 요즘 뜸해
+-- 졌는지"는 알 수 없다. 시니어에게 가장 큰 동기는 정확한 칼로리 숫자가 아니라
+-- "내가 꾸준히 하고 있다"는 그림이라, 그 그림을 그릴 데이터를 따로 만든다.
+--
+-- 설계에서 중요한 것 두 가지:
+--   1. 운동이 없는 날도 0 으로 채워서 돌려준다. 빠뜨리면 쉰 날이 그래프에서
+--      사라져 실제보다 꾸준히 한 것처럼 보인다 — 기록을 부풀리는 셈이다.
+--   2. 직전 같은 길이 구간의 합계도 같이 준다. "지난주보다 12세트 많아요"
+--      한 문장이 막대 일곱 개보다 잘 읽힌다.
+
+create or replace function public.get_workout_trend(
+    p_user_id uuid,
+    p_from    date,
+    p_to      date,
+    -- 'day' = 하루씩(최근 7일용), 'week' = 7일씩 묶어서(최근 4주용)
+    p_bucket  text default 'day'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_owner_auth_id uuid;
+    v_span          integer;
+    v_prev_from     date;
+    v_prev_to       date;
+    v_points        jsonb;
+    v_total_sets    integer;
+    v_completed     integer;
+    v_days          integer;
+    v_prev_sets     integer;
+    v_prev_days     integer;
+begin
+    if auth.uid() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+
+    -- 남의 기록은 못 본다. get_workout_summary 와 같은 기준.
+    select auth_user_id into v_owner_auth_id from public.users where id = p_user_id;
+    if not found or v_owner_auth_id is distinct from auth.uid() then
+        raise exception 'FORBIDDEN' using errcode = '42501';
+    end if;
+
+    if p_bucket not in ('day', 'week') then
+        raise exception 'INVALID_BUCKET' using errcode = '22023';
+    end if;
+
+    if p_to < p_from then
+        raise exception 'INVALID_RANGE' using errcode = '22023';
+    end if;
+
+    v_span := (p_to - p_from) + 1;
+
+    -- 주 단위는 딱 떨어질 때만 받는다. 30일을 7일씩 자르면 마지막 한 칸이
+    -- 이틀짜리가 되는데, 그 칸만 막대가 낮게 나와 "요즘 덜 한다"로 잘못
+    -- 읽힌다. 애매하게 잘라 보여주느니 부르는 쪽에서 28일로 맞추게 한다.
+    if p_bucket = 'week' and v_span % 7 <> 0 then
+        raise exception 'INVALID_RANGE' using errcode = '22023';
+    end if;
+
+    v_prev_to := p_from - 1;
+    v_prev_from := v_prev_to - (v_span - 1);
+
+    with buckets as (
+        -- 오늘(p_to)에서 거꾸로 잘라 나간다. 달력의 주(월~일)에 맞추지 않는
+        -- 이유는, 오늘이 수요일이면 이번 주 칸만 사흘짜리가 되어 위와 같은
+        -- 착시가 생기기 때문이다. 항상 "오늘부터 7일씩"이라 칸 길이가 같다.
+        select
+            case when p_bucket = 'week' then p_to - (g * 7 + 6) else p_to - g end as bucket_start,
+            case when p_bucket = 'week' then p_to - (g * 7)     else p_to - g end as bucket_end
+        from generate_series(
+            0,
+            case when p_bucket = 'week' then (v_span / 7) - 1 else v_span - 1 end
+        ) as g
+    ),
+    done as (
+        select d.routine_date, d.target_sets
+        from public.daily_routines d
+        where d.user_id = p_user_id
+          and d.is_completed
+          and d.routine_date between p_from and p_to
+    )
+    select jsonb_agg(
+        jsonb_build_object(
+            'bucket_start', b.bucket_start,
+            'bucket_end', b.bucket_end,
+            'completed_count', count(x.routine_date),
+            'total_sets', coalesce(sum(x.target_sets), 0),
+            'workout_days', count(distinct x.routine_date)
+        )
+        order by b.bucket_start
+    )
+    into v_points
+    from buckets b
+    left join done x on x.routine_date between b.bucket_start and b.bucket_end
+    group by b.bucket_start, b.bucket_end;
+
+    select count(*), coalesce(sum(d.target_sets), 0), count(distinct d.routine_date)
+    into v_completed, v_total_sets, v_days
+    from public.daily_routines d
+    where d.user_id = p_user_id and d.is_completed
+      and d.routine_date between p_from and p_to;
+
+    select coalesce(sum(d.target_sets), 0), count(distinct d.routine_date)
+    into v_prev_sets, v_prev_days
+    from public.daily_routines d
+    where d.user_id = p_user_id and d.is_completed
+      and d.routine_date between v_prev_from and v_prev_to;
+
+    return jsonb_build_object(
+        'bucket', p_bucket,
+        'points', coalesce(v_points, '[]'::jsonb),
+        'completed_count', v_completed,
+        'total_sets', v_total_sets,
+        'workout_days', v_days,
+        'previous_total_sets', v_prev_sets,
+        'previous_workout_days', v_prev_days
+    );
+end;
+$$;
+
+comment on function public.get_workout_trend(uuid, date, date, text) is
+    '분석 탭 추이 그래프용 시계열. 운동이 없는 날도 0 으로 채워 주고, 직전 같은 길이 구간의 합계도 같이 준다.';
+
+revoke all on function public.get_workout_trend(uuid, date, date, text) from public;
+grant execute on function public.get_workout_trend(uuid, date, date, text) to authenticated;
+
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260814000028_weight_suggestion_index.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 무게 제안 조회용 인덱스.
+--
+-- weight_suggestion() 은 (user_id, equip_id) 로 지난 완료 기록을 찾아
+-- completed_at 역순으로 한두 건만 본다. 그런데 daily_routines 에는
+-- (user_id, routine_date) 인덱스밖에 없어서 equip_id 로 좁히는 건 못 쓴다.
+--
+-- 이 함수는 운동 목록을 열 때마다 항목 수만큼 불린다(6개 운동이면 12번).
+-- 지금은 행이 적어 티가 안 나지만, 한 사람이 1년만 다녀도 수백 행이 되고
+-- 단지가 늘면 테이블 전체가 커진다 — 그때는 목록 화면이 통째로 느려진다.
+create index if not exists daily_routines_user_equip_completed_idx
+    on public.daily_routines (user_id, equip_id, completed_at desc)
+    where is_completed;
+
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260814000029_how_to_steps.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 운동별 "하는 방법"을 도감에 넣는다.
+--
+-- 지금까지는 앱이 근력운동 전체에 같은 5줄을 띄웠다:
+--   "자리에 앉아 등과 허리를 등받이에 붙입니다 …"
+-- 랫 풀다운은 미는 게 아니라 당기는 운동이고, 의자 스쿼트·데드버그·벽
+-- 푸시업에는 기댈 등받이가 없다. 기구 앞에서 읽는 안내가 그 기구와 다른
+-- 말을 하면 안 하느니만 못하다 — 틀린 자세를 알려주는 셈이라서다.
+--
+-- 출처: CDC/NIA 「Growing Stronger: Strength Training for Older Adults」
+--       (미국 질병통제예방센터 발행, Tufts 대학 영양·운동생리·근감소증
+--        연구실 개발). 미국 정부 저작물이라 인용에 제약이 없다.
+--       https://stacks.cdc.gov/view/cdc/11447
+--       국립노화연구소(NIA) 시니어 근력운동 지침도 같이 참고했다.
+--       https://www.nia.nih.gov/health/exercise-and-physical-activity
+--
+-- 원문에서 그대로 가져온 핵심 규칙(앱이 모든 근력운동 뒤에 공통으로 붙인다):
+--   · 올릴 때 둘~넷을 세고, 내릴 때 넷을 센다("raising the weight to a
+--     count of two to four and then lowering it to a count of four")
+--   · 숨을 참지 않는다("breathe regularly throughout — don't hold your breath")
+--   · 관절을 끝까지 펴 잠그지 않는다("don't lock your elbows/knees")
+--   · 반동을 쓰지 않는다("Don't let momentum do the work")
+--   · 세트 사이 1분쯤 쉰다
+-- 위 네 줄은 모든 운동에 같으므로 DB 에 75번 복사하지 않고 앱이 붙인다.
+-- 여기에는 그 운동에서만 맞는 말만 담는다.
+
+alter table public.exercise_catalog
+    add column if not exists how_to_steps  text[],
+    -- "이것만은 지키세요" 한두 줄. 그 운동에서 다치는 대표적인 경로를 막는다.
+    add column if not exists form_caution  text;
+
+comment on column public.exercise_catalog.how_to_steps is
+    '이 운동에서만 맞는 동작 순서. 호흡·템포·휴식 같은 공통 규칙은 앱이 붙이므로 넣지 않는다.';
+comment on column public.exercise_catalog.form_caution is
+    '이것만은 지키세요. 그 운동에서 다치는 대표 경로를 막는 한두 줄.';
+
+-- 이름으로 맞춰 넣는다. 도감에 없는 이름은 조용히 건너뛴다(단지마다 보유
+-- 기구가 달라도 이 파일 하나로 채울 수 있게).
+update public.exercise_catalog c
+set how_to_steps = v.steps, form_caution = v.caution
+from (values
+
+-- ── 맨몸 ────────────────────────────────────────────────────────────
+-- 벽 푸시업·의자 스쿼트·카프 레이즈·스텝업·옆으로 다리 들기·슈퍼맨은
+-- Growing Stronger 에 같은 동작이 실려 있어 그 순서를 따랐다.
+('벽 푸시업', array[
+    '벽에서 팔 길이보다 조금 멀리 떨어져 벽을 마주 보고 섭니다.',
+    '손바닥을 어깨 높이·어깨너비로 벽에 붙입니다.',
+    '팔꿈치를 굽혀 상체를 벽 쪽으로 천천히 기울입니다.',
+    '팔이 펴질 때까지 벽을 밀어 처음 자리로 돌아옵니다.'],
+ '발은 바닥에 붙인 채 두고, 등을 둥글게 말거나 젖히지 마세요.'),
+
+('무릎 푸시업', array[
+    '매트에 무릎을 대고 엎드려, 손을 어깨너비보다 조금 넓게 짚습니다.',
+    '머리부터 무릎까지 일직선이 되게 자세를 잡습니다.',
+    '팔꿈치를 굽혀 가슴을 바닥 쪽으로 천천히 내립니다.',
+    '바닥을 밀어 처음 자리로 올라옵니다.'],
+ '허리가 처지거나 엉덩이가 솟지 않게 하세요. 힘들면 벽 푸시업부터 하세요.'),
+
+('의자 스쿼트', array[
+    '튼튼한 의자 앞에 발을 어깨너비로 벌리고 섭니다.',
+    '엉덩이를 뒤로 빼며 의자에 닿을 듯 말 듯 천천히 앉습니다.',
+    '발뒤꿈치로 바닥을 밀며 일어섭니다.'],
+ '무릎이 발끝보다 앞으로 나가지 않게 하세요. 털썩 앉지 말고, 힘들면 손으로 의자를 짚고 하세요.'),
+
+('제자리 런지', array[
+    '한 발을 앞으로 크게 내딛고 서서, 필요하면 의자나 난간을 잡습니다.',
+    '두 무릎을 굽혀 몸을 곧게 아래로 내립니다.',
+    '앞발 뒤꿈치로 밀며 처음 자리로 올라옵니다.'],
+ '앞 무릎이 발끝보다 앞으로 나가지 않게 하세요. 흔들리면 폭을 좁히거나 의자를 잡으세요.'),
+
+('스텝업', array[
+    '발판이나 계단 앞에 서서 난간이나 손잡이를 잡습니다.',
+    '한 발을 발판 위에 온전히 올려놓습니다.',
+    '올린 발의 뒤꿈치로 밀며 몸을 들어 올립니다.',
+    '올린 발로 버티며 반대 발을 천천히 내립니다.'],
+ '앞 무릎이 발목보다 앞으로 나가지 않게 하세요. 뒷다리로 차거나 반동을 쓰지 마세요.'),
+
+('카프 레이즈', array[
+    '발을 어깨너비로 벌리고 의자나 난간 옆에 섭니다.',
+    '앞꿈치로 밀어 올려 발뒤꿈치를 최대한 듭니다.',
+    '2~4초 멈췄다가 천천히 내립니다.'],
+ '의자는 균형을 잡는 데만 쓰고 몸을 기대지 마세요.'),
+
+('옆으로 다리 들기', array[
+    '튼튼한 의자 뒤에 서서 등받이를 가볍게 잡습니다.',
+    '다리를 곧게 편 채(무릎은 잠그지 않고) 옆으로 천천히 들어 올립니다.',
+    '잠시 멈췄다가 천천히 내립니다.'],
+ '조금만 벌려도 충분합니다. 상체가 반대쪽으로 기울지 않게 곧게 세우세요.'),
+
+('힙 브릿지', array[
+    '바닥에 누워 무릎을 세우고 발을 엉덩이 가까이 둡니다.',
+    '엉덩이에 힘을 주며 몸통이 일직선이 될 때까지 들어 올립니다.',
+    '잠시 멈췄다가 천천히 내립니다.'],
+ '허리를 젖혀 올리지 말고 엉덩이 힘으로 드세요. 허리가 아프면 덜 올리세요.'),
+
+('슈퍼맨', array[
+    '매트에 엎드려 한쪽 팔을 머리 위로 곧게 뻗습니다.',
+    '뻗은 팔과 반대쪽 다리를 같은 높이로 천천히 들어 올립니다.',
+    '잠시 멈췄다가 천천히 내리고, 반대쪽도 같은 방법으로 합니다.'],
+ '목을 젖히지 말고 시선은 바닥을 봅니다. 허리가 아프면 즉시 멈추세요.'),
+
+('데드버그', array[
+    '바닥에 누워 무릎을 세우고 허리를 바닥에 붙입니다.',
+    '두 팔을 천장으로 뻗고 무릎을 직각으로 들어 올립니다.',
+    '한쪽 팔과 반대쪽 다리를 천천히 뻗었다가 제자리로 돌아옵니다.'],
+ '허리가 바닥에서 뜨면 덜 뻗으세요. 허리가 뜨는 그 지점이 오늘의 한계입니다.'),
+
+('시티드 니 업', array[
+    '의자 앞쪽에 앉아 양손으로 의자 옆을 가볍게 잡습니다.',
+    '등을 곧게 편 채 상체를 살짝 뒤로 기울입니다.',
+    '무릎을 배 쪽으로 천천히 당겼다가 내립니다.'],
+ '등을 둥글게 말지 마세요. 목에 힘이 들어가면 상체를 덜 기울이세요.'),
+
+('플랭크', array[
+    '매트에 엎드려 팔꿈치를 어깨 바로 아래에 두고 바닥을 짚습니다.',
+    '무릎이나 발끝을 대고 몸을 들어 머리부터 발까지 일직선을 만듭니다.',
+    '그 자세로 숨을 고르게 쉬며 버팁니다.'],
+ '허리가 처지면 바로 내려놓으세요. 버티는 동안 숨을 참지 마세요.'),
+
+('월 엔젤', array[
+    '벽에 등을 대고 서서 뒤통수·등·엉덩이를 벽에 붙입니다.',
+    '팔꿈치를 굽혀 팔등을 벽에 붙입니다.',
+    '팔을 벽에 붙인 채 천천히 위로 올렸다가 내립니다.'],
+ '허리가 벽에서 크게 뜨지 않게 하세요. 팔이 벽에서 떨어지는 지점까지만 올리세요.'),
+
+('제자리 무릎 들기', array[
+    '발을 어깨너비로 벌리고 서서, 필요하면 의자를 잡습니다.',
+    '한쪽 무릎을 배 높이까지 들었다가 내립니다.',
+    '좌우를 번갈아 걷듯이 반복하며 팔도 자연스럽게 흔듭니다.'],
+ '숨이 차면 속도를 늦추세요. 어지러우면 즉시 멈추고 앉으세요.'),
+
+-- ── 덤벨 ────────────────────────────────────────────────────────────
+('덤벨 컬', array[
+    '서거나 앉아서 발을 어깨너비로 벌리고, 손바닥이 허벅지를 향하게 덤벨을 잡습니다.',
+    '손바닥이 어깨를 향하도록 팔을 돌리며 들어 올립니다.',
+    '천천히 처음 자리로 내립니다.'],
+ '위팔과 팔꿈치를 옆구리에 붙인 채 고정하세요. 몸을 흔들어 반동을 쓰지 마세요.'),
+
+('덤벨 숄더 프레스', array[
+    '의자에 앉거나 서서 발을 어깨너비로 벌립니다.',
+    '손바닥이 앞을 보게 덤벨을 어깨 높이로 듭니다.',
+    '머리 위로 밀어 올립니다.',
+    '팔꿈치를 옆구리 쪽으로 내리며 어깨 높이까지 천천히 돌아옵니다.'],
+ '손목은 곧게 세우고 목과 어깨에 힘을 빼세요. 덤벨이 몸 앞뒤로 벗어나지 않게 하세요.'),
+
+('덤벨 프론트 레이즈', array[
+    '서서 덤벨을 허벅지 앞에 두고 손등이 앞을 보게 잡습니다.',
+    '팔을 곧게 편 채 어깨 높이까지 앞으로 들어 올립니다.',
+    '천천히 처음 자리로 내립니다.'],
+ '어깨보다 높이 올리지 마세요. 몸을 흔들지 말고 팔로만 드세요.'),
+
+('덤벨 로우', array[
+    '벤치나 의자에 한 손과 한 무릎을 얹고, 등을 바닥과 나란히 폅니다.',
+    '반대 손으로 덤벨을 잡고 팔을 곧게 늘어뜨립니다.',
+    '팔꿈치를 옆구리에 스치듯 붙여 덤벨을 당겨 올립니다.',
+    '천천히 처음 자리로 내립니다.'],
+ '허리를 둥글게 말지 마세요. 몸통을 비틀어 반동으로 올리지 마세요.'),
+
+-- ── 머신: 가슴 ──────────────────────────────────────────────────────
+('체스트 프레스', array[
+    '등과 허리를 등받이에 붙이고 앉아, 손잡이가 가슴 높이에 오게 자리를 맞춥니다.',
+    '손잡이를 잡고 팔이 펴질 때까지 앞으로 밀어냅니다.',
+    '천천히 처음 자리로 돌아옵니다.'],
+ '어깨가 앞으로 말리지 않게 등을 등받이에 붙인 채 미세요.'),
+
+('인클라인 체스트 프레스', array[
+    '등받이에 등을 붙이고 앉아, 손잡이가 가슴 윗부분 높이에 오게 맞춥니다.',
+    '손잡이를 비스듬히 위쪽으로 밀어냅니다.',
+    '천천히 처음 자리로 돌아옵니다.'],
+ '어깨를 으쓱 올리지 마세요. 어깨 앞쪽이 당기면 미는 범위를 줄이세요.'),
+
+('디클라인 체스트 프레스', array[
+    '등받이에 등을 붙이고 앉아, 손잡이가 가슴 아랫부분 높이에 오게 맞춥니다.',
+    '손잡이를 비스듬히 아래쪽으로 밀어냅니다.',
+    '천천히 처음 자리로 돌아옵니다.'],
+ '허리를 등받이에서 띄우지 마세요.'),
+
+('머신 벤치 프레스', array[
+    '벤치에 누워 손잡이가 가슴 높이에 오게 자리를 맞춥니다.',
+    '발을 바닥에 단단히 딛고 손잡이를 위로 밀어 올립니다.',
+    '천천히 처음 자리로 내립니다.'],
+ '허리를 과하게 젖히지 마세요. 어깨가 아프면 내리는 깊이를 줄이세요.'),
+
+('펙덱 플라이', array[
+    '등을 등받이에 붙이고 앉아 손잡이를 가슴 높이에서 잡습니다.',
+    '팔꿈치를 살짝 굽힌 채 두 팔을 몸 앞으로 모읍니다.',
+    '천천히 처음 자리로 벌립니다.'],
+ '팔을 뒤로 크게 젖히지 마세요. 어깨 앞쪽이 당기면 거기서 멈추세요.'),
+
+-- ── 머신: 등 ────────────────────────────────────────────────────────
+('랫 풀다운', array[
+    '자리에 앉아 허벅지 패드를 다리에 맞추고, 위쪽 손잡이를 어깨보다 넓게 잡습니다.',
+    '가슴을 펴고 손잡이를 가슴 위쪽으로 당겨 내립니다.',
+    '천천히 팔을 펴며 처음 자리로 돌아옵니다.'],
+ '손잡이를 목 뒤로 당기지 마세요. 몸을 뒤로 크게 젖혀 반동을 쓰지 마세요.'),
+
+('시티드 로우', array[
+    '발을 발판에 대고 앉아 무릎을 살짝 굽힙니다.',
+    '등을 곧게 편 채 손잡이를 배 쪽으로 당깁니다.',
+    '천천히 팔을 펴며 처음 자리로 돌아옵니다.'],
+ '허리를 둥글게 말거나 뒤로 크게 젖히지 마세요. 어깨뼈를 모은다는 느낌으로 당기세요.'),
+
+('아이소 로우', array[
+    '가슴 패드에 가슴을 대고 앉아 한쪽 손잡이를 잡습니다.',
+    '팔꿈치를 옆구리로 붙이며 한 팔씩 당깁니다.',
+    '천천히 팔을 펴며 돌아온 뒤, 반대쪽도 같은 방법으로 합니다.'],
+ '가슴을 패드에서 떼지 마세요. 몸통을 비틀어 당기지 마세요.'),
+
+('하이 로우 머신', array[
+    '가슴 패드에 가슴을 대고 앉아 위쪽 손잡이를 잡습니다.',
+    '손잡이를 비스듬히 아래·뒤로 당깁니다.',
+    '천천히 팔을 펴며 처음 자리로 돌아옵니다.'],
+ '어깨를 으쓱 올리지 말고 어깨뼈를 아래로 모으며 당기세요.'),
+
+('T바 로우', array[
+    '패드에 가슴을 대고 엎드려 손잡이를 잡습니다.',
+    '등을 곧게 편 채 손잡이를 배 쪽으로 당깁니다.',
+    '천천히 팔을 펴며 처음 자리로 돌아옵니다.'],
+ '허리를 둥글게 말지 마세요. 허리가 아프면 이 기구는 건너뛰세요.'),
+
+('백 익스텐션', array[
+    '패드에 허벅지를 대고 엎드려 발을 발판에 고정합니다.',
+    '등을 곧게 편 채 몸이 일직선이 될 때까지 천천히 올라옵니다.',
+    '천천히 처음 자리로 내려갑니다.'],
+ '일직선을 넘어 허리를 뒤로 젖히지 마세요. 허리 통증이 있으면 건너뛰고 관리사무소에 알리세요.'),
+
+('슈러그 머신', array[
+    '손잡이를 잡고 팔을 곧게 늘어뜨린 채 자세를 잡습니다.',
+    '어깨를 귀 쪽으로 곧장 들어 올립니다.',
+    '천천히 내립니다.'],
+ '어깨를 돌리지 말고 위아래로만 움직이세요. 목에 힘을 주지 마세요.'),
+
+-- ── 머신: 어깨 ──────────────────────────────────────────────────────
+('숄더 프레스', array[
+    '등을 등받이에 붙이고 앉아 손잡이가 어깨 높이에 오게 맞춥니다.',
+    '손잡이를 머리 위로 밀어 올립니다.',
+    '천천히 어깨 높이까지 내립니다.'],
+ '허리를 뒤로 젖히지 말고 등을 등받이에 붙이세요. 목과 어깨에 힘을 빼세요.'),
+
+('레버리지 숄더 프레스', array[
+    '등을 등받이에 붙이고 앉아 손잡이가 어깨 높이에 오게 맞춥니다.',
+    '손잡이를 머리 위로 밀어 올립니다.',
+    '천천히 어깨 높이까지 내립니다.'],
+ '허리를 뒤로 젖히지 마세요. 어깨가 아프면 내리는 깊이를 줄이세요.'),
+
+('리버스 펙덱', array[
+    '가슴 패드에 가슴을 대고 앉아 손잡이를 잡습니다.',
+    '팔꿈치를 살짝 굽힌 채 두 팔을 뒤로 벌립니다.',
+    '천천히 처음 자리로 모읍니다.'],
+ '어깨를 으쓱 올리지 말고 어깨뼈를 모은다는 느낌으로 벌리세요.'),
+
+-- ── 머신: 팔 ────────────────────────────────────────────────────────
+('암 컬 머신', array[
+    '패드에 위팔을 붙이고 앉아 손잡이를 잡습니다.',
+    '팔꿈치를 굽혀 손잡이를 어깨 쪽으로 올립니다.',
+    '천천히 팔을 펴며 내립니다.'],
+ '위팔이 패드에서 떨어지지 않게 하세요.'),
+
+('프리처 컬 머신', array[
+    '경사 패드에 위팔을 붙이고 앉아 손잡이를 잡습니다.',
+    '팔꿈치를 굽혀 손잡이를 어깨 쪽으로 올립니다.',
+    '천천히 팔을 펴며 내립니다.'],
+ '위팔이 패드에서 떨어지지 않게 하세요. 맨 아래에서 팔을 툭 떨어뜨리지 마세요.'),
+
+('머신 트라이셉스 익스텐션', array[
+    '등받이에 등을 붙이고 앉아 손잡이를 잡습니다.',
+    '팔꿈치를 고정한 채 팔을 펴 손잡이를 밀어냅니다.',
+    '천천히 처음 자리로 돌아옵니다.'],
+ '팔꿈치가 옆으로 벌어지지 않게 고정하세요.'),
+
+('딥스 머신', array[
+    '등받이에 등을 붙이고 앉아 손잡이를 몸 옆에서 잡습니다.',
+    '팔을 펴며 손잡이를 아래로 밀어냅니다.',
+    '천천히 처음 자리로 돌아옵니다.'],
+ '어깨를 으쓱 올리지 마세요. 어깨 앞쪽이 아프면 멈추세요.'),
+
+-- ── 머신: 하체 ──────────────────────────────────────────────────────
+('레그 프레스', array[
+    '등과 허리를 등받이에 붙이고 앉아, 발을 발판에 어깨너비로 놓습니다.',
+    '발뒤꿈치로 발판을 밀어 다리를 폅니다.',
+    '무릎이 직각쯤 될 때까지 천천히 돌아옵니다.'],
+ '무릎이 가슴에 닿을 만큼 깊이 내리지 마세요. 허리가 등받이에서 뜨면 거기까지가 범위입니다.'),
+
+('내로우 레그 프레스', array[
+    '등을 등받이에 붙이고 앉아, 발을 발판 가운데에 모아 놓습니다.',
+    '발뒤꿈치로 발판을 밀어 다리를 폅니다.',
+    '무릎이 직각쯤 될 때까지 천천히 돌아옵니다.'],
+ '무릎이 안쪽으로 모이지 않게 발끝 방향과 맞추세요.'),
+
+('핵 스쿼트', array[
+    '어깨 패드에 어깨를 대고 등을 등판에 붙이고 섭니다.',
+    '발을 어깨너비로 놓고 무릎을 굽혀 천천히 앉습니다.',
+    '발뒤꿈치로 밀며 일어섭니다.'],
+ '무릎이 발끝보다 앞으로 나가지 않게 하세요. 허리를 등판에서 떼지 마세요.'),
+
+('레그 익스텐션', array[
+    '등받이에 깊숙이 앉아 무릎이 의자 끝에 오게 맞추고, 발목 앞을 패드에 댑니다.',
+    '발끝을 세우고 무릎이 펴질 때까지 천천히 들어 올립니다.',
+    '잠시 멈췄다가 천천히 내립니다.'],
+ '무릎 앞쪽이 아프면 즉시 멈추고 관리사무소에 알리세요. 반동으로 차 올리지 마세요.'),
+
+('레그 컬', array[
+    '패드에 엎드리거나 앉아 발목 뒤를 패드에 댑니다.',
+    '발목을 세운 채 무릎을 굽혀 뒤꿈치를 엉덩이 쪽으로 당깁니다.',
+    '천천히 처음 자리로 폅니다.'],
+ '엉덩이가 들리지 않게 하세요. 반동으로 차 올리지 마세요.'),
+
+('라잉 레그 컬', array[
+    '패드에 엎드려 무릎이 패드 끝에 오게 맞추고, 발목 뒤를 패드에 댑니다.',
+    '발목을 세운 채 무릎을 굽혀 뒤꿈치를 엉덩이 쪽으로 당깁니다.',
+    '천천히 처음 자리로 폅니다.'],
+ '엉덩이와 허리가 들리지 않게 하세요.'),
+
+('시티드 카프 레이즈', array[
+    '앉아서 앞꿈치를 발판에 올리고 무릎 위에 패드를 맞춥니다.',
+    '앞꿈치로 밀어 올려 발뒤꿈치를 최대한 듭니다.',
+    '2~4초 멈췄다가 천천히 내립니다.'],
+ '반동으로 튕기지 말고 끝까지 천천히 움직이세요.'),
+
+('카프 프레스', array[
+    '레그 프레스에 앉아 앞꿈치만 발판 아래쪽에 걸칩니다.',
+    '무릎을 편 채(잠그지 않고) 앞꿈치로 발판을 밀어냅니다.',
+    '천천히 처음 자리로 돌아옵니다.'],
+ '무릎을 굽혔다 펴지 말고 발목만 움직이세요.'),
+
+('힙 어브덕션', array[
+    '자리에 앉아 무릎 바깥쪽을 패드에 붙입니다.',
+    '두 다리를 바깥으로 천천히 벌립니다.',
+    '천천히 처음 자리로 모읍니다.'],
+ '상체를 뒤로 젖히지 말고 등을 등받이에 붙이세요.'),
+
+('힙 어덕션', array[
+    '자리에 앉아 무릎 안쪽을 패드에 붙이고 다리를 벌린 상태로 시작합니다.',
+    '두 다리를 안쪽으로 천천히 모읍니다.',
+    '천천히 처음 자리로 벌립니다.'],
+ '시작할 때 너무 넓게 벌리지 마세요. 사타구니가 당기면 범위를 줄이세요.'),
+
+-- ── 머신: 복부 ──────────────────────────────────────────────────────
+('복부 크런치', array[
+    '등을 등받이에 붙이고 앉아 손잡이나 어깨 패드를 잡습니다.',
+    '배에 힘을 주며 상체를 천천히 앞으로 숙입니다.',
+    '천천히 처음 자리로 돌아옵니다.'],
+ '팔 힘으로 당기지 말고 배 힘으로 숙이세요. 목을 앞으로 빼지 마세요.'),
+
+-- ── 스미스머신 ──────────────────────────────────────────────────────
+('스미스 벤치 프레스', array[
+    '벤치에 누워 바가 가슴 한가운데 오도록 자리를 맞춥니다.',
+    '바를 어깨너비보다 조금 넓게 잡고 안전걸이를 풉니다.',
+    '바를 가슴 쪽으로 천천히 내렸다가 밀어 올립니다.'],
+ '안전걸이를 반드시 가슴 아래 높이에 걸어 두세요. 혼자 할 때는 무게를 욕심내지 마세요.'),
+
+('스미스 스쿼트', array[
+    '바를 어깨 뒤 승모근 위에 얹고 발을 어깨너비로 벌립니다.',
+    '안전걸이를 풀고 엉덩이를 뒤로 빼며 천천히 앉습니다.',
+    '발뒤꿈치로 밀며 일어섭니다.'],
+ '무릎이 발끝보다 앞으로 나가지 않게 하세요. 안전걸이를 앉는 높이 바로 아래에 걸어 두세요.'),
+
+('스미스 스플릿 스쿼트', array[
+    '바를 어깨 뒤에 얹고 한 발을 앞으로 크게 내딛습니다.',
+    '두 무릎을 굽혀 몸을 곧게 아래로 내립니다.',
+    '앞발 뒤꿈치로 밀며 올라옵니다.'],
+ '앞 무릎이 발끝보다 앞으로 나가지 않게 하세요. 균형이 흔들리면 무게를 줄이세요.'),
+
+-- ── 케이블 ──────────────────────────────────────────────────────────
+('케이블 로우', array[
+    '발을 발판에 대고 앉아 무릎을 살짝 굽힙니다.',
+    '등을 곧게 편 채 손잡이를 배 쪽으로 당깁니다.',
+    '천천히 팔을 펴며 처음 자리로 돌아옵니다.'],
+ '허리를 둥글게 말거나 뒤로 크게 젖히지 마세요.'),
+
+('V바 풀다운', array[
+    '자리에 앉아 허벅지 패드를 맞추고 V자 손잡이를 좁게 잡습니다.',
+    '가슴을 펴고 손잡이를 가슴 위쪽으로 당겨 내립니다.',
+    '천천히 팔을 펴며 처음 자리로 돌아옵니다.'],
+ '몸을 뒤로 크게 젖혀 반동을 쓰지 마세요.'),
+
+('언더핸드 풀다운', array[
+    '자리에 앉아 허벅지 패드를 맞추고, 손바닥이 위를 보게 어깨너비로 잡습니다.',
+    '가슴을 펴고 손잡이를 가슴 쪽으로 당겨 내립니다.',
+    '천천히 팔을 펴며 처음 자리로 돌아옵니다.'],
+ '팔꿈치를 옆구리로 붙이며 당기세요. 손목이 꺾이지 않게 하세요.'),
+
+('스트레이트암 풀다운', array[
+    '기구를 마주 보고 서서 손잡이를 어깨너비로 잡습니다.',
+    '팔을 편 채(팔꿈치는 살짝 굽히고) 손잡이를 허벅지 앞까지 눌러 내립니다.',
+    '천천히 처음 자리로 돌아옵니다.'],
+ '팔꿈치를 굽혔다 펴지 마세요. 허리를 둥글게 말지 마세요.'),
+
+('케이블 크로스오버', array[
+    '양쪽 케이블을 잡고 한 발을 앞으로 내딛어 섭니다.',
+    '팔꿈치를 살짝 굽힌 채 두 팔을 몸 앞으로 모읍니다.',
+    '천천히 처음 자리로 벌립니다.'],
+ '팔을 뒤로 크게 젖히지 마세요. 어깨 앞쪽이 당기면 거기서 멈추세요.'),
+
+('케이블 래터럴 레이즈', array[
+    '케이블을 몸 반대편 손으로 잡고 옆으로 섭니다.',
+    '팔을 곧게 편 채 어깨 높이까지 옆으로 들어 올립니다.',
+    '천천히 처음 자리로 내립니다.'],
+ '어깨보다 높이 올리지 마세요. 몸을 기울여 반동을 쓰지 마세요.'),
+
+('케이블 리어델트 플라이', array[
+    '케이블을 가슴 높이에서 팔을 교차해 잡고 섭니다.',
+    '팔꿈치를 살짝 굽힌 채 두 팔을 뒤로 벌립니다.',
+    '천천히 처음 자리로 모읍니다.'],
+ '어깨를 으쓱 올리지 말고 어깨뼈를 모으며 벌리세요.'),
+
+('페이스 풀', array[
+    '로프를 얼굴 높이에 맞추고 양손으로 잡습니다.',
+    '팔꿈치를 어깨 높이로 벌리며 로프를 얼굴 쪽으로 당깁니다.',
+    '천천히 처음 자리로 돌아옵니다.'],
+ '어깨를 으쓱 올리지 마세요. 목을 앞으로 빼지 마세요.'),
+
+('업라이트 케이블 로우', array[
+    '손잡이를 어깨너비보다 좁게 잡고 팔을 늘어뜨린 채 섭니다.',
+    '팔꿈치를 위로 이끌며 손잡이를 가슴 높이까지 끌어올립니다.',
+    '천천히 처음 자리로 내립니다.'],
+ '가슴 높이보다 위로 올리지 마세요. 어깨가 결리면 이 운동은 건너뛰세요.'),
+
+('케이블 푸시다운', array[
+    '기구를 마주 보고 서서 손잡이를 가슴 높이에서 잡습니다.',
+    '팔꿈치를 옆구리에 붙인 채 팔을 펴 손잡이를 아래로 밀어 내립니다.',
+    '천천히 처음 자리로 돌아옵니다.'],
+ '팔꿈치가 옆구리에서 떨어지지 않게 고정하세요. 상체를 숙여 체중으로 누르지 마세요.'),
+
+('로프 푸시다운', array[
+    '로프를 양손으로 잡고 기구를 마주 보고 섭니다.',
+    '팔꿈치를 옆구리에 붙인 채 로프를 아래로 내리며 양옆으로 벌립니다.',
+    '천천히 처음 자리로 돌아옵니다.'],
+ '팔꿈치를 옆구리에 고정하세요. 어깨로 누르지 말고 팔로만 미세요.'),
+
+('케이블 해머 컬', array[
+    '로프를 양손으로 마주 잡고 팔을 늘어뜨린 채 섭니다.',
+    '엄지가 위를 보는 상태를 유지하며 팔꿈치를 굽혀 올립니다.',
+    '천천히 처음 자리로 내립니다.'],
+ '위팔과 팔꿈치를 옆구리에 붙인 채 고정하세요.'),
+
+('케이블 크런치', array[
+    '기구 앞에 무릎을 꿇고 로프를 머리 옆에서 잡습니다.',
+    '배에 힘을 주며 상체를 둥글게 말아 아래로 숙입니다.',
+    '천천히 처음 자리로 돌아옵니다.'],
+ '팔로 당기지 말고 배 힘으로 숙이세요. 엉덩이를 뒤로 빼지 마세요.'),
+
+('케이블 리버스 크런치', array[
+    '바닥에 누워 발목에 케이블을 걸고 손으로 바닥을 짚습니다.',
+    '배에 힘을 주며 무릎을 가슴 쪽으로 당깁니다.',
+    '천천히 처음 자리로 내립니다.'],
+ '허리가 바닥에서 크게 뜨지 않게 하세요. 반동으로 차지 마세요.'),
+
+('케이블 우드찹', array[
+    '케이블을 몸 옆 높은 곳에 맞추고 양손으로 잡습니다.',
+    '배에 힘을 주며 사선 아래로 당겨 내립니다.',
+    '천천히 처음 자리로 돌아옵니다.'],
+ '허리를 비틀지 말고 몸통 전체를 함께 돌리세요. 무릎은 살짝 굽힌 상태를 유지하세요.'),
+
+('팔로프 프레스', array[
+    '케이블을 가슴 높이에 맞추고 옆으로 서서 양손으로 잡습니다.',
+    '몸이 돌아가지 않게 버티며 두 팔을 앞으로 곧게 밀어냅니다.',
+    '천천히 가슴 쪽으로 돌아옵니다.'],
+ '몸통이 케이블 쪽으로 돌아가면 무게를 줄이세요. 버티는 동안 숨을 참지 마세요.'),
+
+('케이블 킥백', array[
+    '발목에 케이블을 걸고 기구를 마주 보고 서서 손잡이를 잡습니다.',
+    '무릎을 편 채 다리를 뒤로 천천히 밀어냅니다.',
+    '천천히 처음 자리로 돌아옵니다.'],
+ '허리를 젖혀 다리를 올리지 마세요. 엉덩이 힘으로만 미세요.'),
+
+-- ── 유산소 ──────────────────────────────────────────────────────────
+-- 유산소는 세트·반복이 아니라 "이어서 하는 시간"이라 공통 규칙도 다르다.
+('트레드밀', array[
+    '안전키를 옷에 집고 손잡이를 잡은 채 벨트에 올라섭니다.',
+    '가장 느린 속도로 시작해 3분쯤 몸을 덥힙니다.',
+    '옆 사람과 말은 되지만 노래는 못 부를 정도의 속도를 유지합니다.',
+    '끝나기 2~3분 전부터 속도를 줄여 마무리합니다.'],
+ '안전키를 반드시 옷에 집으세요. 손잡이에 몸을 기대지 말고 똑바로 서서 걸으세요.'),
+
+('실내 자전거', array[
+    '안장에 앉았을 때 페달이 가장 아래일 때 무릎이 살짝 굽는 높이로 맞춥니다.',
+    '가장 가벼운 저항으로 시작해 3분쯤 몸을 덥힙니다.',
+    '숨이 조금 차지만 말은 되는 정도로 계속 밟습니다.',
+    '끝나기 2~3분 전부터 저항을 낮춰 마무리합니다.'],
+ '무릎이 완전히 펴지거나 너무 굽으면 안장 높이를 다시 맞추세요.'),
+
+('등받이 자전거', array[
+    '등받이에 등을 붙이고 앉아, 페달이 가장 멀 때 무릎이 살짝 굽는 위치로 맞춥니다.',
+    '가장 가벼운 저항으로 시작해 3분쯤 몸을 덥힙니다.',
+    '숨이 조금 차지만 말은 되는 정도로 계속 밟습니다.',
+    '끝나기 2~3분 전부터 저항을 낮춰 마무리합니다.'],
+ '허리가 아프신 분께 가장 편한 유산소입니다. 등을 등받이에서 떼지 마세요.'),
+
+('일립티컬', array[
+    '손잡이를 잡고 발판에 두 발을 올립니다.',
+    '가장 가벼운 저항으로 시작해 3분쯤 몸을 덥힙니다.',
+    '걷듯이 자연스럽게 발을 굴리며 이어 갑니다.',
+    '끝나기 2~3분 전부터 속도를 줄여 마무리합니다.'],
+ '무릎에 충격이 적은 운동입니다. 상체를 숙이지 말고 곧게 세우세요.'),
+
+('로잉머신', array[
+    '발을 발판에 고정하고 손잡이를 잡습니다.',
+    '다리로 먼저 밀고, 이어서 몸통을 젖히며 손잡이를 배 쪽으로 당깁니다.',
+    '팔을 펴고 몸통을 세운 뒤 무릎을 굽혀 처음 자리로 돌아옵니다.',
+    '끝나기 2~3분 전부터 속도를 줄여 마무리합니다.'],
+ '허리를 둥글게 말지 마세요. 팔로 먼저 당기지 말고 다리부터 미세요.'),
+
+('스텝밀', array[
+    '손잡이를 잡고 가장 느린 속도로 시작합니다.',
+    '계단을 오르듯 한 칸씩 발을 온전히 딛습니다.',
+    '숨이 조금 차지만 말은 되는 정도의 속도를 유지합니다.',
+    '끝나기 2~3분 전부터 속도를 줄여 마무리합니다.'],
+ '손잡이에 몸을 기대지 마세요. 무릎이 아프면 즉시 멈추세요.'),
+
+('스텝박스', array[
+    '발판 앞에 서서 필요하면 난간을 잡습니다.',
+    '한 발씩 발판에 올라섰다가 한 발씩 내려옵니다.',
+    '올라가는 발을 번갈아 가며 일정한 속도로 이어 갑니다.',
+    '끝나기 2~3분 전부터 속도를 줄여 마무리합니다.'],
+ '발 전체를 발판에 딛으세요. 앞꿈치만 걸치면 미끄러집니다.')
+
+) as v(name, steps, caution)
+where c.name = v.name;
+
+
+-- ─────────────────────────────────────────────────────────────
+-- 조회 RPC 가 새 필드를 같이 내려주게 한다.
+-- (본문은 마이그레이션 26 과 같고 how_to_steps·form_caution 두 줄만 늘었다)
+-- ─────────────────────────────────────────────────────────────
+
+create or replace function public.get_daily_routine(
+    p_user_id uuid,
+    p_date    date default current_date
+)
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+    select coalesce(jsonb_agg(row order by sort_order, name), '[]'::jsonb)
+    from (
+        select d.sort_order, cat.name, jsonb_build_object(
+            'routine_id', d.id,
+            'catalog_id', cat.id,
+            'equip_id', e.id,
+            'name', cat.name,
+            'name_ko', cat.name_ko,
+            'station_kind', cat.station_kind,
+            'description', cat.description,
+            'why_it_matters', cat.why_it_matters,
+            'how_to_steps', cat.how_to_steps,
+            'form_caution', cat.form_caution,
+            'target_muscle', cat.target_muscle,
+            'video_url', cat.video_url,
+            'qr_code_val', e.qr_code_val,
+            'location_label', e.location_label,
+            'target_weight', d.target_weight,
+            'target_sets', d.target_sets,
+            'target_reps', d.target_reps,
+            'target_duration_minutes', d.target_duration_minutes,
+            'is_completed', d.is_completed,
+            'weight_suggestion', case
+                when d.is_completed then null
+                else public.weight_suggestion(p_user_id, e.id)
+            end
+        ) as row
+        from public.daily_routines d
+        join public.exercise_catalog cat on cat.id = d.catalog_id
+        left join public.equipments e on e.id = d.equip_id
+        where d.user_id = p_user_id and d.routine_date = p_date
+    ) s;
+$$;
+
+revoke all on function public.get_daily_routine(uuid, date) from public;
+grant execute on function public.get_daily_routine(uuid, date) to anon, authenticated;
+
+create or replace function public.get_equipment_by_qr(p_qr_code text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_result jsonb;
+begin
+    select jsonb_build_object(
+        'id', e.id,
+        'catalog_id', cat.id,
+        'name', cat.name,
+        'name_ko', cat.name_ko,
+        'station_kind', cat.station_kind,
+        'description', cat.description,
+        'why_it_matters', cat.why_it_matters,
+        'how_to_steps', cat.how_to_steps,
+        'form_caution', cat.form_caution,
+        'target_muscle', cat.target_muscle,
+        'video_url', cat.video_url,
+        'qr_code_val', e.qr_code_val,
+        'location_label', e.location_label,
+        'base_weight_kg', coalesce(e.base_weight_kg, cat.base_weight_kg),
+        'weight_step_kg', coalesce(e.weight_step_kg, cat.weight_step_kg)
+    )
+    into v_result
+    from public.equipments e
+    join public.exercise_catalog cat on cat.id = e.catalog_id
+    where e.qr_code_val = p_qr_code;
+
+    if v_result is null then
+        raise exception 'EQUIPMENT_NOT_FOUND' using errcode = 'P0002';
+    end if;
+
+    return v_result;
+end;
+$$;
+
+revoke all on function public.get_equipment_by_qr(text) from public;
+grant execute on function public.get_equipment_by_qr(text) to anon, authenticated;
+
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260814000030_video_links.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 영상 링크를 자리표시자에서 실제로 열리는 주소로 바꾼다.
+--
+-- 지금까지 video_url 은 전부 https://example.com/videos/*.mp4 였다. "영상으로
+-- 보기"를 눌러도 아무것도 안 나온다 — 버튼이 있는데 안 되는 게 버튼이 없는
+-- 것보다 나쁘다.
+--
+-- ⚠️ 이건 임시다. 제대로 하려면 시범 영상을 직접 찍거나, 트레이너가 확인한
+--    영상 주소를 운동마다 넣어야 한다. 그때는 video_url 을 그 주소로 덮어쓰면
+--    되고 앱은 고칠 것이 없다.
+--
+-- 왜 특정 영상 주소를 바로 박지 않았나:
+--   유튜브 영상 ID 를 확인 없이 넣으면 엉뚱한 영상으로 연결된다. 운동 앱에서
+--   틀린 시범 영상은 틀린 자세 안내와 같은 문제이고, 남의 채널 영상은 어느 날
+--   비공개로 바뀌면 조용히 죽는다. 그래서 "그 운동을 검색한 결과"로 연결한다 —
+--   항상 열리고, 영상이 내려가도 깨지지 않으며, 여러 시범을 비교해 볼 수 있다.
+
+-- 한글이 들어간 검색어를 주소에 넣으려면 퍼센트 인코딩이 필요하다.
+-- Postgres 에 내장 함수가 없어 직접 만든다(글자 단위로 UTF-8 바이트를 %XX 로).
+create or replace function public.youtube_search_url(p_query text)
+returns text
+language sql
+immutable
+as $$
+    select 'https://www.youtube.com/results?search_query=' || string_agg(
+        case
+            when ch ~ '^[A-Za-z0-9]$' then ch
+            when ch = ' ' then '+'
+            else (
+                select string_agg('%' || upper(to_hex(get_byte(convert_to(ch, 'UTF8'), i))), '')
+                from generate_series(0, octet_length(convert_to(ch, 'UTF8')) - 1) as i
+            )
+        end, '' order by ord)
+    from regexp_split_to_table(p_query, '') with ordinality as t(ch, ord);
+$$;
+
+comment on function public.youtube_search_url(text) is
+    '검색어를 유튜브 검색 주소로. 운동별 시범영상 임시 링크를 만드는 데 쓴다.';
+
+-- 자리표시자만 바꾼다. 나중에 진짜 영상 주소를 넣은 운동은 건드리지 않는다.
+update public.exercise_catalog
+set video_url = public.youtube_search_url(
+    case station_kind
+        -- 맨몸운동은 시니어용 영상이 따로 많다. "어르신"을 붙여야 젊은 사람
+        -- 기준의 빠른 동작 영상이 앞에 오지 않는다.
+        when '맨몸'   then '어르신 ' || name || ' 운동 방법'
+        -- 유산소 기구는 자세보다 "어떻게 켜고 쓰는지"가 궁금하다.
+        when '유산소' then name || ' 사용법'
+        else name || ' 운동 정확한 자세'
+    end
+)
+where video_url like '%example.com%';
+
+comment on column public.exercise_catalog.video_url is
+    '시범 영상 주소. 지금은 유튜브 검색 결과로 연결되는 임시값이다 — 트레이너가 확인한 영상이 준비되면 그 주소로 덮어쓰면 된다.';
+
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260814000031_share_card.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 오늘 운동을 한 장으로 요약하는 "운동 카드".
+--
+-- 다 하고 나서 남는 게 없으면 다음에 또 나올 이유도 없다. 오늘 한 걸 숫자로
+-- 보여주고 자식들한테 보낼 수 있게 만든다.
+--
+-- ⚠️ 볼륨은 target_weight(처방 kg)로만 계산한다. actual_weight_kg 에는 지금
+--    "핀 몇 칸"이 들어가 있는데, 그건 기구마다 실제 무게가 다른 상대값이라
+--    합치면 아무 의미 없는 숫자가 된다. 맨몸·유산소도 무게가 없으니 볼륨에서
+--    빠진다(세트·횟수에는 들어간다).
+
+create or replace function public.get_workout_share_card(
+    p_user_id uuid,
+    p_date    date default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    v_owner_auth_id uuid;
+    v_date          date;
+    v_first         timestamptz;
+    v_last          timestamptz;
+    v_result        jsonb;
+    v_exercises     jsonb;
+    v_muscles       jsonb;
+    v_day_count     integer;
+begin
+    if auth.uid() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+
+    select auth_user_id into v_owner_auth_id from public.users where id = p_user_id;
+    if not found or v_owner_auth_id is distinct from auth.uid() then
+        raise exception 'FORBIDDEN' using errcode = '42501';
+    end if;
+
+    -- 날짜를 안 주면 오늘. 서버가 UTC 라 한국 날짜로 바꿔서 본다.
+    v_date := coalesce(p_date, (now() at time zone 'Asia/Seoul')::date);
+
+    select min(d.completed_at), max(d.completed_at)
+    into v_first, v_last
+    from public.daily_routines d
+    where d.user_id = p_user_id and d.routine_date = v_date and d.is_completed;
+
+    -- 완료한 운동이 하나도 없으면 카드를 만들지 않는다.
+    if v_first is null then
+        return null;
+    end if;
+
+    -- 평생 출석일. "676번째 운동" 같은 자랑거리가 된다.
+    select count(distinct (a.attended_at at time zone 'Asia/Seoul')::date)
+    into v_day_count
+    from public.attendance_logs a
+    where a.user_id = p_user_id;
+
+    select jsonb_agg(
+        jsonb_build_object(
+            'name', cat.name,
+            'name_ko', cat.name_ko,
+            'target_muscle', cat.target_muscle,
+            'sets', d.target_sets,
+            'reps', d.target_reps,
+            'duration_minutes', d.target_duration_minutes,
+            'weight_kg', d.target_weight
+        ) order by d.sort_order, cat.name
+    )
+    into v_exercises
+    from public.daily_routines d
+    join public.exercise_catalog cat on cat.id = d.catalog_id
+    where d.user_id = p_user_id and d.routine_date = v_date and d.is_completed;
+
+    select jsonb_agg(m order by m)
+    into v_muscles
+    from (
+        select distinct cat.target_muscle as m
+        from public.daily_routines d
+        join public.exercise_catalog cat on cat.id = d.catalog_id
+        where d.user_id = p_user_id and d.routine_date = v_date and d.is_completed
+          and cat.target_muscle is not null
+    ) s;
+
+    select jsonb_build_object(
+        'date', v_date,
+        -- 마친 시각으로 "저녁 운동"처럼 부른다. 카드 제목에 쓴다.
+        'part_of_day', case
+            when extract(hour from (v_last at time zone 'Asia/Seoul')) < 6  then '새벽'
+            when extract(hour from (v_last at time zone 'Asia/Seoul')) < 11 then '아침'
+            when extract(hour from (v_last at time zone 'Asia/Seoul')) < 17 then '낮'
+            when extract(hour from (v_last at time zone 'Asia/Seoul')) < 21 then '저녁'
+            else '밤'
+        end,
+        'day_count', v_day_count,
+        -- 첫 완료부터 마지막 완료까지. 한 종목만 했으면 0 이 나오는데, 그때는
+        -- 화면에서 시간 칸을 빼는 게 맞다(0분이라고 적으면 안 한 것처럼 보인다).
+        'duration_minutes', greatest(0, round(extract(epoch from (v_last - v_first)) / 60))::integer,
+        'exercise_count', count(*),
+        'total_sets', coalesce(sum(d.target_sets), 0),
+        'total_reps', coalesce(sum(d.target_sets * d.target_reps), 0),
+        'total_minutes_cardio', coalesce(sum(d.target_duration_minutes), 0),
+        'total_volume_kg', coalesce(sum(
+            case when d.target_weight is not null
+                 then d.target_weight * coalesce(d.target_sets, 0) * coalesce(d.target_reps, 0)
+                 else 0 end), 0),
+        'points', coalesce(sum(d.points_awarded), 0),
+        'muscles', coalesce(v_muscles, '[]'::jsonb),
+        'exercises', coalesce(v_exercises, '[]'::jsonb)
+    )
+    into v_result
+    from public.daily_routines d
+    where d.user_id = p_user_id and d.routine_date = v_date and d.is_completed;
+
+    return v_result;
+end;
+$$;
+
+comment on function public.get_workout_share_card(uuid, date) is
+    '오늘 운동 한 장 요약(공유 카드용). 완료한 운동이 없으면 null. 볼륨은 처방 kg 기준 — 핀 칸 값은 쓰지 않는다.';
+
+revoke all on function public.get_workout_share_card(uuid, date) from public;
+grant execute on function public.get_workout_share_card(uuid, date) to authenticated;
+
+
+-- ═══════════════════════════════════════════════════════════
+-- seed.sql — 시범단지 + 보유 기구 (테스트용)
 -- ═══════════════════════════════════════════════════════════
 
 -- 로컬/개발용 시드 데이터.
@@ -3513,17 +5468,25 @@ set enroll_code    = 'TEST24',
     kiosk_pin_hash = crypt('1234', gen_salt('bf'))
 where id = '11111111-1111-4111-8111-111111111111';
 
--- base_weight_kg 는 "표준 성인 남성 시작 무게" 기준이다. 여기에 연령대·성별·목적·
--- 아픈 곳 배율이 곱해져 개인별 무게가 나오므로, 단지마다 기구 사양에 맞춰 조정한다.
--- description 은 기구 이름만으로는 이해하기 어려운 시니어를 위한 쉬운 설명이다.
-insert into public.equipments
-    (apt_id, qr_code_val, name, description, target_muscle, video_url, base_weight_kg, weight_step_kg)
-values
-    ('11111111-1111-4111-8111-111111111111', 'FIT-DEMO-CHEST-01', '체스트 프레스', '의자에 앉아 손잡이를 앞으로 밀어내는 동작입니다. 가슴 근육을 키웁니다.', '가슴', 'https://example.com/videos/chest-press.mp4', 20, 5),
-    ('11111111-1111-4111-8111-111111111111', 'FIT-DEMO-LAT-01',   '랫 풀다운',     '위에서 손잡이를 아래로 당기는 동작입니다. 등 근육을 키워 굽은 등을 펴는 데 도움됩니다.', '등', 'https://example.com/videos/lat-pulldown.mp4', 25, 5),
-    ('11111111-1111-4111-8111-111111111111', 'FIT-DEMO-LEG-01',   '레그 프레스',   '의자에 앉아 발판을 다리로 밀어내는 동작입니다. 허벅지와 엉덩이 근육을 키웁니다.', '하체', 'https://example.com/videos/leg-press.mp4', 40, 10),
-    ('11111111-1111-4111-8111-111111111111', 'FIT-DEMO-SHLD-01',  '숄더 프레스',   '의자에 앉아 손잡이를 머리 위로 밀어올리는 동작입니다. 어깨 근육을 키웁니다.', '어깨', 'https://example.com/videos/shoulder-press.mp4', 15, 5),
-    ('11111111-1111-4111-8111-111111111111', 'FIT-DEMO-ABD-01',   '복부 크런치',   '등받이에 기대 앉아 상체를 앞으로 숙이는 동작입니다. 뱃살 관리와 허리 힘에 도움됩니다.', '복부', 'https://example.com/videos/ab-crunch.mp4', 10, 5),
-    -- 유산소: base_weight_kg 이 없다 — 핀을 꽂는 기구가 아니라 시간으로 처방한다.
-    ('11111111-1111-4111-8111-111111111111', 'FIT-DEMO-CARDIO-01', '트레드밀',    '벨트 위에서 걷거나 가볍게 뛰는 운동입니다. 심장과 폐를 튼튼하게 합니다.', '유산소', 'https://example.com/videos/treadmill.mp4', null, 1)
+-- 시범단지의 보유 기구. 운동 이름·설명·영상은 운동 도감(exercise_catalog,
+-- 마이그레이션 26에서 미리 등록)이 들고 있고, 여기서는 "어떤 운동의 기구가
+-- 몇 번 구역에 있는지"만 잇는다. 맨몸운동은 기구가 없으니 여기 등록하지
+-- 않는다 — 보유 기구가 없는 부위에 자동으로 대체 처방된다.
+--
+-- location_label 규칙:
+--   자리에 고정된 기구  "12번 구역"  — 기구에 붙인 번호표와 같은 숫자를 쓴다.
+--                                    번호는 한 단지 안에서 겹치면 안 된다.
+--   덤벨·맨몸          "덤벨 구역", "매트 구역"  — 특정 기구가 아니라 자리로 안내
+-- 앱은 마지막 띄어쓰기에서 잘라 "12번"을 크게, "구역"을 작게 보여준다.
+insert into public.equipments (apt_id, catalog_id, qr_code_val, location_label)
+select '11111111-1111-4111-8111-111111111111', c.id, v.qr_code_val, v.location_label
+from (values
+    ('체스트 프레스', 'FIT-DEMO-CHEST-01',  '1번 구역'),
+    ('랫 풀다운',     'FIT-DEMO-LAT-01',    '2번 구역'),
+    ('레그 프레스',   'FIT-DEMO-LEG-01',    '3번 구역'),
+    ('숄더 프레스',   'FIT-DEMO-SHLD-01',   '4번 구역'),
+    ('복부 크런치',   'FIT-DEMO-ABD-01',    '5번 구역'),
+    ('트레드밀',      'FIT-DEMO-CARDIO-01', '6번 구역')
+) as v (name, qr_code_val, location_label)
+join public.exercise_catalog c on c.name = v.name
 on conflict (qr_code_val) do nothing;

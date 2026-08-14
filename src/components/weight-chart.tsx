@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
+import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Line } from 'react-native-svg';
 
+import { Text } from '@/components/app-text';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { buildWeightTrend, describeWeightTrend, formatMonthDay } from '@/features/body/weight-trend';
 import type { BodyWeightLog } from '@/lib/database.types';

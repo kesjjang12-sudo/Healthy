@@ -54,8 +54,10 @@ QR 페어링(그 헬스장에 물리적으로 가서 3분 안에 스캔해야 �
 | `users` | 유저. `auth_user_id` 로 Supabase Auth 신원과 연결(카카오/구글로 먼저 가입하면 `phone_number` 는 페어링 전까지 null) |
 | `user_gym_memberships` | 유저가 다닌 헬스장 이력. `is_primary` 행이 지금의 "주 소속", `left_at` 이 찍힌 행은 이사로 떠난 곳(이사 대응의 핵심) |
 | `device_pairings` | 키오스크가 발급한 1회성 QR 페어링 코드(3분 유효) |
-| `equipments` | 기구와 시범 영상. `qr_code_val` 로 QR 스캔 시 조회 |
-| `daily_routines` | 유저별 하루 루틴. `actual_weight_kg`/`actual_reps`/`points_awarded` 는 완료 시 채워짐 |
+| `exercise_catalog` | 운동 도감(전체 공용). 기구 운동·맨몸운동의 이름·설명·영상·기본 무게를 본사가 미리 등록 |
+| `equipments` | 단지별 보유 기구. "도감의 이 운동 기구가 몇 번 구역(`location_label`)에 있다"만 담당. `qr_code_val` 로 QR 스캔 시 조회 |
+| `daily_routines` | 유저별 하루 루틴. `catalog_id` 가 "무슨 운동", `equip_id` 가 "어느 기구"(맨몸이면 null). `actual_weight_kg`/`actual_reps`/`points_awarded` 는 완료 시 채워짐 |
+| `user_equipment_levels` | 사람별·기구별 현재 사용 무게. "올려볼게요"를 눌렀을 때만 바뀌고, 있으면 템플릿 계산보다 우선한다 |
 | `attendance_logs` | 출석 기록. `apt_id` 로 그날 어느 헬스장이었는지도 남긴다 |
 | `kiosk_enroll_attempts` | 단지 등록 실패 기록. PIN 무차별 대입을 막는 용도로만 쓰고 성공하면 지워진다 |
 
@@ -84,6 +86,7 @@ QR 페어링(그 헬스장에 물리적으로 가서 3분 안에 스캔해야 �
 | … | (18~23은 랭킹 기준·기구 조회·유산소·재설치 복구·실시간 체크인) |
 | `20260812000024_kiosk_apartment_enrollment.sql` | `apartments.enroll_code`, `resolve_apartment_for_kiosk` — 태블릿이 단지를 스스로 기억 |
 | `20260812000025_leave_gym_on_switch.sql` | `left_at`/`switch_declined_at` — 이사하면 옛 단지 랭킹에서 빠진다 |
+| `20260812000026_exercise_catalog.sql` | 운동 도감(`exercise_catalog`) 분리 + 단지별 보유·위치(`location_label`) + 맨몸운동 대체 처방 |
 
 ### 루틴 생성: 런타임 AI 호출 없음
 
@@ -102,7 +105,7 @@ gender_modifiers 성별 보정
       ↓ rebuild_routine_templates()
 routine_templates + routine_template_items   ← 210개 조합
       ↓ generate_daily_routine(user_id, date, apt_id?)
-pain_area_rules 적용 → apt_id 의 보유 기구로 치환 → daily_routines
+pain_area_rules 적용 → 운동 도감에서 치환(보유 기구 우선, 없으면 맨몸운동) → daily_routines
 ```
 
 `p_apt_id` 를 안 주면 유저의 주 소속(`users.apt_id`)을 쓴다. 이사 후 아직 안 옮긴
@@ -198,7 +201,7 @@ CLI 로 관리하려면 이쪽이 낫다 (마이그레이션 이력이 남는다
 ```bash
 npx supabase link --project-ref <your-project-ref>
 npx supabase db push                        # migrations 적용
-psql "$DATABASE_URL" -f supabase/seed.sql   # 시범단지 + 기구 5대
+psql "$DATABASE_URL" -f supabase/seed.sql   # 시범단지 + 보유 기구 6대(위치 포함)
 ```
 
 **카카오/구글 로그인을 실제로 켜려면 추가로 필요한 것** (안 해도 앱은 뜨지만 그 두
@@ -290,8 +293,12 @@ update public.apartments
 set kiosk_pin_hash = crypt('원하는PIN', gen_salt('bf'))
 where enroll_code = '위에서-나온-코드';
 
--- 3) 그 단지의 기구를 등록한다(apt_id 는 1)에서 나온 값).
-insert into public.equipments (apt_id, qr_code_val, name, ...) values ...;
+-- 3) 그 단지가 보유한 기구를 등록한다(apt_id 는 1)에서 나온 값).
+--    운동 자체(이름·설명·영상)는 운동 도감(exercise_catalog)에 이미 있으므로
+--    "어떤 운동의 기구가 몇 번 구역에 있는지"만 이으면 된다.
+insert into public.equipments (apt_id, catalog_id, qr_code_val, location_label)
+select '위 apt_id', c.id, 'APT123-CHEST-01', '13번 구역'
+from public.exercise_catalog c where c.name = '체스트 프레스';
 ```
 
 관리사무소에는 **등록 코드와 PIN 두 개**만 알려주면 된다. 태블릿에서 "헬스장 입구

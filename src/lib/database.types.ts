@@ -137,28 +137,6 @@ export type KioskEnrollAttempt = {
 };
 
 /**
- * 특정 헬스장에 놓인 기구 한 대.
- *
- * 운동 설명·부위·영상은 여기 없다 — exercise_catalog 가 갖는다. 이 행이
- * 답하는 건 "이 단지에 그 운동을 할 기구가 있고, 앞에 이 QR 이 붙어 있다"
- * 뿐이다. 무게는 같은 운동이라도 기구마다 다를 수 있어 여기서 덮어쓴다.
- */
-export type Equipment = {
-  id: string;
-  apt_id: string | null;
-  qr_code_val: string;
-  /** 어떤 운동을 하는 기구인지. 이름·설명은 전부 이쪽에 있다. */
-  catalog_id: string | null;
-  /** "2층 창가" 처럼 헬스장 안에서 찾아가는 단서. */
-  location_label: string | null;
-  /** 이 기구의 시작 무게. null 이면 카탈로그 값을 쓴다. */
-  base_weight_kg: number | null;
-  /** 이 기구에서 조절 가능한 최소 단위(kg). null 이면 카탈로그 값을 쓴다. */
-  weight_step_kg: number | null;
-  created_at: string | null;
-};
-
-/**
  * 운동 그 자체. "체스트 프레스는 이런 운동이고 이렇게 한다"는 헬스장과
  * 무관한 사실이라 여기 한 번만 둔다. equipments 는 "이 헬스장에 그 운동을 할
  * 기구가 있다"는 사실과 QR 만 갖는다 — 같은 설명을 단지마다 복사하던 구조를
@@ -167,24 +145,59 @@ export type Equipment = {
 export type ExerciseCatalog = {
   id: string;
   name: string;
-  /** 운동 이름의 한글 직역. 예: 체스트 프레스 → "가슴 밀기". */
+  /** "위에서 당기기"처럼 기구 이름보다 먼저 와닿는 쉬운 말 이름 */
   name_ko: string | null;
-  /** 머신 / 스미스머신 / 케이블 / 덤벨 / 맨몸 / 유산소 */
-  station_kind: string | null;
-  target_muscle: string | null;
+  /** 머신 / 스미스머신 / 케이블 / 덤벨 / 맨몸 / 유산소. '맨몸'은 기구가 없어도 처방할 수 있다 */
+  station_kind: string;
+  /** 시니어가 이해하기 쉬운 한 줄 설명. 비어 있으면 화면에서 부위명으로 대체한다. */
   description: string | null;
+  /** 이 운동이 생활에서 왜 중요한지. 시니어 동기부여용 한 단락 */
   why_it_matters: string | null;
+  /** 이 운동에서만 맞는 동작 순서. 공통 호흡·템포 규칙은 앱이 붙인다 */
+  how_to_steps: string[] | null;
+  /** "이것만은 지키세요" 한두 줄 */
+  form_caution: string | null;
+  target_muscle: string | null;
   video_url: string;
   /** 시작 자세 사진. free-exercise-db(퍼블릭 도메인) 사진을 쓰고, 직접 찍은 것이 생기면 갈아 끼운다. */
   image_url: string | null;
+  /** 표준 성인 남성 시작 무게. null 이면 무게 없이 맨몸으로 안내한다 */
   base_weight_kg: number | null;
   weight_step_kg: number;
+  created_at: string | null;
+};
+
+/** weight_suggestion RPC 가 계산해 루틴 항목에 끼워 주는 무게 조정 제안 */
+export type WeightSuggestion = {
+  action: 'increase' | 'decrease';
+  current_kg: number;
+  suggested_kg: number;
+  reason: string;
+};
+
+/**
+ * 단지별 보유 기구. "이 단지에 도감의 이 운동 기구가 몇 번 구역에 있다"만
+ * 담는다. 이름·설명·영상은 catalog_id 로 도감을 따라간다.
+ */
+export type Equipment = {
+  id: string;
+  apt_id: string | null;
+  catalog_id: string;
+  qr_code_val: string;
+  /** 헬스장 안 위치 표기. 예: "13번 구역". 없으면 화면에서 위치 줄을 생략한다. */
+  location_label: string | null;
+  /** 단지별 기구 사양 보정값. null 이면 도감 기본값을 쓴다 */
+  base_weight_kg: number | null;
+  weight_step_kg: number | null;
   created_at: string | null;
 };
 
 export type DailyRoutine = {
   id: string;
   user_id: string | null;
+  /** 처방된 운동(도감). 기구가 철거돼도 기록의 정체는 이걸로 남는다 */
+  catalog_id: string;
+  /** 그 운동을 수행할 단지 보유 기구. 맨몸운동이면 null */
   equip_id: string | null;
   routine_date: string | null;
   target_weight: number | null;
@@ -209,23 +222,32 @@ export type AttendanceLog = {
   attended_at: string | null;
 };
 
-/** get_daily_routine 이 돌려주는 한 줄. 루틴 + 기구 정보를 합쳐 놓은 형태다. */
+/** get_daily_routine 이 돌려주는 한 줄. 루틴 + 도감 + 기구 위치를 합쳐 놓은 형태다. */
 export type RoutineItem = {
   routine_id: string;
-  equip_id: string;
+  catalog_id: string;
+  /** 이 단지가 보유한 기구. null 이면 기구 없이 하는 맨몸운동이다. */
+  equip_id: string | null;
   name: string;
   /** 운동 이름의 한글 직역. 예: 체스트 프레스 → "가슴 밀기". 없으면 화면에서 생략한다. */
   name_ko: string | null;
-  /** 머신 / 스미스머신 / 케이블 / 맨몸 / 유산소 */
-  station_kind: string | null;
+  /** 머신 / 스미스머신 / 케이블 / 덤벨 / 맨몸 / 유산소 */
+  station_kind: string;
   description: string | null;
   /** 이 운동을 왜 해야 하는지. 건너뛰기 쉬운 부위와 흔한 오해를 짚어 준다. */
   why_it_matters: string | null;
+  /** 이 운동에서만 맞는 동작 순서. 공통 호흡·템포 규칙은 앱이 붙인다 */
+  how_to_steps: string[] | null;
+  /** "이것만은 지키세요" 한두 줄 */
+  form_caution: string | null;
   target_muscle: string | null;
   video_url: string;
   /** 시작 자세 사진. 글만으로는 어느 기구인지부터 막힌다. */
   image_url: string | null;
-  qr_code_val: string;
+  /** 맨몸운동은 기구가 없어서 QR 도 없다. */
+  qr_code_val: string | null;
+  /** 기구가 있는 위치. 예: "13번 구역". 맨몸운동이거나 미입력이면 null */
+  location_label: string | null;
   target_weight: number | null;
   target_sets: number | null;
   target_reps: number | null;
@@ -237,14 +259,6 @@ export type RoutineItem = {
    * 된다. 근거가 없거나(처음 하는 기구) 무게 개념이 없는 운동이면 null.
    */
   weight_suggestion: WeightSuggestion | null;
-};
-
-/** weight_suggestion RPC 결과. 올릴지 내릴지와 그 근거 문구. */
-export type WeightSuggestion = {
-  action: 'increase' | 'decrease';
-  current_kg: number;
-  suggested_kg: number;
-  reason: string;
 };
 
 /** 몸무게 기록 한 줄. 하루에 하나만 남는다(같은 날 다시 재면 덮어씀). */
@@ -277,18 +291,25 @@ export type BodyStatus = {
  */
 export type EquipmentLookup = {
   id: string;
+  catalog_id: string;
   name: string;
   /** 운동 이름의 한글 직역. 예: 체스트 프레스 → "가슴 밀기". 없으면 화면에서 생략한다. */
   name_ko: string | null;
-  /** 머신 / 스미스머신 / 케이블 / 맨몸 / 유산소 */
-  station_kind: string | null;
+  /** 머신 / 스미스머신 / 케이블 / 덤벨 / 맨몸 / 유산소 */
+  station_kind: string;
   description: string | null;
   why_it_matters: string | null;
+  /** 이 운동에서만 맞는 동작 순서. 공통 호흡·템포 규칙은 앱이 붙인다 */
+  how_to_steps: string[] | null;
+  /** "이것만은 지키세요" 한두 줄 */
+  form_caution: string | null;
   target_muscle: string | null;
   video_url: string;
   /** 시작 자세 사진. 글만으로는 어느 기구인지부터 막힌다. */
   image_url: string | null;
   qr_code_val: string;
+  /** 기구가 있는 위치. 예: "13번 구역" */
+  location_label: string | null;
   base_weight_kg: number | null;
   weight_step_kg: number;
 };
@@ -358,6 +379,62 @@ export type WorkoutSummary = {
   by_muscle: { target_muscle: string | null; completed_count: number; total_sets: number }[];
 };
 
+/** 추이 그래프의 막대 하나. 운동이 없는 구간도 0 으로 채워서 온다. */
+export type TrendPoint = {
+  /** YYYY-MM-DD. 이 막대가 덮는 구간의 첫날 */
+  bucket_start: string;
+  /** YYYY-MM-DD. 하루짜리 막대면 bucket_start 와 같다 */
+  bucket_end: string;
+  completed_count: number;
+  total_sets: number;
+  /** 이 구간에 운동한 날 수. 하루짜리 막대면 0 또는 1 */
+  workout_days: number;
+};
+
+export type WorkoutTrend = {
+  bucket: 'day' | 'week';
+  points: TrendPoint[];
+  completed_count: number;
+  total_sets: number;
+  workout_days: number;
+  /** 직전 같은 길이 구간의 합계. "지난주보다 늘었다"를 말하는 데 쓴다 */
+  previous_total_sets: number;
+  previous_workout_days: number;
+};
+
+/** 공유 카드에 실리는 오늘 운동 한 종목 */
+export type ShareCardExercise = {
+  name: string;
+  name_ko: string | null;
+  target_muscle: string | null;
+  sets: number | null;
+  reps: number | null;
+  /** 유산소면 분, 근력이면 null */
+  duration_minutes: number | null;
+  /** 처방 무게(kg). 맨몸·유산소면 null */
+  weight_kg: number | null;
+};
+
+/** get_workout_share_card 응답. 완료한 운동이 없으면 null 이 온다. */
+export type WorkoutShareCard = {
+  date: string;
+  /** 새벽 / 아침 / 낮 / 저녁 / 밤 — 마친 시각 기준 */
+  part_of_day: string;
+  /** 평생 출석일 수. "312번째 운동"으로 쓴다 */
+  day_count: number;
+  /** 첫 완료부터 마지막 완료까지. 한 종목만 했으면 0 이라 화면에서 숨긴다 */
+  duration_minutes: number;
+  exercise_count: number;
+  total_sets: number;
+  total_reps: number;
+  total_minutes_cardio: number;
+  /** 처방 kg × 세트 × 횟수. 핀 칸 값은 쓰지 않는다 */
+  total_volume_kg: number;
+  points: number;
+  muscles: string[];
+  exercises: ShareCardExercise[];
+};
+
 export type VisitStats = {
   /** 평생 출석일 수(DAY_N 배지용). 헬스장 구분 없이 센다. */
   total_days: number;
@@ -424,20 +501,20 @@ export type Database = {
         Update: Partial<KioskEnrollAttempt>;
         Relationships: [];
       };
-      equipments: {
-        Row: Equipment;
-        Insert: Partial<Equipment> & Pick<Equipment, 'qr_code_val'>;
-        Update: Partial<Equipment>;
-        Relationships: [
-          Relationship<'equipments_apt_id_fkey', 'apt_id', 'apartments'>,
-          Relationship<'equipments_catalog_id_fkey', 'catalog_id', 'exercise_catalog'>,
-        ];
-      };
       exercise_catalog: {
         Row: ExerciseCatalog;
         Insert: Partial<ExerciseCatalog> & Pick<ExerciseCatalog, 'name' | 'video_url'>;
         Update: Partial<ExerciseCatalog>;
         Relationships: [];
+      };
+      equipments: {
+        Row: Equipment;
+        Insert: Partial<Equipment> & Pick<Equipment, 'qr_code_val' | 'catalog_id'>;
+        Update: Partial<Equipment>;
+        Relationships: [
+          Relationship<'equipments_apt_id_fkey', 'apt_id', 'apartments'>,
+          Relationship<'equipments_catalog_id_fkey', 'catalog_id', 'exercise_catalog'>,
+        ];
       };
       daily_routines: {
         Row: DailyRoutine;
@@ -556,6 +633,14 @@ export type Database = {
       get_workout_summary: {
         Args: { p_user_id: string; p_from: string; p_to: string };
         Returns: WorkoutSummary;
+      };
+      get_workout_trend: {
+        Args: { p_user_id: string; p_from: string; p_to: string; p_bucket?: 'day' | 'week' };
+        Returns: WorkoutTrend;
+      };
+      get_workout_share_card: {
+        Args: { p_user_id: string; p_date?: string };
+        Returns: WorkoutShareCard | null;
       };
       get_visit_stats: {
         Args: { p_user_id: string };
