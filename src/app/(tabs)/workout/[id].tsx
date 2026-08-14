@@ -182,6 +182,7 @@ function WorkoutSession({
       totalSets={totalSets}
       seconds={session.restRemaining}
       ageGroup={user?.profile_data?.age_group}
+      routineId={item.routine_id}
     />
   ) : (
     <LoggingView item={item} pin={pin} />
@@ -413,15 +414,21 @@ function RestingView({
   totalSets,
   seconds,
   ageGroup,
+  routineId,
 }: {
   nextSet: number;
   totalSets: number;
   seconds: number;
   ageGroup: AgeGroup | undefined;
+  routineId: string;
 }) {
-  // 세트 번호로 고른다. 남은 초로 고르면 1초마다 문구가 바뀌어서, 읽는 도중에
-  // 글자가 갈리고 화면만 산만해진다. 세트가 넘어갈 때만 새 문구가 나온다.
-  const encouragement = useMemo(() => pickRestMessage(ageGroup, nextSet), [ageGroup, nextSet]);
+  // 운동 + 세트 번호로 고른다. 세트 번호만 쓰면 보통 2~3 뿐이라 문구를 아무리
+  // 넣어도 두세 개만 돌아간다. 남은 초는 넣지 않는다 — 1초마다 바뀌면 읽다가
+  // 놓치고 화면만 산만해진다.
+  const encouragement = useMemo(
+    () => pickRestMessage(ageGroup, routineId, nextSet),
+    [ageGroup, routineId, nextSet],
+  );
 
   return (
     <>
