@@ -9,10 +9,9 @@ import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
 import {
-  CARDIO_HOW_TO_STEPS,
   FIRST_TIME_RULE,
   formatVolume,
-  HOW_TO_STEPS,
+  howToSteps,
   isCardioItem,
   needsWeightLog,
   WEIGHT_RULE,
@@ -259,7 +258,7 @@ function ReadyView({ item }: { item: RoutineItem }) {
           하는 방법
         </Text>
         <View style={styles.steps}>
-          {(isCardio ? CARDIO_HOW_TO_STEPS : HOW_TO_STEPS).map((step, index) => (
+          {howToSteps(item).map((step: string, index: number) => (
             <View key={step} style={styles.step}>
               <View style={styles.stepBadge}>
                 <Text style={styles.stepNumber} maxFontSizeMultiplier={1.2}>
@@ -273,6 +272,18 @@ function ReadyView({ item }: { item: RoutineItem }) {
           ))}
         </View>
       </View>
+
+      {/* 그 운동에서 다치는 대표 경로 하나. 순서를 다 읽지 않는 분도 이건 본다. */}
+      {item.form_caution ? (
+        <View style={styles.cautionBox}>
+          <Text style={styles.cautionTitle} maxFontSizeMultiplier={1.2}>
+            이것만은 지켜주세요
+          </Text>
+          <Text style={styles.cautionText} maxFontSizeMultiplier={1.3}>
+            {item.form_caution}
+          </Text>
+        </View>
+      ) : null}
 
       {/* 무게가 없는 운동(유산소·맨몸)에는 "한 칸 올리세요" 안내가 맞지 않는다.
           유산소는 "하는 방법"에 속도 조절 안내가 이미 들어 있다. */}
@@ -674,6 +685,25 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: FontSize.body,
     fontWeight: '500',
+    lineHeight: FontSize.body * 1.5,
+    letterSpacing: LetterSpacing.body,
+    color: Colors.text,
+  },
+  cautionBox: {
+    gap: Spacing.sm,
+    padding: Spacing.xl,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.dangerFaint,
+  },
+  cautionTitle: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.danger,
+  },
+  cautionText: {
+    fontSize: FontSize.body,
+    fontWeight: '600',
     lineHeight: FontSize.body * 1.5,
     letterSpacing: LetterSpacing.body,
     color: Colors.text,

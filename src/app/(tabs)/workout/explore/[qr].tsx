@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { EquipmentError, getEquipmentByQr } from '@/features/equipment/api';
-import { FIRST_TIME_RULE, HOW_TO_STEPS, WEIGHT_RULE } from '@/features/routine/guidance';
+import { FIRST_TIME_RULE, howToSteps, WEIGHT_RULE } from '@/features/routine/guidance';
 import { primaryName, secondaryName } from '@/features/routine/labels';
 import type { EquipmentLookup } from '@/lib/database.types';
 
@@ -127,7 +127,7 @@ export default function EquipmentExploreScreen() {
             하는 방법
           </Text>
           <View style={styles.steps}>
-            {HOW_TO_STEPS.map((step, index) => (
+            {howToSteps(equipment).map((step: string, index: number) => (
               <View key={step} style={styles.step}>
                 <View style={styles.stepBadge}>
                   <Text style={styles.stepNumber} maxFontSizeMultiplier={1.2}>

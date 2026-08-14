@@ -132,6 +132,10 @@ export type ExerciseCatalog = {
   description: string | null;
   /** 이 운동이 생활에서 왜 중요한지. 시니어 동기부여용 한 단락 */
   why_it_matters: string | null;
+  /** 이 운동에서만 맞는 동작 순서. 공통 호흡·템포 규칙은 앱이 붙인다 */
+  how_to_steps: string[] | null;
+  /** "이것만은 지키세요" 한두 줄 */
+  form_caution: string | null;
   target_muscle: string | null;
   video_url: string;
   /** 표준 성인 남성 시작 무게. null 이면 무게 없이 맨몸으로 안내한다 */
@@ -207,6 +211,10 @@ export type RoutineItem = {
   station_kind: string;
   description: string | null;
   why_it_matters: string | null;
+  /** 이 운동에서만 맞는 동작 순서. 공통 호흡·템포 규칙은 앱이 붙인다 */
+  how_to_steps: string[] | null;
+  /** "이것만은 지키세요" 한두 줄 */
+  form_caution: string | null;
   target_muscle: string | null;
   video_url: string;
   qr_code_val: string | null;
@@ -236,6 +244,10 @@ export type EquipmentLookup = {
   station_kind: string;
   description: string | null;
   why_it_matters: string | null;
+  /** 이 운동에서만 맞는 동작 순서. 공통 호흡·템포 규칙은 앱이 붙인다 */
+  how_to_steps: string[] | null;
+  /** "이것만은 지키세요" 한두 줄 */
+  form_caution: string | null;
   target_muscle: string | null;
   video_url: string;
   qr_code_val: string;

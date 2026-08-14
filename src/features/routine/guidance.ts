@@ -3,29 +3,50 @@ import type { RoutineItem } from '@/lib/database.types';
 /**
  * 기구 앞에서 읽는 안내 문구.
  *
- * 기구별 개별 설명은 equipments.description 에 채울 수 있지만(트레이너가
- * 직접 쓰는 것), 세트 사이 호흡·자세 같은 공통 순서는 여기 고정 문구로
- * 둔다. 억지로 기구 이름을 넣어 그럴듯한 문장을 지어내면 틀린 자세를
- * 알려주게 되므로, 기구에 상관없이 맞는 말만 적었다.
+ * 운동별 동작 순서는 도감(exercise_catalog.how_to_steps)에 있다. 이 파일은
+ * 그 뒤에 붙는 공통 규칙과 무게 고르는 법을 맡는다.
  */
-export const HOW_TO_STEPS: readonly string[] = [
-  '자리에 앉아 등과 허리를 등받이에 붙입니다.',
-  '손잡이나 발판을 잡고, 팔다리가 너무 굽지 않게 자리를 맞춥니다.',
-  '힘을 주면서 둘 셀 동안 밀고, 셋 셀 동안 천천히 돌아옵니다.',
-  '밀 때 숨을 내쉬고, 돌아올 때 들이마십니다.',
-  '한 세트가 끝나면 1분쯤 쉬었다가 다음 세트를 합니다.',
+/**
+ * 모든 근력운동 뒤에 공통으로 붙는 규칙.
+ *
+ * 기구마다 동작은 달라도 호흡·속도·휴식은 같다. 운동별 순서는 도감
+ * (exercise_catalog.how_to_steps)이 갖고 있고, 여기 있는 건 그 뒤에
+ * 덧붙는 공통분모다 — 75개 운동에 같은 문장을 복사해 두지 않으려고 나눴다.
+ *
+ * 출처: CDC/NIA 「Growing Stronger: Strength Training for Older Adults」
+ * (미국 질병통제예방센터 발행, Tufts 대학 개발). 원문의 규칙을 그대로 옮겼다.
+ *   · "raising the weight (to a count of two to four) and then lowering it
+ *      (to a count of four) in a smooth, fluid motion"
+ *   · "breathe regularly throughout the exercises — don't hold your breath!"
+ *   · "Don't lock your elbows; keep a slight bend in your arms"
+ *   · "Don't let momentum do the work"
+ */
+export const COMMON_STRENGTH_STEPS: readonly string[] = [
+  '힘을 주는 동안 둘을 세고, 돌아올 때는 넷을 세며 천천히 움직입니다.',
+  '힘줄 때 숨을 내쉬고 돌아올 때 들이마십니다. 숨을 참지 마세요.',
+  '팔꿈치나 무릎을 끝까지 펴서 잠그지 말고, 살짝 굽힌 상태로 두세요.',
+  '반동을 쓰지 말고, 한 세트가 끝나면 1분쯤 쉬었다가 다음 세트를 합니다.',
 ];
 
 /**
- * 유산소 기구(트레드밀 등) 앞에서 읽는 순서. 근력 기구용 HOW_TO_STEPS 와
- * 다르게 "세트 사이 쉼"이 아니라 "쉬지 않고 이어서 하는 시간"이 핵심이라
+ * 유산소용 공통 규칙. 근력과 달리 "세트"가 없고 "이어서 하는 시간"이 핵심이라
  * 따로 둔다.
  */
-export const CARDIO_HOW_TO_STEPS: readonly string[] = [
-  '아주 천천히 시작해서 몸을 3분쯤 덥힙니다.',
-  '옆 사람과 말은 할 수 있지만 노래는 못 부를 정도의 속도를 유지합니다.',
+export const COMMON_CARDIO_STEPS: readonly string[] = [
   '숨이 너무 차거나 어지러우면 속도를 낮추거나 잠시 멈춥니다.',
-  '끝나기 전 2~3분은 다시 천천히 속도를 줄여 마무리합니다.',
+];
+
+/**
+ * 도감에 순서가 아직 안 채워진 운동을 위한 최소한의 안내.
+ *
+ * 예전에는 이 자리에 "자리에 앉아 등받이에 붙이고 …" 같은 머신 전용 문장이
+ * 있었다. 그게 랫 풀다운·의자 스쿼트·데드버그에도 똑같이 나갔다 — 기구와
+ * 다른 말을 하는 안내는 없느니만 못하다. 그래서 어떤 운동에도 틀리지 않는
+ * 말만 남겼다.
+ */
+export const FALLBACK_STEPS: readonly string[] = [
+  '기구에 붙은 안내 그림을 보고 자리와 높이를 몸에 맞춥니다.',
+  '자세를 잡은 뒤 천천히 힘을 주고, 천천히 처음 자리로 돌아옵니다.',
 ];
 
 /** 근력: "3세트 × 12회", 유산소: "15분" 처럼 오늘 할 양을 한 줄로. 값이 없으면 null. */
@@ -71,3 +92,20 @@ export const WEIGHT_RULE =
   '마지막 한 개를 들 때 "두세 개는 더 하겠다" 싶으면 다음에 한 칸 올리고, "더는 못 들겠다" 싶으면 한 칸 내리세요.';
 
 export const FIRST_TIME_RULE = '처음 해 보시는 기구라면 맨 위 한두 칸에서 시작하세요.';
+
+/**
+ * 이 운동의 "하는 방법" 전체. 도감의 운동별 순서 뒤에 공통 규칙을 붙인다.
+ * 도감이 비어 있으면 어떤 운동에도 틀리지 않는 최소 안내로 대신한다.
+ */
+export function howToSteps(item: RoutineHowTo): string[] {
+  const own = item.how_to_steps?.length ? item.how_to_steps : FALLBACK_STEPS;
+  const common = item.target_duration_minutes != null ? COMMON_CARDIO_STEPS : COMMON_STRENGTH_STEPS;
+  return [...own, ...common];
+}
+
+/** howToSteps 가 필요로 하는 최소한의 모양. RoutineItem 과 EquipmentLookup 둘 다 만족한다. */
+export type RoutineHowTo = {
+  how_to_steps: string[] | null;
+  /** 유산소인지 가르는 값. 기구 조회(EquipmentLookup)에는 없으므로 없어도 된다. */
+  target_duration_minutes?: number | null;
+};
