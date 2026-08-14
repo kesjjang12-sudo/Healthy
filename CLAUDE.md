@@ -90,11 +90,17 @@
 `claude/fitroutine-db-schema-epbb3p`, `claude/github-friend-invite-wrmsh4`,
 `claude/toss-app-ui-ux-design-zikopg`
 
-## 배포 경로가 둘이다 — 웹만 올리면 앱은 그대로다
+## 배포 경로가 둘이다 (2026-08-14부터 CI 가 자동으로 한다)
 
-- **gh-pages** = PWA(웹). 위 절차대로 세션마다 올리고 있다.
+- **gh-pages** = PWA(웹)
 - **EAS Update** = 태블릿·폰에 설치된 앱. `app.json` 의 `updates.url` 로 받는다.
-  `npx eas update --branch preview --message "..."` 를 따로 돌려야 갱신된다.
 
-지금까지 이 문서에 웹 절차만 있어서 설치형 앱이 오래 방치됐다. UI 가 바뀌는
-배포를 했으면 **둘 다** 올릴 것.
+앱의 자동 업데이트는 **받는 쪽만 자동**이다. 올리는 쪽(`eas update`)은 누가
+돌려야 하는데 그동안 아무도 안 돌려서 설치형 앱이 오래 멈춰 있었다.
+
+이제 `.github/workflows/deploy.yml` 이 **main 에 푸시되면 둘 다 배포한다.**
+그러니 웬만하면 손으로 배포하지 말고 main 에 푸시만 할 것 — 위의 gh-pages 수동
+절차는 CI 가 멈췄을 때의 대비책으로 남겨 둔다.
+
+CI 가 앱 업데이트까지 하려면 저장소 시크릿 `EXPO_TOKEN` 이 있어야 한다.
+없으면 웹만 나가고 경고만 남긴다(빌드는 실패하지 않는다).
