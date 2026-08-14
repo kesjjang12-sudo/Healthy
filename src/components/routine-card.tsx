@@ -3,6 +3,7 @@ import { Text } from '@/components/app-text';
 
 import { CheckMark } from '@/components/check-mark';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing, TouchTarget } from '@/constants/theme';
+import { placeChip, placeText, primaryName, secondaryName } from '@/features/routine/labels';
 import type { RoutineItem } from '@/lib/database.types';
 
 type Props = {
@@ -28,20 +29,18 @@ function formatTarget(item: RoutineItem): string {
   return parts.join(' · ');
 }
 
-/** 기구가 어디 있는지(또는 기구가 필요 없는지)를 한 마디로 */
-function formatPlace(item: RoutineItem): string | null {
-  if (item.location_label) return item.location_label;
-  // equip_id 가 없으면 이 단지에 기구가 없어 맨몸운동으로 대체된 처방이다.
-  if (item.equip_id === null) return '기구 없이';
-  return null;
-}
-
 export function RoutineCard({ item, order, onPress }: Props) {
   const done = Boolean(item.is_completed);
-  const place = formatPlace(item);
-  const label = `${order}번째 운동, ${item.name}, ${formatTarget(item)}${
-    place ? `, ${place}` : ''
-  }${done ? ', 완료' : ''}`;
+  const title = primaryName(item);
+  const equipName = secondaryName(item);
+  const place = placeChip(item);
+  const spoken = placeText(item);
+
+  // 읽어 줄 때는 쉬운 이름과 기구 이름을 둘 다 부른다 — 기구 앞에 서서
+  // 이름표와 맞춰봐야 하는 분에게는 기구 이름도 필요하다.
+  const label = `${order}번째 운동, ${title}${equipName ? `, ${equipName}` : ''}, ${formatTarget(
+    item,
+  )}${spoken ? `, ${spoken}` : ''}${done ? ', 완료' : ''}`;
 
   const body = (
     <>
@@ -56,28 +55,53 @@ export function RoutineCard({ item, order, onPress }: Props) {
       </View>
 
       <View style={styles.texts}>
-        <Text style={[styles.name, done && styles.nameDone]} maxFontSizeMultiplier={1.3}>
-          {item.name}
+        {/* 무슨 동작인지가 가장 크다. 기구 이름은 그 아래 작게 —
+            "레그 프레스"는 헬스장을 오래 다닌 사람의 말이라 처음 오신 분에게는
+            아무것도 알려주지 못한다. */}
+        <Text style={[styles.title, done && styles.titleDone]} maxFontSizeMultiplier={1.3}>
+          {title}
         </Text>
+        {equipName ? (
+          <Text style={styles.equipName} maxFontSizeMultiplier={1.3}>
+            {equipName}
+            {item.target_muscle ? `  ·  ${item.target_muscle}` : ''}
+          </Text>
+        ) : item.target_muscle ? (
+          <Text style={styles.equipName} maxFontSizeMultiplier={1.3}>
+            {item.target_muscle}
+          </Text>
+        ) : null}
         <Text style={styles.target} maxFontSizeMultiplier={1.3}>
           {formatTarget(item)}
-          {item.target_muscle ? `  ·  ${item.target_muscle}` : ''}
         </Text>
       </View>
 
-      {/* 토스 목록처럼 오른쪽 끝에 보조정보 — 기구를 찾아가야 하는 시니어에게
-          위치는 이름 다음으로 중요한 정보다. */}
+      {/* 기구에 붙은 번호표와 같은 숫자를 오른쪽에 크게. 목록을 훑는 동안
+          "몇 번으로 가면 되는지"가 눈에 먼저 들어와야 한다. */}
       {place ? (
-        <Text style={styles.place} maxFontSizeMultiplier={1.2}>
-          {place}
-        </Text>
+        <View style={[styles.placeChip, done && styles.placeChipDone]}>
+          <Text
+            style={[styles.placeMain, done && styles.placeTextDone]}
+            maxFontSizeMultiplier={1.2}>
+            {place.main}
+          </Text>
+          {place.sub ? (
+            <Text
+              style={[styles.placeSub, done && styles.placeTextDone]}
+              maxFontSizeMultiplier={1.2}>
+              {place.sub}
+            </Text>
+          ) : null}
+        </View>
       ) : null}
     </>
   );
 
+  // accessible 을 켜야 위 label 한 줄로 읽힌다. 안 켜면 위치 칩이
+  // "22번" / "구역" 두 조각으로 따로 읽혀 무슨 말인지 알 수 없다.
   if (!onPress) {
     return (
-      <View style={styles.row} accessibilityLabel={label}>
+      <View style={styles.row} accessible accessibilityLabel={label}>
         {body}
       </View>
     );
@@ -130,25 +154,55 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
-  name: {
-    fontSize: FontSize.subtitle,
+  title: {
+    fontSize: FontSize.headline,
     fontWeight: '700',
+    lineHeight: FontSize.headline * 1.3,
     letterSpacing: LetterSpacing.subtitle,
     color: Colors.text,
   },
-  nameDone: {
+  titleDone: {
     color: Colors.textSecondary,
   },
-  target: {
+  equipName: {
     fontSize: FontSize.caption,
     fontWeight: '500',
     letterSpacing: LetterSpacing.body,
+    color: Colors.textTertiary,
+  },
+  target: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },
-  place: {
-    fontSize: FontSize.caption,
+  placeChip: {
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // 숫자가 한 자리든 두 자리든 칩 너비가 같아야 목록의 오른쪽 끝이 흔들리지 않는다.
+    minWidth: 74,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.primaryFaint,
+  },
+  placeChipDone: {
+    backgroundColor: Colors.surfacePressed,
+  },
+  placeMain: {
+    fontSize: FontSize.subtitle,
     fontWeight: '700',
+    letterSpacing: LetterSpacing.subtitle,
+    color: Colors.primary,
+  },
+  placeSub: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
     letterSpacing: LetterSpacing.body,
     color: Colors.primary,
+  },
+  placeTextDone: {
+    color: Colors.textTertiary,
   },
 });

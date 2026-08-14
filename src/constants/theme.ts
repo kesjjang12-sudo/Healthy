@@ -96,6 +96,8 @@ export const FontSize = {
   subtitle: 24,
   /** 버튼 라벨 */
   label: 24,
+  /** 목록에서 가장 먼저 읽혀야 하는 줄 — 쉬운 말로 쓴 운동 이름 */
+  headline: 28,
   /** 화면 제목 */
   title: 34,
   /** 키패드 숫자 */

@@ -18,6 +18,7 @@ import {
   weightHint,
 } from '@/features/routine/guidance';
 import { RoutineError, completeRoutine } from '@/features/routine/api';
+import { placeText, primaryName, secondaryName } from '@/features/routine/labels';
 import { useDailyRoutine } from '@/features/routine/use-daily-routine';
 import { formatRest, useWorkoutSession } from '@/features/routine/use-workout-session';
 import type { RoutineItem } from '@/lib/database.types';
@@ -196,6 +197,8 @@ function WorkoutSession({ item, onExit }: { item: RoutineItem; onExit: () => voi
 function ReadyView({ item }: { item: RoutineItem }) {
   const volume = formatVolume(item);
   const isCardio = isCardioItem(item);
+  const equipName = secondaryName(item);
+  const place = placeText(item);
 
   return (
     <>
@@ -203,17 +206,18 @@ function ReadyView({ item }: { item: RoutineItem }) {
         {item.target_muscle ? (
           <Text style={styles.eyebrow} maxFontSizeMultiplier={1.3}>
             {item.target_muscle} 운동
-            {/* 기구를 찾아가야 하면 위치를, 기구가 필요 없으면 그 사실을 바로 알린다. */}
-            {item.location_label
-              ? ` · ${item.location_label}`
-              : item.equip_id === null
-                ? ' · 기구 없이 하는 운동'
-                : ''}
           </Text>
         ) : null}
+        {/* 목록에서 크게 읽은 그 이름이 그대로 제목이 된다. 기구 이름은 그
+            아래 한 줄 — 기구 앞에서 이름표와 맞춰볼 때만 필요하다. */}
         <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-          {item.name}
+          {primaryName(item)}
         </Text>
+        {equipName ? (
+          <Text style={styles.equipName} maxFontSizeMultiplier={1.3}>
+            기구 이름 {equipName}
+          </Text>
+        ) : null}
         {/* 기구 이름만으로는 뭘 하는 기구인지 안 와닿는 분이 많다. 설명이
             채워져 있으면 그대로 보여준다 — 없으면 억지로 지어내지 않는다. */}
         {item.description ? (
@@ -222,6 +226,19 @@ function ReadyView({ item }: { item: RoutineItem }) {
           </Text>
         ) : null}
       </View>
+
+      {/* 어디로 가야 하는지는 시작 버튼을 누르기 전에 답이 나와야 한다.
+          기구에 붙은 번호표와 같은 숫자를 그대로 크게 적는다. */}
+      {place ? (
+        <View style={styles.placeBox}>
+          <Text style={styles.placeLabel} maxFontSizeMultiplier={1.2}>
+            {item.equip_id === null ? '이 운동은' : '기구 위치'}
+          </Text>
+          <Text style={styles.placeValue} maxFontSizeMultiplier={1.2}>
+            {place}
+          </Text>
+        </View>
+      ) : null}
 
       {volume ? (
         <View style={styles.hero}>
@@ -279,7 +296,7 @@ function WorkingView({
     return (
       <>
         <Text style={styles.name} maxFontSizeMultiplier={1.2}>
-          {item.name}
+          {primaryName(item)}
         </Text>
 
         <View style={styles.hero}>
@@ -301,7 +318,7 @@ function WorkingView({
   return (
     <>
       <Text style={styles.name} maxFontSizeMultiplier={1.2}>
-        {item.name}
+        {primaryName(item)}
       </Text>
 
       <View style={styles.hero}>
@@ -414,8 +431,8 @@ function FinishedView({
       </Text>
       <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
         {isCardioItem(item)
-          ? `${item.name} ${item.target_duration_minutes}분을 마치셨습니다.`
-          : `${item.name} ${item.target_sets ?? 1}세트를 ${pin}칸으로 마치셨습니다.`}
+          ? `${primaryName(item)} ${item.target_duration_minutes}분을 마치셨습니다.`
+          : `${primaryName(item)} ${item.target_sets ?? 1}세트를 ${pin}칸으로 마치셨습니다.`}
       </Text>
       {pointsAwarded ? (
         <Text style={styles.pointsEarned} maxFontSizeMultiplier={1.3}>
@@ -503,6 +520,34 @@ const styles = StyleSheet.create({
     lineHeight: FontSize.title * 1.3,
     letterSpacing: LetterSpacing.title,
     color: Colors.text,
+  },
+  equipName: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textTertiary,
+  },
+  placeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.primaryFaint,
+  },
+  placeLabel: {
+    fontSize: FontSize.body,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+  },
+  placeValue: {
+    fontSize: FontSize.subtitle,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.subtitle,
+    color: Colors.primary,
   },
   description: {
     fontSize: FontSize.body,

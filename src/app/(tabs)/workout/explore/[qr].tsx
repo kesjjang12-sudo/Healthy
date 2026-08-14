@@ -8,6 +8,7 @@ import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { EquipmentError, getEquipmentByQr } from '@/features/equipment/api';
 import { FIRST_TIME_RULE, HOW_TO_STEPS, WEIGHT_RULE } from '@/features/routine/guidance';
+import { primaryName, secondaryName } from '@/features/routine/labels';
 import type { EquipmentLookup } from '@/lib/database.types';
 
 /**
@@ -105,9 +106,15 @@ export default function EquipmentExploreScreen() {
               {equipment.location_label ? ` · ${equipment.location_label}` : ''}
             </Text>
           ) : null}
+          {/* 목록·상세와 같은 규칙: 무슨 동작인지가 제목, 기구 이름은 아래 작게 */}
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-            {equipment.name}
+            {primaryName(equipment)}
           </Text>
+          {secondaryName(equipment) ? (
+            <Text style={styles.equipName} maxFontSizeMultiplier={1.3}>
+              기구 이름 {secondaryName(equipment)}
+            </Text>
+          ) : null}
           {equipment.description ? (
             <Text style={styles.description} maxFontSizeMultiplier={1.3}>
               {equipment.description}
@@ -218,6 +225,12 @@ const styles = StyleSheet.create({
     lineHeight: FontSize.title * 1.3,
     letterSpacing: LetterSpacing.title,
     color: Colors.text,
+  },
+  equipName: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textTertiary,
   },
   description: {
     fontSize: FontSize.body,
