@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ExercisePhoto } from '@/components/exercise-photo';
 import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import {
@@ -111,6 +112,8 @@ export default function EquipmentExploreScreen() {
               : '오늘 루틴에는 없는 운동입니다. 궁금해서 보시는 거라면 자유롭게 살펴보세요.'}
           </Text>
         </View>
+
+        <ExercisePhoto uri={equipment.image_url} name={equipment.name_ko ?? equipment.name} />
 
         <View style={styles.headings}>
           {equipment.target_muscle ? (

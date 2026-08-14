@@ -58,6 +58,8 @@ export type GuideEquipment = {
   description: string | null;
   target_muscle: string | null;
   station_kind: string | null;
+  /** 시작 자세 사진. 어느 기구인지 글보다 사진이 빠르다. */
+  image_url: string | null;
   /** 이 헬스장에 기구가 없는 맨몸 운동은 QR 이 없다. */
   qr_code_val: string | null;
 };
@@ -98,7 +100,7 @@ function sortBodyweightFirst(items: GuideEquipment[]): GuideEquipment[] {
 export async function listEquipmentGuide(aptId: string | null): Promise<EquipmentGuideSection[]> {
   const { data, error } = await supabase
     .from('exercise_catalog')
-    .select('id,name,name_ko,description,target_muscle,station_kind,equipments(qr_code_val,apt_id)')
+    .select('id,name,name_ko,description,target_muscle,station_kind,image_url,equipments(qr_code_val,apt_id)')
     .order('name');
 
   if (error) throw toEquipmentError(error);
@@ -118,6 +120,7 @@ export async function listEquipmentGuide(aptId: string | null): Promise<Equipmen
       description: row.description,
       target_muscle: row.target_muscle,
       station_kind: row.station_kind,
+      image_url: row.image_url,
       qr_code_val: (mine ?? equipments[0])?.qr_code_val ?? null,
     };
 
