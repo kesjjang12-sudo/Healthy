@@ -4,15 +4,41 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Icon, type IconName } from '@/components/icon';
 import { PrimaryButton } from '@/components/primary-button';
 import { StrengthHookBanner } from '@/components/strength-hook-banner';
-import { Colors, FontSize, LetterSpacing, Spacing } from '@/constants/theme';
+import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { isEmptyProfile, signInAsTestUser } from '@/features/auth/anonymous';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { OAuthError, signInWithGoogle, signInWithKakao } from '@/features/auth/oauth';
 import { pickHookMessage } from '@/features/content/hooking-copy';
 
 type Provider = 'kakao' | 'google';
+
+/**
+ * 첫 화면에서 말해야 하는 세 가지. 이 앱이 누구를 위한 것이고(시니어),
+ * 어디서 쓰는 것이며(우리 아파트 헬스장), 무엇이 다른지(AI 가 매일 짜 준다).
+ *
+ * 예전엔 제목 한 줄과 근력 카피만 있어서, 처음 본 사람이 "그래서 이게
+ * 뭐 하는 앱인지"를 알 수 없었다. 로그인 버튼을 누를 이유를 여기서 준다.
+ */
+const SELLING_POINTS: readonly { icon: IconName; title: string; body: string }[] = [
+  {
+    icon: 'sparkle',
+    title: 'AI 가 매일 짜 드려요',
+    body: '나이와 지난 기록을 보고 무게와 횟수까지',
+  },
+  {
+    icon: 'building',
+    title: '우리 단지 헬스장 그대로',
+    body: '없는 기구는 나오지 않습니다',
+  },
+  {
+    icon: 'heart',
+    title: '큰 글씨와 쉬운 말로',
+    body: '기구마다 사진과 순서를 보고 따라 하세요',
+  },
+];
 
 /**
  * 개인 폰 앱의 첫 화면. 로그인 수단 3가지 — 전화번호(QR)는 카카오/구글이 못
@@ -82,15 +108,39 @@ export default function LoginScreen() {
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xxl }]}>
         <View style={styles.headings}>
-          <Text style={styles.title} maxFontSizeMultiplier={1.2}>
+          <Text style={styles.brand} maxFontSizeMultiplier={1.2}>
             핏루틴
           </Text>
+          <Text style={styles.title} maxFontSizeMultiplier={1.2}>
+            우리 아파트 헬스장{'\n'}AI 운동 코치
+          </Text>
+          {/* 소구점 세 가지 — 시니어 · 아파트 · AI 루틴 */}
           <Text style={styles.subtitle} maxFontSizeMultiplier={1.3}>
-            로그인하고 오늘의 운동을 시작하세요
+            4060 세대를 위해 만들었습니다
           </Text>
         </View>
 
-        <StrengthHookBanner message={message} size="large" />
+        <View style={styles.points}>
+          {SELLING_POINTS.map((point) => (
+            <View key={point.title} style={styles.point}>
+              <View style={styles.pointIcon}>
+                <Icon name={point.icon} size={26} color={Colors.primary} strokeWidth={2} />
+              </View>
+              <View style={styles.pointBody}>
+                <Text style={styles.pointTitle} maxFontSizeMultiplier={1.2}>
+                  {point.title}
+                </Text>
+                <Text style={styles.pointText} maxFontSizeMultiplier={1.3}>
+                  {point.body}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {/* 근력 카피는 소구점 아래에 한 번만. 소구점이 "무엇을 주는 앱인지"라면
+            이건 "왜 지금 해야 하는지"라, 둘 다 있어야 설득이 닫힌다. */}
+        <StrengthHookBanner message={message} size="compact" />
 
         {errorMessage ? (
           <Text
@@ -145,8 +195,10 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    justifyContent: 'center',
-    gap: Spacing.xxl,
+    // 소구점 세 줄이 들어오면서 내용이 길어졌다. 가운데 정렬로 두면 작은
+    // 화면에서 위가 잘려 제목부터 안 보인다.
+    justifyContent: 'flex-start',
+    gap: Spacing.xl,
     paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.xl,
     maxWidth: 700,
@@ -156,15 +208,57 @@ const styles = StyleSheet.create({
   headings: {
     gap: Spacing.sm,
   },
-  title: {
-    fontSize: FontSize.title,
+  brand: {
+    fontSize: FontSize.body,
     fontWeight: '700',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.primary,
+  },
+  title: {
+    fontSize: FontSize.headline,
+    fontWeight: '700',
+    lineHeight: FontSize.headline * 1.3,
     letterSpacing: LetterSpacing.title,
     color: Colors.text,
   },
   subtitle: {
     fontSize: FontSize.body,
     fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+  },
+  points: {
+    gap: Spacing.md,
+  },
+  point: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.lg,
+  },
+  /** 아이콘은 옅은 파랑 타일 위에. 목록 행(ListRow)의 타일과 같은 문법이다. */
+  pointIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.primaryFaint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pointBody: {
+    flex: 1,
+    gap: Spacing.xs,
+    paddingTop: Spacing.xs,
+  },
+  pointTitle: {
+    fontSize: FontSize.body,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.subtitle,
+    color: Colors.text,
+  },
+  pointText: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    lineHeight: FontSize.caption * 1.5,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },

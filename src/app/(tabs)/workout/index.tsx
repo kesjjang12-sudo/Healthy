@@ -1,6 +1,6 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -11,6 +11,7 @@ import { PrimaryButton } from '@/components/primary-button';
 import { RoutineCard } from '@/components/routine-card';
 import { StrengthHookBanner } from '@/components/strength-hook-banner';
 import { WeightNudgeModal } from '@/components/weight-nudge-modal';
+import { WittyLoading } from '@/components/witty-loading';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useCheckInListener } from '@/features/attendance/use-checkin-listener';
 import { useAuthSession } from '@/features/auth/auth-session';
@@ -201,12 +202,7 @@ export default function WorkoutTab() {
         <StrengthHookBanner message={hookMessage} size="compact" />
 
         {isLoading ? (
-          <View style={styles.centered}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={styles.centeredText} maxFontSizeMultiplier={1.3}>
-              오늘의 운동을 준비하고 있어요
-            </Text>
-          </View>
+          <WittyLoading />
         ) : errorMessage ? (
           <View style={styles.errorBox}>
             <Text
@@ -551,18 +547,6 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.body,
     lineHeight: FontSize.caption * 1.55,
     color: Colors.textTertiary,
-  },
-  centered: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.lg,
-    paddingVertical: Spacing.xxxl,
-  },
-  centeredText: {
-    fontSize: FontSize.body,
-    fontWeight: '600',
-    letterSpacing: LetterSpacing.body,
-    color: Colors.textSecondary,
   },
   errorBox: {
     gap: Spacing.lg,

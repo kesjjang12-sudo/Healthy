@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -9,6 +9,7 @@ import { ExercisePhoto } from '@/components/exercise-photo';
 import { Keypad } from '@/components/keypad';
 import { PrimaryButton } from '@/components/primary-button';
 import { WeightSuggestionCard } from '@/components/weight-suggestion-card';
+import { WittyLoading } from '@/components/witty-loading';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { pickCompletionPraise } from '@/features/content/hooking-copy';
@@ -80,11 +81,7 @@ export default function RoutineDetailScreen() {
   );
 
   if (isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
-    );
+    return <WittyLoading />;
   }
 
   if (errorMessage || !item) {
@@ -781,12 +778,6 @@ const styles = StyleSheet.create({
     maxWidth: 900,
     width: '100%',
     alignSelf: 'center',
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.background,
   },
   centeredBlock: {
     flex: 1,

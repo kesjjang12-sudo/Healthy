@@ -16,6 +16,7 @@ export type IconName =
   | 'logout'
   | 'building'
   | 'heart'
+  | 'sparkle'
   | 'coin';
 
 type Props = {
@@ -135,6 +136,15 @@ export function Icon({ name, size = 24, color = Colors.text, strokeWidth = 1.9, 
           d="M12 20c-4.5-2.9-7.5-5.8-8.6-8.4C2.2 8.7 4 5.5 7.2 5.5c1.9 0 3.5 1 4.8 2.9 1.3-1.9 2.9-2.9 4.8-2.9 3.2 0 5 3.2 3.8 6.1-1.1 2.6-4.1 5.5-8.6 8.4z"
           {...stroke}
         />
+      )}
+      {name === 'sparkle' && (
+        <>
+          <Path
+            d="M11 4.5c.3-.9 1.7-.9 2 0l1.4 4.3 4.3 1.4c.9.3.9 1.7 0 2l-4.3 1.4-1.4 4.3c-.3.9-1.7.9-2 0l-1.4-4.3-4.3-1.4c-.9-.3-.9-1.7 0-2l4.3-1.4z"
+            {...stroke}
+          />
+          <Path d="M18.5 3.5v3M17 5h3" {...stroke} strokeWidth={Math.max(1.4, strokeWidth - 0.3)} />
+        </>
       )}
       {name === 'coin' && (
         <>
