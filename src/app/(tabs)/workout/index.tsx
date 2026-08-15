@@ -1,16 +1,17 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CheckMark } from '@/components/check-mark';
+import { CourseToggle } from '@/components/course-toggle';
 import { ListRow } from '@/components/list-row';
 import { PrimaryButton } from '@/components/primary-button';
 import { RoutineCard } from '@/components/routine-card';
 import { StrengthHookBanner } from '@/components/strength-hook-banner';
 import { WeightNudgeModal } from '@/components/weight-nudge-modal';
-import { Colors, FontSize, LetterSpacing, Radius, Spacing, TouchTarget } from '@/constants/theme';
+import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useCheckInListener } from '@/features/attendance/use-checkin-listener';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { pickGreeting } from '@/features/content/greeting';
@@ -255,36 +256,25 @@ export default function WorkoutTab() {
                 <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
                   오늘은 얼마나 하실 건가요?
                 </Text>
-                <View style={styles.courseRow}>
-                  {result.course_options.map((option) => {
-                    const selected = result.course === option.course;
-                    return (
-                      <Pressable
-                        key={option.course}
-                        onPress={() => void changeCourse(option.course)}
-                        disabled={pendingCourse !== null}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected }}
-                        accessibilityLabel={`${COURSE_LABELS[option.course]}, 약 ${option.minutes}분 코스`}
-                        style={({ pressed }) => [
-                          styles.courseCard,
-                          selected && styles.courseCardSelected,
-                          pressed && styles.courseCardPressed,
-                        ]}>
-                        <Text
-                          style={[styles.courseName, selected && styles.courseNameSelected]}
-                          maxFontSizeMultiplier={1.2}>
-                          {COURSE_LABELS[option.course]}
-                        </Text>
-                        <Text
-                          style={[styles.courseMinutes, selected && styles.courseMinutesSelected]}
-                          maxFontSizeMultiplier={1.2}>
-                          약 {option.minutes}분
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                {/* 카드 두 장 대신 FIT ROTEIN 시안의 슬라이딩 토글.
+                    course_options 는 short/long 두 가지뿐이다(COURSE_LABELS 참고). */}
+                <CourseToggle
+                  options={[
+                    {
+                      value: result.course_options[0].course,
+                      label: COURSE_LABELS[result.course_options[0].course],
+                      sub: `약 ${result.course_options[0].minutes}분`,
+                    },
+                    {
+                      value: result.course_options[1].course,
+                      label: COURSE_LABELS[result.course_options[1].course],
+                      sub: `약 ${result.course_options[1].minutes}분`,
+                    },
+                  ]}
+                  value={result.course}
+                  onChange={(course) => void changeCourse(course)}
+                  disabled={pendingCourse !== null}
+                />
                 {courseError ? (
                   <Text style={styles.noticeError} maxFontSizeMultiplier={1.3}>
                     {courseError}
@@ -478,11 +468,12 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.body,
     color: Colors.success,
   },
+  /** FIT ROTEIN 시안의 히어로 카드 — 파란 면 위에 흰 글씨·흰 진행 바. */
   progress: {
-    gap: Spacing.sm,
+    gap: Spacing.md,
     padding: Spacing.xl,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.primary,
   },
   progressHead: {
     flexDirection: 'row',
@@ -493,76 +484,37 @@ const styles = StyleSheet.create({
     fontSize: FontSize.body,
     fontWeight: '700',
     letterSpacing: LetterSpacing.body,
-    color: Colors.text,
+    color: 'rgba(255,255,255,0.85)',
   },
   progressCount: {
-    fontSize: FontSize.subtitle,
+    fontSize: FontSize.headline,
     fontWeight: '700',
     letterSpacing: LetterSpacing.subtitle,
-    color: Colors.primary,
+    color: Colors.textOnPrimary,
     fontVariant: ['tabular-nums'],
   },
   progressTrack: {
-    height: 14,
+    height: 12,
     borderRadius: Radius.full,
-    backgroundColor: Colors.background,
+    backgroundColor: 'rgba(255,255,255,0.28)',
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
     borderRadius: Radius.full,
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.background,
   },
   progressFillDone: {
-    backgroundColor: Colors.success,
+    backgroundColor: Colors.background,
   },
   progressHint: {
     fontSize: FontSize.caption,
-    fontWeight: '500',
+    fontWeight: '600',
     letterSpacing: LetterSpacing.body,
-    color: Colors.textSecondary,
+    color: 'rgba(255,255,255,0.9)',
   },
   courseSection: {
     gap: Spacing.md,
-  },
-  courseRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  courseCard: {
-    flex: 1,
-    gap: Spacing.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.md,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.surface,
-    minHeight: TouchTarget.min,
-  },
-  courseCardSelected: {
-    backgroundColor: Colors.primary,
-  },
-  courseCardPressed: {
-    opacity: 0.85,
-  },
-  courseName: {
-    fontSize: FontSize.subtitle,
-    fontWeight: '700',
-    letterSpacing: LetterSpacing.subtitle,
-    color: Colors.text,
-  },
-  courseNameSelected: {
-    color: Colors.textOnPrimary,
-  },
-  courseMinutes: {
-    fontSize: FontSize.caption,
-    fontWeight: '600',
-    letterSpacing: LetterSpacing.body,
-    color: Colors.textSecondary,
-  },
-  courseMinutesSelected: {
-    color: Colors.textOnPrimary,
   },
   noticeError: {
     fontSize: FontSize.caption,

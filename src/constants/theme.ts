@@ -1,34 +1,36 @@
 /**
- * 핏루틴 디자인 토큰.
+ * 핏루틴 디자인 토큰 — FIT ROTEIN(Wanted 계열) 시스템.
  *
- * 시각 언어는 토스를 기준으로 잡았다 — 선을 긋지 않고 여백과 면으로 구분하고,
- * 색은 파랑 하나만 쓰고, 주 버튼은 화면 아래에 고정한다.
+ * 색·라운드는 계정의 FIT ROTEIN 디자인 시스템에서 가져왔다:
+ * 주색 Blue 50 #0066FF, 회색은 Cool Neutral(살짝 파란기 도는 회색, 순회색 금지).
+ * 선을 긋지 않고 여백과 면으로 구분하고, 색은 파랑 하나만 쓰고, 주 버튼은
+ * 화면 아래에 고정하는 문법은 그대로다.
  *
- * 다만 치수는 토스보다 크다. 토스는 앉아서 폰을 보는 사람 기준이고, 우리는
- * 헬스장 벽에 걸린 태블릿을 서서 조작하는 4060 시니어가 기준이다.
+ * 치수는 시안보다 크게 유지한다. 우리는 헬스장에서 서서 조작하는 4060
+ * 시니어가 기준이라, FIT ROTEIN 의 색만 가져오고 크기는 양보하지 않는다.
  * - 터치 타깃 최소 88pt (WCAG 권장 44pt의 2배)
  * - 본문 최소 20pt, 얇은 굵기 금지
  * - 본문 대비 7:1 이상 (WCAG AAA), 다크모드 없이 밝은 화면 고정
  */
 
-/** 회색은 파랑 쪽으로 살짝 기울여, 브랜드 색과 같은 계열로 읽히게 한다. */
+/** Cool Neutral 램프(FIT ROTEIN). CN10→900 … CN99→50 로 매핑했다. */
 const grey = {
-  900: '#191F28',
-  700: '#333D4B',
-  600: '#4E5968',
-  500: '#6B7684',
-  400: '#8B95A1',
-  300: '#B0B8C1',
-  200: '#D1D6DB',
-  100: '#E5E8EB',
-  50: '#F2F4F6',
+  900: '#171719',
+  700: '#37383C',
+  600: '#5A5C63',
+  500: '#70737C',
+  400: '#989BA2',
+  300: '#AEB0B6',
+  200: '#C2C4C8',
+  100: '#DBDCDF',
+  50: '#F7F7F8',
 } as const;
 
 export const Colors = {
-  /** 브랜드 — 화면에서 파랑은 여기서만 나온다 */
-  primary: '#3182F6',
-  primaryPressed: '#1B64DA',
-  primaryFaint: '#E8F3FF',
+  /** 브랜드 — 화면에서 파랑은 여기서만 나온다. FIT ROTEIN Blue 50/40/95. */
+  primary: '#0066FF',
+  primaryPressed: '#0054D1',
+  primaryFaint: '#EAF2FE',
 
   /** 배경: 흰 바탕 위에 회색 "면"으로 영역을 나눈다 */
   background: '#FFFFFF',
@@ -45,11 +47,11 @@ export const Colors = {
   /** 상태 */
   danger: '#F04452',
   dangerFaint: '#FFF0F1',
-  success: '#00A661',
-  successFaint: '#E7F8F0',
+  success: '#009F69',
+  successFaint: '#E5F7F0',
 
-  /** 선은 최후의 수단이다. 면으로 안 되는 곳에만 머리카락 굵기로 쓴다. */
-  divider: grey[100],
+  /** 선은 최후의 수단이다. CN50 을 16% 얹은 값 — 면으로 안 되는 곳에만. */
+  divider: '#E9EAEC',
 
   grey,
 } as const;
@@ -60,8 +62,8 @@ export const Colors = {
  * 화면에서 겹치지만 않으면 된다.
  */
 export const IconTint = {
-  blue: '#3182F6',
-  green: '#00A661',
+  blue: '#0066FF',
+  green: '#009F69',
   orange: '#FF9200',
   red: '#F04452',
   teal: '#00B7B9',
@@ -80,11 +82,12 @@ export const Spacing = {
   xxxl: 48,
 } as const;
 
+/** FIT ROTEIN 라운드 스케일 — 이전(10/14/20/28)보다 각을 살렸다. */
 export const Radius = {
-  sm: 10,
-  md: 14,
-  lg: 20,
-  xl: 28,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
   full: 999,
 } as const;
 

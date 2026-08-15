@@ -128,14 +128,18 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     alignItems: 'center',
   },
+  /** FIT ROTEIN 시안: 막대는 전부 브랜드 파랑, 위쪽만 둥글려 바닥에 심는다. */
   bar: {
     width: '72%',
     minWidth: 14,
-    borderRadius: Radius.sm,
-    backgroundColor: Colors.grey[300],
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 2,
+    backgroundColor: Colors.primary,
   },
   barToday: {
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.primaryPressed,
   },
   barEmpty: {
     width: '52%',
@@ -162,6 +166,6 @@ const styles = StyleSheet.create({
   },
   labelToday: {
     fontWeight: '700',
-    color: Colors.text,
+    color: Colors.primary,
   },
 });

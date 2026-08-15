@@ -67,9 +67,29 @@ export default function RankingTab() {
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
       ) : (
-        // 토스 증권의 보유 종목 목록처럼: 이름은 왼쪽, 값은 오른쪽 끝에 굵게.
-        // 칸을 나누는 카드 없이 흰 바탕에 행만 쌓고, 내 행만 옅은 파랑으로 띄운다.
-        <View style={styles.list}>
+        <>
+          {/* FIT ROTEIN 시안의 내 순위 카드 — 목록을 훑기 전에 내 위치부터 답한다. */}
+          {(() => {
+            const myRow = rows.find((row) => row.is_me);
+            return myRow ? (
+              <View style={styles.myCard}>
+                <Text style={styles.myRank} maxFontSizeMultiplier={1.2}>
+                  {myRow.rank}위
+                </Text>
+                <View style={styles.myInfo}>
+                  <Text style={styles.myName} maxFontSizeMultiplier={1.3} numberOfLines={1}>
+                    {myRow.nickname}
+                  </Text>
+                  <Text style={styles.myMeta} maxFontSizeMultiplier={1.2}>
+                    출석 {myRow.attendance_count}일
+                  </Text>
+                </View>
+              </View>
+            ) : null;
+          })()}
+          {/* 토스 증권의 보유 종목 목록처럼: 이름은 왼쪽, 값은 오른쪽 끝에 굵게.
+              칸을 나누는 카드 없이 흰 바탕에 행만 쌓고, 내 행만 옅은 파랑으로 띄운다. */}
+          <View style={styles.list}>
           {rows.map((row) => (
             <View key={row.rank} style={[styles.row, row.is_me && styles.rowMe]}>
               <View style={[styles.rankBadge, row.rank <= 3 && styles.rankBadgeTop]}>
@@ -97,7 +117,8 @@ export default function RankingTab() {
               </View>
             </View>
           ))}
-        </View>
+          </View>
+        </>
       )}
     </ScrollView>
   );
@@ -142,6 +163,38 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.body,
     color: Colors.danger,
     textAlign: 'center',
+  },
+  /** 내 순위 카드(FIT ROTEIN 시안). 옅은 파랑 면 위에 순위를 크게. */
+  myCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.lg,
+    padding: Spacing.xl,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.primaryFaint,
+  },
+  myRank: {
+    fontSize: FontSize.title,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.title,
+    color: Colors.primary,
+    fontVariant: ['tabular-nums'],
+  },
+  myInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  myName: {
+    fontSize: FontSize.body,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.text,
+  },
+  myMeta: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.primaryPressed,
   },
   list: {
     gap: Spacing.xs,

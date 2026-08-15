@@ -963,16 +963,16 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },
+  /** FIT ROTEIN 시안의 세트 진행 — 점 대신 가로로 꽉 차는 칸. */
   dots: {
     flexDirection: 'row',
-    justifyContent: 'center',
     gap: Spacing.sm,
   },
   dot: {
-    width: 18,
-    height: 18,
+    flex: 1,
+    height: 10,
     borderRadius: Radius.full,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.grey[100],
   },
   dotDone: {
     backgroundColor: Colors.primary,

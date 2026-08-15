@@ -4,9 +4,11 @@ import { Colors } from '@/constants/theme';
 
 export type IconName =
   | 'dumbbell'
+  | 'thunder'
   | 'calendar'
   | 'trophy'
   | 'chart'
+  | 'column'
   | 'person'
   | 'chevron-right'
   | 'qr'
@@ -22,6 +24,8 @@ type Props = {
   color?: string;
   /** 선 굵기. 탭바처럼 작게 쓸 땐 살짝 두껍게 주면 또렷하다. */
   strokeWidth?: number;
+  /** 활성 탭처럼 면을 채워 그린다(FIT ROTEIN 의 fill 변형). thunder 만 지원. */
+  filled?: boolean;
 };
 
 /**
@@ -31,7 +35,7 @@ type Props = {
  * 따라 모양이 달라지고 화면 톤을 흐트러뜨리기 때문이다. 대신 24pt 격자 위에
  * 같은 선 굵기·같은 둥근 끝으로 그려서 어디서나 한 세트로 읽히게 한다.
  */
-export function Icon({ name, size = 24, color = Colors.text, strokeWidth = 1.9 }: Props) {
+export function Icon({ name, size = 24, color = Colors.text, strokeWidth = 1.9, filled = false }: Props) {
   const stroke = {
     stroke: color,
     strokeWidth,
@@ -49,6 +53,21 @@ export function Icon({ name, size = 24, color = Colors.text, strokeWidth = 1.9 }
           <Path d="M17 7.5v9" {...stroke} />
           <Path d="M20 9.5v5" {...stroke} />
           <Path d="M7 12h10" {...stroke} />
+        </>
+      )}
+      {name === 'thunder' && (
+        <Path
+          d="M13.2 2.8 5.6 13.2c-.3.4 0 .9.5.9h4.6l-1.6 6.8c-.1.6.6.9 1 .4l7.6-10.4c.3-.4 0-.9-.5-.9h-4.6l1.6-6.8c.1-.6-.6-.9-1-.4z"
+          {...stroke}
+          fill={filled ? color : 'none'}
+        />
+      )}
+      {name === 'column' && (
+        <>
+          <Rect x={3.5} y={3.5} width={17} height={17} rx={3} {...stroke} />
+          <Path d="M8.2 16.5v-4" {...stroke} strokeWidth={strokeWidth + 0.4} />
+          <Path d="M12 16.5V7.5" {...stroke} strokeWidth={strokeWidth + 0.4} />
+          <Path d="M15.8 16.5v-6.5" {...stroke} strokeWidth={strokeWidth + 0.4} />
         </>
       )}
       {name === 'calendar' && (

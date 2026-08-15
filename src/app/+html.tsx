@@ -43,7 +43,7 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="핏루틴" />
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="theme-color" content="#3182F6" />
+        <meta name="theme-color" content="#0066FF" />
 
         <ScrollViewStyleReset />
       </head>

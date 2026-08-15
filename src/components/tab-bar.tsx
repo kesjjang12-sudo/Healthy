@@ -14,10 +14,10 @@ import { Colors, FontSize, LetterSpacing, Spacing, TouchTarget } from '@/constan
  * SVG 로 직접 그린 것이라 기기마다 모양이 흔들리지 않는다.
  */
 const TAB_ICONS: Record<string, IconName> = {
-  workout: 'dumbbell',
+  workout: 'thunder',
   calendar: 'calendar',
   ranking: 'trophy',
-  analysis: 'chart',
+  analysis: 'column',
   profile: 'person',
 };
 
@@ -57,6 +57,7 @@ export function TextTabBar({ state, descriptors, navigation }: BottomTabBarProps
                 size={26}
                 color={isFocused ? Colors.primary : Colors.textTertiary}
                 strokeWidth={isFocused ? 2.3 : 1.9}
+                filled={isFocused}
               />
             ) : null}
             <Text style={[styles.label, isFocused && styles.labelActive]} maxFontSizeMultiplier={1.2}>
