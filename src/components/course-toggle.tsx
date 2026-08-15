@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     backgroundColor: Colors.surface,
     padding: PADDING,
-    minHeight: 72,
+    minHeight: 56,
   },
   trackDisabled: {
     opacity: 0.6,

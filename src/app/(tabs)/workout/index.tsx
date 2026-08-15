@@ -483,7 +483,8 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.85)',
   },
   progressCount: {
-    fontSize: FontSize.headline,
+    // 시안 히어로 카드의 카운트(36px).
+    fontSize: 36,
     fontWeight: '700',
     letterSpacing: LetterSpacing.subtitle,
     color: Colors.textOnPrimary,

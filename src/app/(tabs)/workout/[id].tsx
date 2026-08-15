@@ -938,7 +938,8 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   heroValue: {
-    fontSize: FontSize.display,
+    // 시안의 무게 숫자(56px) — 이 화면의 주인공이라 토큰 스케일 밖에서 크게 간다.
+    fontSize: 56,
     fontWeight: '700',
     letterSpacing: LetterSpacing.title,
     color: Colors.primary,
