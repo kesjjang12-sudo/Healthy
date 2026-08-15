@@ -1,12 +1,12 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CalendarGrid } from '@/components/calendar-grid';
-import { PrimaryButton } from '@/components/primary-button';
-import { Colors, FontSize, LetterSpacing, Spacing } from '@/constants/theme';
+import { Icon } from '@/components/icon';
+import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { CalendarError, getAttendanceDays } from '@/features/calendar/api';
 import { formatMonthLabel, getMonthGrid, type CalendarCell } from '@/features/calendar/date-utils';
@@ -64,21 +64,29 @@ export default function CalendarTab() {
       </Text>
 
       <View style={styles.monthNav}>
-        <PrimaryButton
-          label="이전 달"
-          variant="quiet"
-          size="compact"
+        {/* FIT ROTEIN 시안의 ‹ › 화살표 버튼. 글자 버튼("이전 달")보다 조용해서
+            달 이름이 주인공으로 남는다. */}
+        <Pressable
           onPress={() => changeMonth(-1)}
-        />
+          accessibilityRole="button"
+          accessibilityLabel="이전 달"
+          style={({ pressed }) => [styles.monthArrow, pressed && styles.monthArrowPressed]}>
+          <Icon name="chevron-right" size={20} color={Colors.textSecondary} strokeWidth={2.2} />
+        </Pressable>
         <Text style={styles.monthLabel} maxFontSizeMultiplier={1.2}>
           {formatMonthLabel(cursor.getFullYear(), cursor.getMonth())}
         </Text>
-        <PrimaryButton
-          label="다음 달"
-          variant="quiet"
-          size="compact"
+        <Pressable
           onPress={() => changeMonth(1)}
-        />
+          accessibilityRole="button"
+          accessibilityLabel="다음 달"
+          style={({ pressed }) => [
+            styles.monthArrow,
+            styles.monthArrowNext,
+            pressed && styles.monthArrowPressed,
+          ]}>
+          <Icon name="chevron-right" size={20} color={Colors.textSecondary} strokeWidth={2.2} />
+        </Pressable>
       </View>
 
       {isLoading ? (
@@ -94,7 +102,8 @@ export default function CalendarTab() {
       )}
 
       <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-        파란 동그라미가 출석한 날입니다. 날짜를 누르면 그날 한 운동을 볼 수 있어요.
+        파란 점이 찍힌 날이 출석한 날이고, 파란 원이 오늘입니다. 날짜를 누르면 그날 한 운동을 볼
+        수 있어요.
       </Text>
     </ScrollView>
   );
@@ -124,6 +133,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  monthArrow: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.grey[200],
+    // 왼쪽 화살표는 chevron-right 를 뒤집어 쓴다.
+    transform: [{ scaleX: -1 }],
+  },
+  monthArrowNext: {
+    transform: [{ scaleX: 1 }],
+  },
+  monthArrowPressed: {
+    backgroundColor: Colors.surface,
   },
   monthLabel: {
     fontSize: FontSize.subtitle,

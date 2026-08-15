@@ -193,7 +193,7 @@ export default function WorkoutTab() {
         {/* 토스 자산 목록의 한 줄처럼: 타일 + 이름, 값은 오른쪽 끝. */}
         <ListRow
           icon="coin"
-          tint="orange"
+          tint="blue"
           title="내 포인트"
           value={`${(user!.total_points ?? 0).toLocaleString('ko-KR')}점`}
           valueTone="primary"
@@ -218,14 +218,14 @@ export default function WorkoutTab() {
             {/* 오늘 얼마나 왔는지. 목록만 있으면 몇 개 남았는지 세어야 한다. */}
             {routines.length > 0 ? (
               <View style={styles.progress}>
-                <View style={styles.progressHead}>
-                  <Text style={styles.progressLabel} maxFontSizeMultiplier={1.2}>
-                    {allDone ? '오늘 운동 끝!' : '오늘의 진행'}
-                  </Text>
-                  <Text style={styles.progressCount} maxFontSizeMultiplier={1.2}>
-                    {doneCount} / {routines.length}
-                  </Text>
-                </View>
+                {/* 시안 구조: 라벨 → 큰 카운트 → 진행 바 → 힌트, 전부 왼쪽 정렬. */}
+                <Text style={styles.progressLabel} maxFontSizeMultiplier={1.2}>
+                  {allDone ? '오늘 운동 끝!' : '오늘의 운동'}
+                </Text>
+                <Text style={styles.progressCount} maxFontSizeMultiplier={1.2}>
+                  {doneCount}
+                  <Text style={styles.progressCountSub}> / {routines.length} 완료</Text>
+                </Text>
                 <View style={styles.progressTrack}>
                   <View
                     style={[
@@ -471,24 +471,25 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     backgroundColor: Colors.primary,
   },
-  progressHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
   progressLabel: {
-    fontSize: FontSize.body,
-    fontWeight: '700',
+    fontSize: FontSize.caption,
+    fontWeight: '600',
     letterSpacing: LetterSpacing.body,
-    color: 'rgba(255,255,255,0.85)',
+    color: 'rgba(255,255,255,0.8)',
   },
   progressCount: {
     // 시안 히어로 카드의 카운트(36px).
     fontSize: 36,
     fontWeight: '700',
+    lineHeight: 40,
     letterSpacing: LetterSpacing.subtitle,
     color: Colors.textOnPrimary,
     fontVariant: ['tabular-nums'],
+  },
+  progressCountSub: {
+    fontSize: FontSize.subtitle,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.7)',
   },
   progressTrack: {
     height: 12,
