@@ -70,12 +70,23 @@ export default function RoutineDetailScreen() {
 
   // 마치고 나가는 길은 그냥 뒤로가기가 아니다. 목록이 방금 무엇을 마쳤는지
   // 알아야 "○○ 완료! +N점"을 띄울 수 있다.
+  //
+  // replace 를 쓰면 안 된다. 이 화면은 운동 탭 스택 안에 있어서, replace 는
+  // 목록으로 "가기만" 하고 상세 화면을 스택에서 걷어내지 않는다. 운동을
+  // 하나 마칠 때마다 화면이 하나씩 쌓이고, 쌓인 화면들은 사라진 게 아니라
+  // 높이 0 으로 살아서 각자 타이머(쉬는 시간 카운트다운)와 조회 훅을 계속
+  // 돌린다. 세 번만 반복해도 실제로 유령 화면 24개가 남는 것을 확인했고,
+  // 폰에서는 그게 쌓여 화면이 멈춘 것처럼 느려진다.
+  //
+  // dismissTo 는 목록까지 스택을 실제로 걷어내면서 파라미터도 넘겨준다.
   const goBackCompleted = useCallback(
     (name: string, points: number | null) => {
-      router.replace({
-        pathname: '/workout',
+      const href = {
+        pathname: '/workout' as const,
         params: { completed: name, ...(points ? { points: String(points) } : {}) },
-      });
+      };
+      if (router.canDismiss()) router.dismissTo(href);
+      else router.replace(href);
     },
     [router],
   );
