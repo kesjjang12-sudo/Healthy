@@ -1,4 +1,4 @@
-import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, G, Path, Rect } from 'react-native-svg';
 
 import { Colors } from '@/constants/theme';
 
@@ -30,6 +30,22 @@ type Props = {
 };
 
 /**
+ * 시각 크기 보정.
+ *
+ * 24 격자에 그린다고 크기가 같아지지 않는다. 실제로 재 보니 잉크 경계가
+ * 번개 19, 달력·차트 17, 사람 16, 트로피 15.5 로 제각각이라, 같은 size 를
+ * 줘도 탭바에서 번개만 크고 트로피만 작아 보였다. 각 아이콘을 중심(12,12)
+ * 기준으로 조정해 높이를 17 로 맞춘다. 숫자는 눈대중이 아니라 브라우저에서
+ * getBBox 로 측정한 값이다.
+ */
+const NORMALIZE: Partial<Record<IconName, { scale: number; dy?: number }>> = {
+  thunder: { scale: 17 / 19 },
+  trophy: { scale: 17 / 15.5, dy: -0.3 },
+  person: { scale: 17 / 16 },
+  // calendar · column 은 이미 17 이라 건드리지 않는다.
+};
+
+/**
  * 앱에서 쓰는 모든 아이콘. 토스처럼 단순한 선 아이콘을 SVG 로 직접 그린다.
  *
  * 이모지·글리프 문자를 쓰지 않는 원칙은 그대로다(CheckMark 참고) — 기기 폰트에
@@ -37,16 +53,25 @@ type Props = {
  * 같은 선 굵기·같은 둥근 끝으로 그려서 어디서나 한 세트로 읽히게 한다.
  */
 export function Icon({ name, size = 24, color = Colors.text, strokeWidth = 1.9, filled = false }: Props) {
+  const fix = NORMALIZE[name];
+
   const stroke = {
     stroke: color,
-    strokeWidth,
+    // scale 은 획 굵기까지 같이 키운다. 그만큼 나눠 둬야 보정한 아이콘과
+    // 안 한 아이콘의 선이 같은 굵기로 보인다.
+    strokeWidth: fix ? strokeWidth / fix.scale : strokeWidth,
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
     fill: 'none' as const,
   };
+  // 중심을 원점으로 옮겨 키운 뒤 되돌린다. 선 굵기까지 같이 커지므로
+  // 그만큼 나눠 두어야 다른 아이콘과 획이 같아진다.
+  const transform = fix
+    ? `translate(12, ${12 + (fix.dy ?? 0)}) scale(${fix.scale}) translate(-12, -12)`
+    : undefined;
 
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24">
+  const glyphs = (
+    <>
       {name === 'dumbbell' && (
         <>
           <Path d="M4 9.5v5" {...stroke} />
@@ -153,6 +178,12 @@ export function Icon({ name, size = 24, color = Colors.text, strokeWidth = 1.9, 
           <Path d="M8 12h8" {...stroke} strokeWidth={Math.max(1.4, strokeWidth - 0.3)} />
         </>
       )}
+    </>
+  );
+
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      {transform ? <G transform={transform}>{glyphs}</G> : glyphs}
     </Svg>
   );
 }
