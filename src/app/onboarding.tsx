@@ -1,10 +1,17 @@
 import { Redirect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChoiceButton } from '@/components/choice-button';
+import { FontScalePicker } from '@/components/font-scale-picker';
 import { PrimaryButton } from '@/components/primary-button';
 import { TextField } from '@/components/text-field';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
@@ -12,6 +19,7 @@ import { useAuthSession } from '@/features/auth/auth-session';
 import { logBodyWeight, parseHeightInput, parseWeightInput, sanitizeWeightText } from '@/features/body/api';
 import { needsConsent } from '@/features/legal/api';
 import { updateProfileData } from '@/features/onboarding/api';
+import { useFontScale } from '@/features/settings/font-scale';
 import {
   confirmStepIndex,
   findFirstUnansweredIndex,
@@ -20,7 +28,7 @@ import {
   questionsFor,
   type ProfileQuestion,
 } from '@/features/onboarding/questions';
-import type { ProfileData, User } from '@/lib/database.types';
+import type { FontScale, ProfileData, User } from '@/lib/database.types';
 
 /** 가로가 이만큼 넓으면 선택지를 2열로 편다. */
 const WIDE_LAYOUT_MIN_WIDTH = 900;
@@ -64,6 +72,7 @@ function OnboardingFlow({ user }: { user: User }) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { setUser, signOut } = useAuthSession();
+  const { scale: fontScale, setScale } = useFontScale();
 
   // 아픈 곳에 동의하지 않으신 분께는 그 문항을 아예 띄우지 않는다.
   const questions = useMemo(() => questionsFor(user.profile_data), [user.profile_data]);
@@ -128,6 +137,30 @@ function OnboardingFlow({ user }: { user: User }) {
     },
     [],
   );
+
+  /**
+   * 글자 크기는 고르는 즉시 화면에 반영한다 — 이 문항의 요지가 "눌러 보고
+   * 확인한다"라서, 다음 화면에 가서야 커지면 고를 수가 없다.
+   * 답으로도 기록해 두어야 최종 확인 화면과 서버 저장에 함께 실린다.
+   */
+  const handlePickFontScale = useCallback(
+    (next: FontScale) => {
+      setScale(next);
+      setAnswers((current) => ({ ...current, font_scale: next }));
+    },
+    [setScale],
+  );
+
+  /**
+   * 화면에 지금 적용돼 있는 크기를 그대로 답으로 굳힌다. handleNext 를 안 쓰는
+   * 이유는, 안 누르고 넘어가신 분의 answers 에는 아직 값이 없어서다 — 그때도
+   * 눈으로 보고 계신 크기(기본 '중간')가 저장돼야 다음에 켰을 때 안 달라진다.
+   */
+  const handleFontNext = useCallback(() => {
+    setAnswers((current) => ({ ...current, font_scale: fontScale }));
+    saveInBackground({ font_scale: fontScale });
+    setStepIndex((current) => current + 1);
+  }, [fontScale, saveInBackground]);
 
   const handleNext = useCallback(
     (question: ProfileQuestion) => {
@@ -299,7 +332,10 @@ function OnboardingFlow({ user }: { user: User }) {
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
             {question.title}
           </Text>
-          {question.mode === 'multi' || question.mode === 'body' || question.mode === 'text' ? (
+          {question.mode === 'multi' ||
+          question.mode === 'body' ||
+          question.mode === 'text' ||
+          question.mode === 'font' ? (
             <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
               {question.helper}
             </Text>
@@ -308,7 +344,22 @@ function OnboardingFlow({ user }: { user: User }) {
 
         {/* 문항 종류가 셋이다: 키·몸무게(숫자 두 칸), 닉네임(글자 한 칸),
             나머지(선택지). 순서대로 좁혀 나간다. */}
-        {isBodyStep ? (
+        {question.mode === 'font' ? (
+          <View style={styles.fontFields}>
+            <FontScalePicker value={fontScale} onChange={handlePickFontScale} />
+
+            {/* 낱글자만으로는 실제로 읽을 때 어떤지 알기 어렵다. 앱에서 실제로
+                나오는 문장을 그대로 보여 준다. */}
+            <View style={styles.fontPreview}>
+              <Text style={styles.fontPreviewLabel} maxFontSizeMultiplier={1.2}>
+                이렇게 보입니다
+              </Text>
+              <Text style={styles.fontPreviewText} maxFontSizeMultiplier={1.3}>
+                다리로 밀기{'\n'}40kg · 3세트 · 12회
+              </Text>
+            </View>
+          </View>
+        ) : isBodyStep ? (
           <View style={styles.bodyFields}>
             <TextField
               label="키 (cm)"
@@ -384,6 +435,11 @@ function OnboardingFlow({ user }: { user: User }) {
         ) : null}
         {isBodyStep ? (
           <PrimaryButton label="다음" onPress={handleBodyNext} disabled={!bodyReady} />
+        ) : null}
+        {/* 글자 크기는 아무것도 안 누르셔도 넘어갈 수 있다. 지금 화면이 이미
+            '중간'으로 그려져 있으니, 그대로 두는 것도 하나의 답이다. */}
+        {question.mode === 'font' ? (
+          <PrimaryButton label="다음" onPress={handleFontNext} />
         ) : null}
         {stepIndex > 0 ? (
           <PrimaryButton
@@ -476,6 +532,28 @@ const styles = StyleSheet.create({
   },
   bodyFields: {
     gap: Spacing.lg,
+  },
+  fontFields: {
+    gap: Spacing.lg,
+  },
+  fontPreview: {
+    gap: Spacing.xs,
+    padding: Spacing.xl,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.surface,
+  },
+  fontPreviewLabel: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+  },
+  fontPreviewText: {
+    fontSize: FontSize.subtitle,
+    fontWeight: '700',
+    lineHeight: FontSize.subtitle * 1.5,
+    letterSpacing: LetterSpacing.subtitle,
+    color: Colors.text,
   },
   optionFull: {
     flexGrow: 1,

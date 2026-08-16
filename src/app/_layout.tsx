@@ -6,6 +6,7 @@ import { SetupRequired } from '@/components/setup-required';
 import { Colors } from '@/constants/theme';
 import { AuthSessionProvider } from '@/features/auth/auth-session';
 import { DeviceRoleProvider, useDeviceRole } from '@/features/device-role/context';
+import { FontScaleProvider } from '@/features/settings/font-scale';
 import { MISSING_ENV } from '@/lib/env';
 
 export default function RootLayout() {
@@ -22,9 +23,14 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
-      <DeviceRoleProvider>
-        <RoleAwareStack />
-      </DeviceRoleProvider>
+      {/* 글자 크기는 로그인 전(설문·로그인 화면)에도 적용돼야 해서 가장 바깥에 둔다.
+          키오스크 태블릿도 같은 공급자를 쓰지만, 거기선 아무도 안 고르므로
+          기본값('중간')으로 지금과 같은 화면이 나온다. */}
+      <FontScaleProvider>
+        <DeviceRoleProvider>
+          <RoleAwareStack />
+        </DeviceRoleProvider>
+      </FontScaleProvider>
     </SafeAreaProvider>
   );
 }

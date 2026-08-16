@@ -5,6 +5,7 @@ import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChoiceButton } from '@/components/choice-button';
+import { FontScalePicker } from '@/components/font-scale-picker';
 import { ListRow } from '@/components/list-row';
 import { PrimaryButton } from '@/components/primary-button';
 import { TextField } from '@/components/text-field';
@@ -17,8 +18,9 @@ import { CONSENT_ITEMS } from '@/features/legal/consent-items';
 import { updateProfileData } from '@/features/onboarding/api';
 import { PROFILE_QUESTIONS } from '@/features/onboarding/questions';
 import { NicknameError, updateNickname } from '@/features/profile/api';
+import { useFontScale } from '@/features/settings/font-scale';
 import { copyToClipboard } from '@/lib/clipboard';
-import type { GymMembershipSummary } from '@/lib/database.types';
+import type { FontScale, GymMembershipSummary } from '@/lib/database.types';
 import { supabase } from '@/lib/supabase';
 
 const GENDER_QUESTION = PROFILE_QUESTIONS.find((q) => q.key === 'gender')!;
@@ -37,6 +39,7 @@ export default function ProfileTab() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, setUser, signOut } = useAuthSession();
+  const { scale: fontScale, setScale: setFontScale } = useFontScale();
 
   const [nickname, setNickname] = useState(user?.profile_data?.nickname ?? '');
   const [isSavingNickname, setIsSavingNickname] = useState(false);
@@ -155,6 +158,20 @@ export default function ProfileTab() {
     [user, setUser],
   );
 
+  /**
+   * 화면에 먼저 반영하고 서버에는 뒤따라 보낸다. 글자 크기는 눌러 보고 고르는
+   * 값이라 왕복을 기다리면 "눌렀는데 안 바뀌네" 가 된다. 저장이 실패해도 이
+   * 기기에는 남아 있고(AsyncStorage), 다음에 아무 화면에서나 다시 보내진다.
+   */
+  const selectFontScale = useCallback(
+    async (next: FontScale) => {
+      setFontScale(next);
+      const updated = await updateProfileData(user!.id, { font_scale: next }).catch(() => null);
+      if (updated) setUser(updated);
+    },
+    [setFontScale, user, setUser],
+  );
+
   const switchPrimary = useCallback(
     async (aptId: string) => {
       setSwitchingAptId(aptId);
@@ -255,6 +272,18 @@ export default function ProfileTab() {
             />
           ))}
         </View>
+      </View>
+
+      {/* 가입할 때 한 번 고르지만, 그때는 새 앱이라 어느 크기가 편한지 모른다.
+          며칠 써 보고 바꾸실 수 있게 같은 고르개를 여기 한 번 더 둔다. */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
+          글자 크기
+        </Text>
+        <FontScalePicker value={fontScale} onChange={(next) => void selectFontScale(next)} />
+        <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+          누르시면 앱 전체 글씨가 바로 바뀝니다.
+        </Text>
       </View>
 
       <View style={styles.section}>

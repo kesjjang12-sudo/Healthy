@@ -1,4 +1,9 @@
-import type { AgeGroup, Gender, Goal, PainArea, ProfileData } from '@/lib/database.types';
+import { DEFAULT_FONT_SCALE, FONT_SCALE_LABELS } from '@/features/settings/font-scale';
+import type { AgeGroup, FontScale, Gender, Goal, PainArea, ProfileData } from '@/lib/database.types';
+
+function isFontScale(value: unknown): value is FontScale {
+  return value === 'small' || value === 'medium' || value === 'large';
+}
 
 type Option<V> = {
   readonly value: V;
@@ -60,11 +65,27 @@ type BodyQuestion = {
   readonly helper: string;
 };
 
+/**
+ * 글자 크기 문항.
+ *
+ * 단일 선택(single)으로 두지 않은 이유: single 은 고르는 즉시 다음 문항으로
+ * 넘어간다. 글자 크기는 골라 놓고 "이 정도면 읽히나" 를 눈으로 확인해야
+ * 하는 값이라, 세 개를 눌러 보며 비교한 뒤 직접 넘어가야 한다.
+ */
+type FontQuestion = {
+  readonly key: 'font_scale';
+  readonly mode: 'font';
+  readonly title: string;
+  readonly summaryLabel: string;
+  readonly helper: string;
+};
+
 export type ProfileQuestion =
   | TextQuestion<'nickname'>
   | SingleQuestion<'gender', Gender>
   | SingleQuestion<'age_group', AgeGroup>
   | BodyQuestion
+  | FontQuestion
   | MultiQuestion<'goals', Goal>
   | MultiQuestion<'pain_areas', PainArea>;
 
@@ -82,6 +103,15 @@ export const NICKNAME_MAX_LENGTH = 12;
  * 선택지가 적은 것부터 물어 첫 화면에서 막히지 않게 한다.
  */
 export const PROFILE_QUESTIONS: readonly ProfileQuestion[] = [
+  // 글자 크기를 맨 앞에서 묻는다. 뒤에 두면 잘 안 보이는 글씨로 나머지
+  // 문항을 다 읽고 나서야 크기를 고치게 된다 — 순서가 거꾸로다.
+  {
+    key: 'font_scale',
+    mode: 'font',
+    title: '글자가 잘 보이시나요?',
+    summaryLabel: '글자 크기',
+    helper: '눌러 보시면 이 화면 글씨가 바로 바뀝니다. 편한 크기로 고르세요.',
+  },
   {
     key: 'nickname',
     mode: 'text',
@@ -184,6 +214,7 @@ export function isAnswered(question: ProfileQuestion, values: Partial<ProfileDat
   // 공백만 친 이름은 답한 걸로 치지 않는다 — "  님, 안녕하세요"가 뜬다.
   if (question.mode === 'text') return typeof value === 'string' && value.trim() !== '';
   if (question.mode === 'single') return value !== undefined;
+  if (question.mode === 'font') return isFontScale(value);
   if (!Array.isArray(value)) return false;
 
   return question.noneLabel ? true : value.length > 0;
@@ -216,6 +247,10 @@ export function formatAnswer(question: ProfileQuestion, values: Partial<ProfileD
 
   if (question.mode === 'single') {
     return question.options.find((option) => option.value === value)?.label ?? '아직 안 고르셨어요';
+  }
+
+  if (question.mode === 'font') {
+    return isFontScale(value) ? FONT_SCALE_LABELS[value] : FONT_SCALE_LABELS[DEFAULT_FONT_SCALE];
   }
 
   if (!Array.isArray(value)) return '아직 안 고르셨어요';
