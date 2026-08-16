@@ -217,7 +217,8 @@ export default function ProfileTab() {
           </Text>
         ) : (
           <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-            닉네임은 2주에 한 번 바꿀 수 있어요.
+            랭킹에서 이웃에게 보이는 이름입니다. 가입하실 때 하나 지어 드렸고, 마음에 안 드시면
+            바꾸셔도 됩니다. 한 번 바꾸면 2주 뒤에 다시 바꿀 수 있어요.
           </Text>
         )}
       </View>

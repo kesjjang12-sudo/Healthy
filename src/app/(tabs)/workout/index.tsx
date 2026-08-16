@@ -132,7 +132,10 @@ export default function WorkoutTab() {
     return () => clearTimeout(timer);
   }, [justCheckedIn]);
 
-  const name = user!.profile_data?.nickname?.trim() ?? '';
+  // 인사말이 쓰는 값(real_name)이 비었는지로 판단한다. 예전엔 nickname 을
+  // 봤는데, 이제 가입할 때 닉네임이 자동으로 붙으므로 그걸로 보면 이 권유가
+  // 영영 안 뜬다 — 정작 이름 없이 "회원님"으로 불리는 분에게 필요한 안내다.
+  const name = user!.profile_data?.real_name?.trim() ?? '';
 
   return (
     <View style={styles.screen}>
