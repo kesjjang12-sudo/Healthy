@@ -16,6 +16,11 @@ type Props<T extends string> = {
   value: T;
   onChange: (value: T) => void;
   disabled?: boolean;
+  /**
+   * 바꾸는 중. 두 번 누르는 것만 막고 흐리게는 하지 않는다 — 방금 미끄러진
+   * 썸까지 같이 흐려지면 반응한 게 아니라 멈춘 것처럼 보인다.
+   */
+  busy?: boolean;
 };
 
 /**
@@ -25,7 +30,13 @@ type Props<T extends string> = {
  * 이전 방식은 글자 정렬이 흔들렸는데, 여기서는 각 칸의 정가운데에 라벨을
  * 두어 구조적으로 어긋날 수 없다. 트랙 높이는 시니어 손가락 기준으로 키웠다.
  */
-export function CourseToggle<T extends string>({ options, value, onChange, disabled }: Props<T>) {
+export function CourseToggle<T extends string>({
+  options,
+  value,
+  onChange,
+  disabled,
+  busy,
+}: Props<T>) {
   const [trackWidth, setTrackWidth] = useState(0);
   const isSecond = value === options[1].value;
   // useRef(...).current 는 렌더 중 ref 접근이라 lint 에 걸린다. lazy state 로
@@ -56,7 +67,7 @@ export function CourseToggle<T extends string>({ options, value, onChange, disab
           <Pressable
             key={option.value}
             onPress={() => onChange(option.value)}
-            disabled={disabled}
+            disabled={disabled || busy}
             accessibilityRole="button"
             accessibilityState={{ selected }}
             accessibilityLabel={option.sub ? `${option.label}, ${option.sub}` : option.label}

@@ -40,7 +40,7 @@ export default function WorkoutTab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, refresh: refreshProfile } = useAuthSession();
-  const { result, isLoading, errorMessage, retry } = useDailyRoutine(user!.id);
+  const { result, isLoading, errorMessage, retry, refresh } = useDailyRoutine(user!.id);
   const { stats: visitStats, refresh: refreshVisitStats } = useVisitStats(user!.id);
   const hookMessage = useMemo(() => pickHookMessage(), []);
 
@@ -66,20 +66,28 @@ export default function WorkoutTab() {
   const doneCount = routines.filter((item) => item.is_completed).length;
   const allDone = routines.length > 0 && doneCount === routines.length;
 
+  /**
+   * 코스 바꾸기.
+   *
+   * refresh(조용히 갈아 끼우기)를 쓴다. 예전엔 retry 를 불러서 화면이 통째로
+   * 로딩으로 바뀌었다가 돌아왔다 — 짧게↔충분히 를 오갈 때마다 새로고침처럼
+   * 번쩍인 게 이것이다. 다 읽을 때까지 기다렸다가 pending 을 푸는 것도 같은
+   * 이유다. 먼저 풀면 아직 옛 목록인데 토글만 새 값으로 앉아 있게 된다.
+   */
   const changeCourse = useCallback(
     async (course: RoutineCourse) => {
       setPendingCourse(course);
       setCourseError(null);
       try {
         await setRoutineCourse(course);
-        retry();
+        await refresh();
       } catch {
         setCourseError('코스를 바꾸지 못했습니다. 다시 시도해 주세요.');
       } finally {
         setPendingCourse(null);
       }
     },
-    [retry],
+    [refresh],
   );
 
   // 인사말은 출석일 수가 도착하면 한 번 더 고른다("첫 방문이시네요"를 제대로
@@ -104,15 +112,18 @@ export default function WorkoutTab() {
   const handleCheckIn = useCallback(() => {
     setJustCheckedIn(true);
     refreshVisitStats();
-    retry();
-  }, [refreshVisitStats, retry]);
+    void refresh();
+  }, [refreshVisitStats, refresh]);
 
   useCheckInListener(user!.id, handleCheckIn);
 
-  // 운동을 마치고 돌아오면 이 화면은 그동안 계속 떠 있던 상태다. 다시 불러오지
-  // 않으면 방금 끝낸 운동이 목록에서 여전히 "안 한 것"으로 보이고 포인트도
-  // 그대로라, 저장이 안 된 줄 알고 같은 운동을 또 하게 된다.
-  // 첫 진입은 위 훅들이 이미 불러오므로 건너뛴다.
+  // 운동을 마치고 돌아오면 이 화면은 그동안 계속 떠 있던 상태다. 포인트를 다시
+  // 읽지 않으면 방금 받은 점수가 안 보여서, 저장이 안 된 줄 알고 같은 운동을
+  // 또 하게 된다. 첫 진입은 위 훅들이 이미 불러오므로 건너뛴다.
+  //
+  // 루틴 목록은 여기서 안 부른다 — useDailyRoutine 이 자기 useFocusEffect 에서
+  // 조용히 다시 읽는다. 예전엔 여기서 retry 까지 불러 같은 요청이 두 번 나갔고,
+  // 그중 하나가 화면을 로딩으로 갈아치워서 돌아올 때마다 번쩍였다.
   const hasFocusedOnce = useRef(false);
   useFocusEffect(
     useCallback(() => {
@@ -120,9 +131,8 @@ export default function WorkoutTab() {
         hasFocusedOnce.current = true;
         return;
       }
-      retry();
       void refreshProfile();
-    }, [retry, refreshProfile]),
+    }, [refreshProfile]),
   );
 
   // 안내는 잠깐만 띄운다. 계속 남아 있으면 다음에 열었을 때 방금 찍은 것처럼 보인다.
@@ -270,17 +280,26 @@ export default function WorkoutTab() {
                       sub: `약 ${result.course_options[1].minutes}분`,
                     },
                   ]}
-                  value={result.course}
+                  // 서버 응답을 기다리지 않고 누른 쪽으로 먼저 미끄러진다.
+                  // result.course 만 보면 목록을 다시 받을 때까지 썸이 그대로라
+                  // 눌러도 아무 일 없는 것처럼 보인다. 실패하면 pendingCourse 가
+                  // 풀리면서 서버 값으로 돌아온다.
+                  value={pendingCourse ?? result.course}
                   onChange={(course) => void changeCourse(course)}
-                  disabled={pendingCourse !== null}
+                  busy={pendingCourse !== null}
                 />
                 {courseError ? (
                   <Text style={styles.noticeError} maxFontSizeMultiplier={1.3}>
                     {courseError}
                   </Text>
                 ) : (
-                  <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-                    바꾸면 오늘 목록이 바로 다시 짜입니다. 이미 마친 운동은 그대로 남아요.
+                  <Text
+                    style={styles.footNote}
+                    maxFontSizeMultiplier={1.3}
+                    accessibilityLiveRegion="polite">
+                    {pendingCourse
+                      ? '오늘 목록을 다시 짜고 있어요…'
+                      : '바꾸면 오늘 목록이 바로 다시 짜입니다. 이미 마친 운동은 그대로 남아요.'}
                   </Text>
                 )}
               </View>
