@@ -17,6 +17,7 @@ export type IconName =
   | 'building'
   | 'heart'
   | 'sparkle'
+  | 'document'
   | 'coin';
 
 type Props = {
@@ -169,6 +170,19 @@ export function Icon({ name, size = 24, color = Colors.text, strokeWidth = 1.9, 
             {...stroke}
           />
           <Path d="M18.5 3.5v3M17 5h3" {...stroke} strokeWidth={Math.max(1.4, strokeWidth - 0.3)} />
+        </>
+      )}
+      {/* 약관·개인정보처리방침 — 모서리를 접은 종이. 글줄은 본선보다 얇게
+          그어야 24px 안에서 뭉치지 않는다. */}
+      {name === 'document' && (
+        <>
+          <Path d="M14 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5z" {...stroke} />
+          <Path d="M14 3.5v5h5" {...stroke} />
+          <Path
+            d="M8.5 13h7M8.5 16.5h4.5"
+            {...stroke}
+            strokeWidth={Math.max(1.4, strokeWidth - 0.3)}
+          />
         </>
       )}
       {name === 'coin' && (
