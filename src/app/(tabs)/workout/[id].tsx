@@ -9,19 +9,21 @@ import { ExercisePhoto } from '@/components/exercise-photo';
 import { Keypad } from '@/components/keypad';
 import { PrimaryButton } from '@/components/primary-button';
 import { WeightSuggestionCard } from '@/components/weight-suggestion-card';
+import { CardioChase } from '@/components/cardio-chase';
 import { WittyLoading } from '@/components/witty-loading';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { pickCompletionPraise } from '@/features/content/hooking-copy';
 import { pickRestMessage } from '@/features/content/rest-encouragement';
 import {
-  FIRST_TIME_RULE,
+  firstTimeRule,
   formatVolume,
   howToSteps,
   isCardioItem,
   needsWeightLog,
-  WEIGHT_RULE,
   weightHint,
+  weightRule,
+  weightUnit,
 } from '@/features/routine/guidance';
 import { RoutineError, completeRoutine } from '@/features/routine/api';
 import { placeText, primaryName, secondaryName } from '@/features/routine/labels';
@@ -418,6 +420,7 @@ function ReadyView({ item, onWeightChanged }: { item: RoutineItem; onWeightChang
         <WeightSuggestionCard
           equipId={item.equip_id}
           suggestion={item.weight_suggestion}
+          unit={weightUnit(item)}
           onApplied={onWeightChanged}
         />
       ) : null}
@@ -531,6 +534,12 @@ function WorkingView({
             </Text>
           ) : null}
         </View>
+
+        {/* 숫자 시계만 보며 버티는 15분은 길다. 토끼를 피해 깃발까지 가는
+            거북이로 같은 시간을 이야기로 보여준다. */}
+        {target !== null ? (
+          <CardioChase elapsedSeconds={elapsedSeconds} targetMinutes={target} />
+        ) : null}
 
         <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
           다 하셨으면 아래 버튼을 눌러주세요. 더 하셔도 괜찮고, 힘들면 먼저 멈추셔도 됩니다.
@@ -689,6 +698,9 @@ function LoggingView({
     );
   }
 
+  // 덤벨·스미스머신은 꽂을 핀이 없다. 손에 든 무게(kg)를 그대로 묻는다.
+  const isKg = weightUnit(item) === 'kg';
+
   return (
     <>
       <View style={styles.headings}>
@@ -696,15 +708,16 @@ function LoggingView({
           {item.target_sets ?? 1}세트 모두 끝났습니다
         </Text>
         <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          오늘 꽂으신 핀이 몇 번째 칸이었나요? 다음에 시작점으로 알려드립니다. 적으셨으면 아래에서
-          오늘 어떠셨는지 눌러 주세요 — 그걸로 마치기가 됩니다.
+          {isKg
+            ? '오늘 드신 무게가 몇 kg 이었나요? 다음에 시작점으로 알려드립니다. 적으셨으면 아래에서 오늘 어떠셨는지 눌러 주세요 — 그걸로 마치기가 됩니다.'
+            : '오늘 꽂으신 핀이 몇 번째 칸이었나요? 다음에 시작점으로 알려드립니다. 적으셨으면 아래에서 오늘 어떠셨는지 눌러 주세요 — 그걸로 마치기가 됩니다.'}
         </Text>
       </View>
 
       <View style={styles.hero}>
         <Text style={styles.heroValue} maxFontSizeMultiplier={1.2}>
           {pin === '' ? '−' : pin}
-          <Text style={styles.heroUnit}>칸</Text>
+          <Text style={styles.heroUnit}>{isKg ? 'kg' : '칸'}</Text>
         </Text>
       </View>
     </>
@@ -745,8 +758,8 @@ function FinishedView({
         {isCardioItem(item)
           ? // 처방 시간이 아니라 실제로 움직인 시간을 되짚어 준다.
             `${primaryName(item)} ${minutes}분을 마치셨습니다.`
-          : needsWeightLog(item)
-            ? `${primaryName(item)} ${item.target_sets ?? 1}세트를 ${pin}칸으로 마치셨습니다.`
+          : needsWeightLog(item) && pin !== ''
+            ? `${primaryName(item)} ${item.target_sets ?? 1}세트를 ${pin}${weightUnit(item) === 'kg' ? 'kg' : '칸'}으로 마치셨습니다.`
             : `${primaryName(item)} ${item.target_sets ?? 1}세트를 마치셨습니다.`}
       </Text>
       {/* 저장됐다는 사실만 알리고 끝내면 그냥 절차가 된다. 방금 한 일을
@@ -794,10 +807,10 @@ function WeightGuide({ item }: { item: RoutineItem }) {
           {weightHint(item)}
         </Text>
         <Text style={styles.hintText} maxFontSizeMultiplier={1.3}>
-          {WEIGHT_RULE}
+          {weightRule(item)}
         </Text>
         <Text style={styles.hintText} maxFontSizeMultiplier={1.3}>
-          {FIRST_TIME_RULE}
+          {firstTimeRule(item)}
         </Text>
       </View>
     </View>

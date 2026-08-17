@@ -81,22 +81,42 @@ export function needsWeightLog(item: RoutineItem): boolean {
  * 개인이 알아서 맞추게 되고, 무리해서 다칠 일이 적다.
  * DB 가 계산한 무게는 시작점으로만 참고하게 둔다.
  */
+/**
+ * 이 운동의 무게를 무엇으로 세는지.
+ *
+ * 머신·케이블은 무게 더미에 핀을 꽂으니 "몇 번째 칸"이 자연스럽고, 덤벨과
+ * 스미스머신(원판)은 꽂을 핀이 없어 kg 밖에 없다. 핀 기구에 kg 을 말하면
+ * 환산을 시켜야 하고, 덤벨에 "칸"을 물으면 대답할 수가 없다.
+ */
+export function weightUnit(item: { station_kind: string }): 'pin' | 'kg' {
+  return item.station_kind === '덤벨' || item.station_kind === '스미스머신' ? 'kg' : 'pin';
+}
+
 export function weightHint(item: RoutineItem): string {
   if (item.target_weight === null) {
     return '기구에 무게가 없는 운동입니다. 몸으로만 천천히 하세요.';
   }
-  // 지난번에 꽂았던 칸이 있으면 그게 가장 좋은 시작점이다 — 본인이 실제로
-  // 해 본 값이라 kg 환산 계산보다 정확하고, 기구 앞에서 바로 따라 할 수 있다.
+  // 지난번에 쓴 값이 있으면 그게 가장 좋은 시작점이다 — 본인이 실제로
+  // 해 본 값이라 처방 계산보다 정확하고, 기구 앞에서 바로 따라 할 수 있다.
   if (item.last_pin !== null) {
-    return `지난번엔 ${item.last_pin}번째 칸이었어요. 거기서 시작하세요.`;
+    return weightUnit(item) === 'kg'
+      ? `지난번엔 ${item.last_pin}kg 이었어요. 그 무게로 시작하세요.`
+      : `지난번엔 ${item.last_pin}번째 칸이었어요. 거기서 시작하세요.`;
   }
   return `${item.target_weight}kg 근처에서 시작해 보세요.`;
 }
 
-export const WEIGHT_RULE =
-  '마지막 한 개를 들 때 "두세 개는 더 하겠다" 싶으면 다음에 한 칸 올리고, "더는 못 들겠다" 싶으면 한 칸 내리세요.';
+export function weightRule(item: { station_kind: string }): string {
+  return weightUnit(item) === 'kg'
+    ? '마지막 한 개를 들 때 "두세 개는 더 하겠다" 싶으면 다음에 한 단계 무거운 것으로, "더는 못 들겠다" 싶으면 한 단계 가벼운 것으로 바꾸세요.'
+    : '마지막 한 개를 들 때 "두세 개는 더 하겠다" 싶으면 다음에 한 칸 올리고, "더는 못 들겠다" 싶으면 한 칸 내리세요.';
+}
 
-export const FIRST_TIME_RULE = '처음 해 보시는 기구라면 맨 위 한두 칸에서 시작하세요.';
+export function firstTimeRule(item: { station_kind: string }): string {
+  return weightUnit(item) === 'kg'
+    ? '처음 해 보신다면 가장 가벼운 것부터 잡으세요.'
+    : '처음 해 보시는 기구라면 맨 위 한두 칸에서 시작하세요.';
+}
 
 /**
  * 이 운동의 "하는 방법" 전체. 도감의 운동별 순서 뒤에 공통 규칙을 붙인다.

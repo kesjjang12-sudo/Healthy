@@ -10,6 +10,8 @@ import type { WeightSuggestion } from '@/lib/database.types';
 type Props = {
   equipId: string;
   suggestion: WeightSuggestion;
+  /** 핀 기구(머신·케이블)는 "칸", 덤벨·스미스머신은 kg 로 말한다. */
+  unit: 'pin' | 'kg';
   /** 적용되면 처방값이 달라지므로 화면을 다시 불러와야 한다. */
   onApplied: () => void;
 };
@@ -24,7 +26,7 @@ type Props = {
  * 내리는 제안도 같은 비중으로 보여준다. 못 따라가는 분은 무게를 스스로
  * 낮추지 않고 그냥 그만두기 때문에, 먼저 말을 걸어 줘야 한다.
  */
-export function WeightSuggestionCard({ equipId, suggestion, onApplied }: Props) {
+export function WeightSuggestionCard({ equipId, suggestion, unit, onApplied }: Props) {
   const [isApplying, setIsApplying] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -58,12 +60,16 @@ export function WeightSuggestionCard({ equipId, suggestion, onApplied }: Props) 
         {suggestion.reason}
       </Text>
 
-      {/* kg 숫자 대신 "한 칸". 회원이 기구에서 보는 건 핀 칸이지 kg 이 아니고,
+      {/* 핀 기구는 kg 숫자 대신 "한 칸" — 회원이 기구에서 보는 건 핀 칸이고,
           제안 폭도 늘 기구의 한 단(weight_step)이라 "한 칸"이 정확한 말이다.
-          "올리다/내리다"는 앱의 다른 안내(WEIGHT_RULE)와 같은 뜻으로 쓴다 —
-          올리다 = 더 무겁게. */}
+          덤벨·스미스머신은 손에 드는 무게가 곧 kg 이라 숫자를 그대로 보여준다.
+          "올리다/내리다"는 앱의 다른 안내(weightRule)와 같은 뜻 — 올리다 = 더 무겁게. */}
       <Text style={styles.change} maxFontSizeMultiplier={1.2}>
-        {isIncrease ? '지난번보다 딱 한 칸만 무겁게' : '지난번보다 한 칸 가볍게'}
+        {unit === 'kg'
+          ? `${suggestion.current_kg}kg → ${suggestion.suggested_kg}kg`
+          : isIncrease
+            ? '지난번보다 딱 한 칸만 무겁게'
+            : '지난번보다 한 칸 가볍게'}
       </Text>
 
       {/* 올리는 제안일수록 물러설 길을 분명히 적어 둔다. 어르신은 권한 것을
