@@ -5,11 +5,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/app-text';
 import { FontScalePicker } from '@/components/font-scale-picker';
+import { GrowthBadge } from '@/components/growth-badge';
 import { Icon } from '@/components/icon';
 import { ListRow } from '@/components/list-row';
 import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
+import { growthStatus } from '@/features/growth/levels';
 import {
   GymMembershipError,
   listMyGymMemberships,
@@ -179,12 +181,14 @@ export default function ProfileTab() {
         </Text>
       </Pressable>
 
+      {/* 경험치와 호칭. 운동 홈의 성장 카드와 같은 값을 요약해서 보여준다. */}
       <View style={styles.pointCard}>
+        <GrowthBadge levelIndex={growthStatus(user?.total_points ?? 0).level.index} size={34} />
         <Text style={styles.pointLabel} maxFontSizeMultiplier={1.3}>
-          내 포인트
+          {growthStatus(user?.total_points ?? 0).level.name}
         </Text>
         <Text style={styles.pointValue} maxFontSizeMultiplier={1.3}>
-          {(user?.total_points ?? 0).toLocaleString('ko-KR')}점
+          경험치 {(user?.total_points ?? 0).toLocaleString('ko-KR')}점
         </Text>
       </View>
 

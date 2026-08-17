@@ -9,6 +9,7 @@ import { ExercisePhoto } from '@/components/exercise-photo';
 import { Keypad } from '@/components/keypad';
 import { PrimaryButton } from '@/components/primary-button';
 import { WeightSuggestionCard } from '@/components/weight-suggestion-card';
+import { GrowthBadge } from '@/components/growth-badge';
 import { JourneyCheckpoint, JourneyRing } from '@/components/journey-ring';
 import { WittyLoading } from '@/components/witty-loading';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
@@ -26,6 +27,7 @@ import {
   weightUnit,
 } from '@/features/routine/guidance';
 import { RoutineError, completeRoutine } from '@/features/routine/api';
+import { GROWTH_LEVELS, levelUpBetween } from '@/features/growth/levels';
 import { COURSE, fetchJourneyMinutes, journeyPoint } from '@/features/routine/journey';
 import { placeText, primaryName, secondaryName } from '@/features/routine/labels';
 import {
@@ -213,6 +215,8 @@ function WorkoutSession({
   const [isFinished, setIsFinished] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [pointsAwarded, setPointsAwarded] = useState<number | null>(null);
+  /** 이번 완료로 오른 명예 호칭. 안 올랐으면 null. */
+  const [leveledUpTo, setLeveledUpTo] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const minutesText = typedMinutes ?? String(measuredMinutes);
@@ -281,7 +285,11 @@ function WorkoutSession({
       // 받은 점수를 그 자리에서 합산해 둔다. 서버를 다시 부르면 그만큼
       // 늦어지고, 그 사이 목록으로 나가면 포인트가 안 오른 것처럼 보인다.
       if (awarded && user) {
-        setUser({ ...user, total_points: (user.total_points ?? 0) + awarded });
+        const before = user.total_points ?? 0;
+        setUser({ ...user, total_points: before + awarded });
+        // 이 점수로 호칭이 올랐으면 완료 화면에서 승급을 축하한다 —
+        // 방금 끝낸 직후가 가장 뿌듯한 순간이다.
+        setLeveledUpTo(levelUpBetween(before, before + awarded)?.name ?? null);
       }
     } catch (error) {
       setSaveError(error instanceof RoutineError ? error.message : '기록을 저장하지 못했습니다.');
@@ -297,6 +305,7 @@ function WorkoutSession({
       pin={pin}
       minutes={minutesValue}
       pointsAwarded={pointsAwarded}
+      leveledUpTo={leveledUpTo}
       saveError={saveError}
     />
   ) : session.phase === 'ready' ? (
@@ -807,12 +816,15 @@ function FinishedView({
   pin,
   minutes,
   pointsAwarded,
+  leveledUpTo,
   saveError,
 }: {
   item: RoutineItem;
   pin: string;
   minutes: number;
   pointsAwarded: number | null;
+  /** 이번 점수로 오른 명예 호칭. 안 올랐으면 null. */
+  leveledUpTo: string | null;
   saveError: string | null;
 }) {
   // 화면이 다시 그려질 때마다 문구가 바뀌면 읽던 문장이 사라진다.
@@ -850,7 +862,7 @@ function FinishedView({
       {pointsAwarded ? (
         <View style={styles.pointsPill}>
           <Text style={styles.pointsEarned} maxFontSizeMultiplier={1.3}>
-            +{pointsAwarded}점
+            경험치 +{pointsAwarded}점
           </Text>
         </View>
       ) : saveError ? (
@@ -858,8 +870,26 @@ function FinishedView({
           {saveError}
         </Text>
       ) : null}
+
+      {/* 승급. 방금 끝낸 직후가 가장 뿌듯한 순간이라 여기서 알린다. */}
+      {leveledUpTo && !saveError ? (
+        <View style={styles.levelUpCard} accessibilityLiveRegion="polite">
+          <GrowthBadge levelIndex={levelIndexOf(leveledUpTo)} size={52} />
+          <Text style={styles.levelUpTitle} maxFontSizeMultiplier={1.2}>
+            {leveledUpTo}(으)로 올라섰습니다!
+          </Text>
+          <Text style={styles.levelUpSub} maxFontSizeMultiplier={1.3}>
+            꾸준히 나오신 결과입니다. 랭킹의 이름 옆 배지도 바뀌었어요.
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
+}
+
+/** 호칭 이름 → 배지 단계. FinishedView 는 이름만 들고 있어서 여기서 찾는다. */
+function levelIndexOf(name: string): number {
+  return GROWTH_LEVELS.find((level) => level.name === name)?.index ?? 0;
 }
 
 /** 몇 세트 남았는지 점으로. 숫자보다 눈에 먼저 들어온다. */
@@ -1059,6 +1089,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: Radius.full,
     backgroundColor: Colors.success,
+  },
+  levelUpCard: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.lg,
+    padding: Spacing.xl,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.primaryFaint,
+    alignSelf: 'stretch',
+  },
+  levelUpTitle: {
+    fontSize: FontSize.headline,
+    fontWeight: '800',
+    letterSpacing: LetterSpacing.subtitle,
+    color: Colors.primaryPressed,
+    textAlign: 'center',
+  },
+  levelUpSub: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+    textAlign: 'center',
   },
   pointsPill: {
     paddingHorizontal: Spacing.xl,

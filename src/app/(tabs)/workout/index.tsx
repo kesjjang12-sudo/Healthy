@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CheckMark } from '@/components/check-mark';
 import { CourseToggle } from '@/components/course-toggle';
+import { GrowthCard } from '@/components/growth-card';
 import { ListRow } from '@/components/list-row';
 import { PrimaryButton } from '@/components/primary-button';
 import { RoutineCard } from '@/components/routine-card';
@@ -203,14 +204,9 @@ export default function WorkoutTab() {
           </View>
         ) : null}
 
-        {/* 토스 자산 목록의 한 줄처럼: 타일 + 이름, 값은 오른쪽 끝. */}
-        <ListRow
-          icon="coin"
-          tint="blue"
-          title="내 포인트"
-          value={`${(user!.total_points ?? 0).toLocaleString('ko-KR')}점`}
-          valueTone="primary"
-        />
+        {/* 포인트를 경험치로 읽어 명예 호칭을 올린다. 숫자만 있던 "내 포인트"
+            줄이 "다음 호칭까지 얼마"라는 목표가 있는 카드가 됐다. */}
+        <GrowthCard xp={user!.total_points ?? 0} />
 
         <StrengthHookBanner message={hookMessage} size="compact" />
 

@@ -3,8 +3,10 @@ import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GrowthBadge } from '@/components/growth-badge';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
+import { growthStatus } from '@/features/growth/levels';
 import { RankingError, getApartmentLeaderboard } from '@/features/ranking/api';
 import type { LeaderboardRow } from '@/lib/database.types';
 
@@ -99,6 +101,9 @@ export default function RankingTab() {
                   {row.rank}
                 </Text>
               </View>
+              {/* 호칭 배지. 랭킹은 출석순이지만, 옆 사람이 무슨 호칭인지 보이면
+                  "나도 저기까지"라는 목표가 생긴다. */}
+              <GrowthBadge levelIndex={growthStatus(row.total_points ?? 0).level.index} size={24} />
               <Text
                 style={[styles.nickname, row.is_me && styles.nicknameMe]}
                 maxFontSizeMultiplier={1.3}
