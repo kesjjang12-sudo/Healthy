@@ -20,13 +20,32 @@ import { Platform } from 'react-native';
  * 화면이 켜져 있으면 타이머 화면 자체가 목표 도달을 보여준다.
  */
 
+/**
+ * 네이티브 빌드에 expo-notifications 가 들어간 뒤에 true 로 바꾼다.
+ *
+ * ⚠️ 이 스위치가 있는 이유 (2026-08-17 사고):
+ * 동적 import + try/catch 로 감싸 두면 안전할 거라 보고 유산소 시작에 알림
+ * 예약을 붙였는데, 설치된 앱에서 시작 버튼을 누르면 앱이 그대로 꺼졌다.
+ * expo-notifications 는 모듈 최상단에서 `requireNativeModule('ExpoBadgeModule')`
+ * 같은 호출을 실행한다 — 지금 깔린 바이너리에는 그 네이티브 모듈이 없어서
+ * 불러오는 순간 실패하고, 그 실패는 네이티브 단계라 JS try/catch 로 잡히지
+ * 않는다. Metro 는 동적 import 도 번들에 정적으로 넣기 때문에 "없으면 건너뛴다"가
+ * 성립하지 않는다. 그래서 지금은 아예 손대지 않는 것만이 안전하다.
+ *
+ * 웹 검증만으로는 이걸 못 잡는다 — 웹에서는 이 경로를 통째로 건너뛰기 때문이다.
+ * 이 값을 켤 때는 반드시 실제 기기에서 유산소 시작을 눌러 확인할 것.
+ */
+const NATIVE_ALARM_READY = false;
+
 type NotificationsModule = typeof import('expo-notifications');
 
 let cachedModule: NotificationsModule | null | undefined;
 
 async function loadModule(): Promise<NotificationsModule | null> {
   if (cachedModule !== undefined) return cachedModule;
-  if (Platform.OS === 'web') {
+  // 네이티브 모듈이 확실히 있을 때만 불러온다. 여기서 막지 않으면 아래
+  // import 가 평가되는 순간 앱이 꺼진다.
+  if (!NATIVE_ALARM_READY || Platform.OS === 'web') {
     cachedModule = null;
     return null;
   }

@@ -188,24 +188,35 @@ function WorkoutSession({
   const alarmId = useRef<string | null>(null);
   useEffect(() => {
     return () => {
-      void cancelCardioGoalAlarm(alarmId.current);
+      void cancelCardioGoalAlarm(alarmId.current).catch(() => {});
     };
   }, []);
 
   const startCardio = useCallback(() => {
+    // 운동 시작이 먼저다. 알림은 부수 기능이라, 그쪽에서 무슨 일이 나도
+    // 시작을 막지 못하게 순서와 예외 처리를 분리해 둔다.
     session.start();
     const target = item.target_duration_minutes;
     if (!isCardio || target === null) return;
-    // 목표를 채우는 순간 도착해 있을 지점을 미리 계산해 알림 문구에 싣는다.
-    const arrival = journeyPoint(journeyBase + target).current.name;
-    void scheduleCardioGoalAlarm(target, item.name_ko ?? item.name, arrival).then((id) => {
-      alarmId.current = id;
-    });
+
+    try {
+      // 목표를 채우는 순간 도착해 있을 지점을 미리 계산해 알림 문구에 싣는다.
+      const arrival = journeyPoint(journeyBase + target).current.name;
+      void scheduleCardioGoalAlarm(target, item.name_ko ?? item.name, arrival)
+        .then((id) => {
+          alarmId.current = id;
+        })
+        // catch 를 안 달면 거부된 약속이 처리되지 않은 예외로 올라간다.
+        .catch(() => {});
+    } catch {
+      // 알림을 못 걸어도 운동은 그대로 진행한다.
+    }
   }, [session, isCardio, item, journeyBase]);
 
   const finishCardio = useCallback(() => {
-    void cancelCardioGoalAlarm(alarmId.current);
+    void cancelCardioGoalAlarm(alarmId.current).catch(() => {});
     alarmId.current = null;
+    // 알림 취소가 실패해도 마치기는 진행돼야 한다.
     session.finishSet();
   }, [session]);
 
