@@ -1,15 +1,17 @@
 import { Redirect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon, type IconName } from '@/components/icon';
 import { PrimaryButton } from '@/components/primary-button';
+import { SocialButton, type SocialProvider } from '@/components/social-button';
 import { StrengthHookBanner } from '@/components/strength-hook-banner';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { isEmptyProfile, signInAsTestUser } from '@/features/auth/anonymous';
 import { useAuthSession } from '@/features/auth/auth-session';
+import { loadLastProvider, rememberProvider } from '@/features/auth/last-provider';
 import { OAuthError, signInWithGoogle, signInWithKakao } from '@/features/auth/oauth';
 import { pickHookMessage } from '@/features/content/hooking-copy';
 
@@ -54,11 +56,26 @@ export default function LoginScreen() {
   const [pendingProvider, setPendingProvider] = useState<Provider | null>(null);
   const [isTestSigningIn, setIsTestSigningIn] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // 지난번에 쓴 수단에 "최근 로그인" 표를 붙인다. 못 읽어와도 표만 안 붙는다.
+  const [lastProvider, setLastProvider] = useState<SocialProvider | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void loadLastProvider().then((provider) => {
+      if (!cancelled) setLastProvider(provider);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const message = useMemo(() => pickHookMessage(), []);
 
   const handleOAuth = useCallback(async (provider: Provider) => {
     setPendingProvider(provider);
     setErrorMessage(null);
+    // 브라우저로 나갔다 돌아오는 흐름이라 성공 시점을 여기서 못 볼 때가 있다.
+    // 누른 시점에 적어 둔다 — 다음에 이 화면을 열면 그 버튼에 표가 붙는다.
+    rememberProvider(provider);
 
     try {
       const outcome = provider === 'kakao' ? await signInWithKakao() : await signInWithGoogle();
@@ -153,24 +170,29 @@ export default function LoginScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-        <PrimaryButton
-          label="카카오로 시작하기"
+        {/* 각 서비스의 색과 심벌을 그대로 쓴다. 글자만 있는 버튼 셋이 세로로
+            서 있으면 4060 회원 눈에는 셋 다 같은 것으로 보인다. */}
+        <SocialButton
+          provider="kakao"
+          recent={lastProvider === 'kakao'}
           onPress={() => void handleOAuth('kakao')}
           loading={pendingProvider === 'kakao'}
           disabled={pendingProvider !== null}
         />
-        <PrimaryButton
-          label="구글로 시작하기"
-          variant="secondary"
+        <SocialButton
+          provider="google"
+          recent={lastProvider === 'google'}
           onPress={() => void handleOAuth('google')}
           loading={pendingProvider === 'google'}
           disabled={pendingProvider !== null}
         />
-        <PrimaryButton
-          label="전화번호로 시작하기"
-          variant="quiet"
-          size="compact"
-          onPress={() => router.push('/phone-login')}
+        <SocialButton
+          provider="phone"
+          recent={lastProvider === 'phone'}
+          onPress={() => {
+            rememberProvider('phone');
+            router.push('/phone-login');
+          }}
           disabled={pendingProvider !== null || isTestSigningIn}
         />
         {/* 카카오/구글 심사 전, 페어링할 키오스크가 없을 때 쓰는 임시 테스트
