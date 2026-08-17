@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,7 +9,7 @@ import { ExercisePhoto } from '@/components/exercise-photo';
 import { Keypad } from '@/components/keypad';
 import { PrimaryButton } from '@/components/primary-button';
 import { WeightSuggestionCard } from '@/components/weight-suggestion-card';
-import { CardioChase } from '@/components/cardio-chase';
+import { JourneyCheckpoint, JourneyRing } from '@/components/journey-ring';
 import { WittyLoading } from '@/components/witty-loading';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
@@ -26,7 +26,12 @@ import {
   weightUnit,
 } from '@/features/routine/guidance';
 import { RoutineError, completeRoutine } from '@/features/routine/api';
+import { COURSE, fetchJourneyMinutes, journeyPoint } from '@/features/routine/journey';
 import { placeText, primaryName, secondaryName } from '@/features/routine/labels';
+import {
+  cancelCardioGoalAlarm,
+  scheduleCardioGoalAlarm,
+} from '@/features/notifications/cardio-alarm';
 import { useDailyRoutine } from '@/features/routine/use-daily-routine';
 import {
   elapsedToMinutes,
@@ -162,6 +167,46 @@ function WorkoutSession({
   const elapsedSeconds = useElapsedSeconds(isCardio && session.phase === 'working');
   const measuredMinutes = elapsedToMinutes(elapsedSeconds);
 
+  // 국토 종주: 지난 세션까지의 누적 유산소 분. 못 받아도 0에서 시작할 뿐
+  // 타이머·기록은 그대로 돌아간다.
+  const [journeyBase, setJourneyBase] = useState(0);
+  useEffect(() => {
+    if (!isCardio) return;
+    let cancelled = false;
+    void fetchJourneyMinutes().then((minutes) => {
+      if (!cancelled) setJourneyBase(minutes);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCardio]);
+
+  // 목표 시간 알림 예약 id. 화면을 나가면(언마운트) 반드시 취소한다 —
+  // 하다 만 운동의 알림이 나중에 혼자 울리면 안 된다.
+  const alarmId = useRef<string | null>(null);
+  useEffect(() => {
+    return () => {
+      void cancelCardioGoalAlarm(alarmId.current);
+    };
+  }, []);
+
+  const startCardio = useCallback(() => {
+    session.start();
+    const target = item.target_duration_minutes;
+    if (!isCardio || target === null) return;
+    // 목표를 채우는 순간 도착해 있을 지점을 미리 계산해 알림 문구에 싣는다.
+    const arrival = journeyPoint(journeyBase + target).current.name;
+    void scheduleCardioGoalAlarm(target, item.name_ko ?? item.name, arrival).then((id) => {
+      alarmId.current = id;
+    });
+  }, [session, isCardio, item, journeyBase]);
+
+  const finishCardio = useCallback(() => {
+    void cancelCardioGoalAlarm(alarmId.current);
+    alarmId.current = null;
+    session.finishSet();
+  }, [session]);
+
   const [pin, setPin] = useState('');
   /** 사람이 직접 고친 분(分). null 이면 아직 안 고쳐서 잰 시간을 그대로 쓴다는 뜻. */
   const [typedMinutes, setTypedMinutes] = useState<string | null>(null);
@@ -262,6 +307,7 @@ function WorkoutSession({
       currentSet={session.currentSet}
       totalSets={totalSets}
       elapsedSeconds={elapsedSeconds}
+      journeyBase={journeyBase}
     />
   ) : session.phase === 'resting' ? (
     <RestingView
@@ -319,7 +365,10 @@ function WorkoutSession({
           </>
         ) : session.phase === 'ready' ? (
           <>
-            <PrimaryButton label={isCardio ? '시작' : '운동 시작'} onPress={() => session.start()} />
+            <PrimaryButton
+              label={isCardio ? '시작' : '운동 시작'}
+              onPress={() => (isCardio ? startCardio() : session.start())}
+            />
             {item.video_url ? (
               <PrimaryButton label="영상으로 보기" variant="secondary" onPress={openVideo} />
             ) : null}
@@ -328,7 +377,7 @@ function WorkoutSession({
         ) : session.phase === 'working' ? (
           <PrimaryButton
             label={isCardio ? '다 했어요' : `${session.currentSet}세트 완료`}
-            onPress={() => session.finishSet()}
+            onPress={() => (isCardio ? finishCardio() : session.finishSet())}
           />
         ) : session.phase === 'resting' ? (
           <PrimaryButton label="바로 다음 세트" variant="secondary" onPress={() => session.skipRest()} />
@@ -499,47 +548,75 @@ function WorkingView({
   currentSet,
   totalSets,
   elapsedSeconds,
+  journeyBase,
 }: {
   item: RoutineItem;
   currentSet: number;
   totalSets: number;
   elapsedSeconds: number;
+  /** 지난 세션까지의 누적 유산소 분. 국토 종주 위치 계산에 쓴다. */
+  journeyBase: number;
 }) {
   if (isCardioItem(item)) {
     const target = item.target_duration_minutes;
-    // 목표를 채웠는지 알려면 화면에 시계가 보여야 한다. 트레드밀 계기판을
-    // 대신 읽어 주는 셈이다 — 기구마다 표시가 제각각이라 못 찾는 분이 많다.
     const reachedTarget = target !== null && elapsedSeconds >= target * 60;
+    // 국토 종주: 지난 세션 누적 + 지금 흐르는 시간으로 코스 위 위치를 구한다.
+    const point = journeyPoint(journeyBase + elapsedSeconds / 60);
 
     return (
       <>
         <Text style={styles.name} maxFontSizeMultiplier={1.2}>
           {primaryName(item)}
         </Text>
+        <Text style={styles.journeyCourse} maxFontSizeMultiplier={1.2}>
+          {COURSE.name}
+          {point.round > 1 ? ` · ${point.round}바퀴째` : ''}
+        </Text>
 
-        <View style={styles.hero}>
-          <Text style={styles.heroLabel} maxFontSizeMultiplier={1.2}>
-            지금까지
-          </Text>
-          <Text
-            style={styles.heroValue}
-            maxFontSizeMultiplier={1.2}
-            // 1초마다 바뀌는 값이라 소리로 계속 읽어 주면 오히려 방해가 된다.
-            accessibilityLiveRegion="none">
-            {formatClock(elapsedSeconds)}
-          </Text>
-          {target !== null ? (
-            <Text style={styles.heroSub} maxFontSizeMultiplier={1.2}>
-              {reachedTarget ? `목표 ${target}분을 채우셨습니다` : `목표 ${target}분`}
-            </Text>
-          ) : null}
-        </View>
-
-        {/* 숫자 시계만 보며 버티는 15분은 길다. 토끼를 피해 깃발까지 가는
-            거북이로 같은 시간을 이야기로 보여준다. */}
+        {/* 목표를 채웠는지 알려면 화면에 시계가 보여야 한다. 트레드밀 계기판을
+            대신 읽어 주는 셈인데, 숫자만 보며 버티는 20분은 길어서 링과 여정으로
+            같은 시간을 이야기로 보여준다. */}
         {target !== null ? (
-          <CardioChase elapsedSeconds={elapsedSeconds} targetMinutes={target} />
-        ) : null}
+          <>
+            <JourneyRing
+              elapsedSeconds={elapsedSeconds}
+              targetMinutes={target}
+              journeyKm={point.km}
+              totalKm={point.totalKm}>
+              <Text style={styles.journeyLabel} maxFontSizeMultiplier={1.2}>
+                진행 시간
+              </Text>
+              <Text
+                style={styles.journeyClock}
+                maxFontSizeMultiplier={1.2}
+                // 1초마다 바뀌는 값이라 소리로 계속 읽어 주면 오히려 방해가 된다.
+                accessibilityLiveRegion="none">
+                {formatClock(elapsedSeconds)}
+              </Text>
+              <Text style={styles.journeyGoal} maxFontSizeMultiplier={1.2}>
+                {reachedTarget ? `목표 ${target}분 완주!` : `/ ${formatClock(target * 60)}`}
+              </Text>
+              <Text style={styles.journeyKm} maxFontSizeMultiplier={1.2}>
+                {point.km}km / {point.totalKm}km 지점
+              </Text>
+            </JourneyRing>
+
+            <JourneyCheckpoint
+              place={point.current.name}
+              nextName={point.next.name}
+              nextKm={point.nextKm}
+            />
+          </>
+        ) : (
+          <View style={styles.hero}>
+            <Text style={styles.heroLabel} maxFontSizeMultiplier={1.2}>
+              지금까지
+            </Text>
+            <Text style={styles.heroValue} maxFontSizeMultiplier={1.2} accessibilityLiveRegion="none">
+              {formatClock(elapsedSeconds)}
+            </Text>
+          </View>
+        )}
 
         <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
           다 하셨으면 아래 버튼을 눌러주세요. 더 하셔도 괜찮고, 힘들면 먼저 멈추셔도 됩니다.
@@ -932,6 +1009,40 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: LetterSpacing.subtitle,
     color: Colors.textSecondary,
+  },
+  /** 국토 종주: 운동 이름 밑 코스명 한 줄 */
+  journeyCourse: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+    marginTop: -Spacing.md,
+  },
+  journeyLabel: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: 1.6,
+    color: Colors.textTertiary,
+  },
+  journeyClock: {
+    fontSize: 52,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+    color: Colors.text,
+    lineHeight: 56,
+  },
+  journeyGoal: {
+    fontSize: FontSize.subtitle,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+    color: Colors.textSecondary,
+  },
+  journeyKm: {
+    marginTop: Spacing.sm,
+    fontSize: FontSize.caption + 1,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    color: Colors.primary,
   },
   helper: {
     fontSize: FontSize.body,

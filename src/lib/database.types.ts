@@ -672,6 +672,11 @@ export type Database = {
         Args: Record<string, never>;
         Returns: BodyStatus;
       };
+      /** 지금까지 완료한 유산소 총 시간(분). 국토 종주 둘레길의 누적 거리 계산용. */
+      get_journey_minutes: {
+        Args: Record<string, never>;
+        Returns: number;
+      };
       log_body_weight: {
         Args: { p_weight_kg: number; p_height_cm?: number };
         Returns: BodyStatus;
