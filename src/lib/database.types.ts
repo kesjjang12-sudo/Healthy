@@ -288,6 +288,11 @@ export type RoutineItem = {
   actual_duration_minutes: number | null;
   is_completed: boolean;
   /**
+   * 이 기구에서 가장 최근에 꽂았던 핀 칸. 처음이거나 유산소·맨몸이면 null.
+   * (daily_routines.actual_weight_kg 에는 kg 이 아니라 핀 칸이 들어 있다)
+   */
+  last_pin: number | null;
+  /**
    * 지난 수행 기록에 근거한 무게 조정 제안. 제안일 뿐 적용은 본인이 누를 때만
    * 된다. 근거가 없거나(처음 하는 기구) 무게 개념이 없는 운동이면 null.
    */

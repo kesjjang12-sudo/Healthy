@@ -85,6 +85,11 @@ export function weightHint(item: RoutineItem): string {
   if (item.target_weight === null) {
     return '기구에 무게가 없는 운동입니다. 몸으로만 천천히 하세요.';
   }
+  // 지난번에 꽂았던 칸이 있으면 그게 가장 좋은 시작점이다 — 본인이 실제로
+  // 해 본 값이라 kg 환산 계산보다 정확하고, 기구 앞에서 바로 따라 할 수 있다.
+  if (item.last_pin !== null) {
+    return `지난번엔 ${item.last_pin}번째 칸이었어요. 거기서 시작하세요.`;
+  }
   return `${item.target_weight}kg 근처에서 시작해 보세요.`;
 }
 

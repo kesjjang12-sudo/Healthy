@@ -58,8 +58,12 @@ export function WeightSuggestionCard({ equipId, suggestion, onApplied }: Props) 
         {suggestion.reason}
       </Text>
 
+      {/* kg 숫자 대신 "한 칸". 회원이 기구에서 보는 건 핀 칸이지 kg 이 아니고,
+          제안 폭도 늘 기구의 한 단(weight_step)이라 "한 칸"이 정확한 말이다.
+          "올리다/내리다"는 앱의 다른 안내(WEIGHT_RULE)와 같은 뜻으로 쓴다 —
+          올리다 = 더 무겁게. */}
       <Text style={styles.change} maxFontSizeMultiplier={1.2}>
-        {suggestion.current_kg}kg → {suggestion.suggested_kg}kg
+        {isIncrease ? '지난번보다 딱 한 칸만 무겁게' : '지난번보다 한 칸 가볍게'}
       </Text>
 
       {/* 올리는 제안일수록 물러설 길을 분명히 적어 둔다. 어르신은 권한 것을

@@ -204,7 +204,7 @@ function WorkoutSession({
     void Linking.openURL(item.video_url).catch(() => {});
   }, [item.video_url]);
 
-  const finishAndSave = useCallback(async () => {
+  const finishAndSave = useCallback(async (felt: 'ok' | 'hard' = 'ok') => {
     setIsSaving(true);
     setSaveError(null);
 
@@ -212,13 +212,22 @@ function WorkoutSession({
       // 유산소는 실제로 움직인 시간을, 근력은 꽂은 핀 칸을 남긴다.
       // "핀"은 기구마다 실제 kg 이 다른 상대값이라 정확한 kg 은 아니지만,
       // 지금 저장할 수 있는 건 이것뿐이다 — 없는 것보다는 다음 방문 때 참고할
-      // 시작점이 있는 편이 낫다. 근력의 실제 횟수는 따로 받지 않으므로 처방
-      // 횟수를 그대로 쓴다(완료 버튼을 눌렀다는 건 다 했다는 뜻).
+      // 시작점이 있는 편이 낫다.
+      //
+      // 횟수는 숫자로 안 묻는다. 대신 마치는 버튼이 [할 만했어요 / 힘들었어요]
+      // 둘이라, 누른 버튼이 그대로 답이 된다(추가 탭 0). "힘들었어요"는 목표를
+      // 다 못 채웠다는 뜻으로 목표의 절반을 적는다 — 서버의 "내려볼까요?" 기준
+      // (70% 미만)에 확실히 걸리는 값이면 되고, 정확한 횟수는 여기서 중요하지
+      // 않다. 예전엔 무조건 목표를 다 채운 것으로 보내서, 힘들어한 기록이
+      // 서버에 한 번도 남지 않아 내려보자는 제안이 영영 안 떴다.
+      const targetReps = item.target_reps ?? null;
+      const actualReps =
+        targetReps === null ? null : felt === 'hard' ? Math.floor(targetReps / 2) : targetReps;
       const { pointsAwarded: awarded } = await completeRoutine(
         item.routine_id,
         isCardio
           ? { actualDurationMinutes: minutesValue }
-          : { actualWeightKg: pin === '' ? null : Number(pin), actualReps: item.target_reps },
+          : { actualWeightKg: pin === '' ? null : Number(pin), actualReps },
       );
       setPointsAwarded(awarded);
 
@@ -321,13 +330,31 @@ function WorkoutSession({
           />
         ) : session.phase === 'resting' ? (
           <PrimaryButton label="바로 다음 세트" variant="secondary" onPress={() => session.skipRest()} />
-        ) : (
+        ) : isCardio || !logsWeight ? (
           <PrimaryButton
             label="기록하고 마치기"
-            disabled={isCardio ? !isMinutesValid : logsWeight && pin.length === 0}
+            disabled={isCardio && !isMinutesValid}
             loading={isSaving}
             onPress={() => void finishAndSave()}
           />
+        ) : (
+          <>
+            {/* 마치는 버튼이 곧 오늘 소감이다. 어느 쪽을 눌러도 기록되고,
+                "힘들었어요"가 쌓이면 다음에 무게를 내려보자고 먼저 말을 건다. */}
+            <PrimaryButton
+              label="할 만했어요"
+              disabled={pin.length === 0}
+              loading={isSaving}
+              onPress={() => void finishAndSave('ok')}
+            />
+            <PrimaryButton
+              label="힘들었어요"
+              variant="secondary"
+              disabled={pin.length === 0}
+              loading={isSaving}
+              onPress={() => void finishAndSave('hard')}
+            />
+          </>
         )}
       </View>
     </View>
@@ -669,7 +696,8 @@ function LoggingView({
           {item.target_sets ?? 1}세트 모두 끝났습니다
         </Text>
         <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          오늘 꽂으신 핀이 몇 번째 칸이었나요? 다음에 시작점으로 알려드립니다.
+          오늘 꽂으신 핀이 몇 번째 칸이었나요? 다음에 시작점으로 알려드립니다. 적으셨으면 아래에서
+          오늘 어떠셨는지 눌러 주세요 — 그걸로 마치기가 됩니다.
         </Text>
       </View>
 
