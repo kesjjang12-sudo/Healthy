@@ -29,6 +29,8 @@ type Props = {
   right?: ReactNode;
   /** 누르면 다른 화면으로 간다는 표시. onPress 가 있을 때만 의미 있다. */
   chevron?: boolean;
+  /** 행 아래 가는 구분선. 행이 여럿 쌓이는 화면(프로필 등)에서 켠다 — 피드백. */
+  divider?: boolean;
   onPress?: () => void;
   accessibilityLabel?: string;
 };
@@ -57,6 +59,7 @@ export function ListRow({
   valueTone = 'secondary',
   right,
   chevron = false,
+  divider = false,
   onPress,
   accessibilityLabel,
 }: Props) {
@@ -106,7 +109,7 @@ export function ListRow({
 
   if (!onPress) {
     return (
-      <View style={styles.row} accessibilityLabel={label}>
+      <View style={[styles.row, divider && styles.divider]} accessibilityLabel={label}>
         {body}
       </View>
     );
@@ -117,7 +120,7 @@ export function ListRow({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
+      style={({ pressed }) => [styles.row, divider && styles.divider, pressed && styles.rowPressed]}>
       {body}
     </Pressable>
   );
@@ -138,6 +141,10 @@ const styles = StyleSheet.create({
   },
   rowPressed: {
     backgroundColor: Colors.surface,
+  },
+  divider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.grey[100],
   },
   tile: {
     width: 48,

@@ -221,6 +221,7 @@ export default function ProfileTab() {
           <View style={styles.rows}>
             {memberships.map((m) => (
               <ListRow
+                divider
                 key={m.apt_id}
                 icon="building"
                 tint={m.is_primary ? 'blue' : 'grey'}
@@ -260,6 +261,7 @@ export default function ProfileTab() {
               연동을 할 수 없어 "준비 중"만 정직하게 보여준다. */}
           {getHealthConnectionStatus() === 'unavailable' ? (
             <ListRow
+                divider
               icon="heart"
               tint="red"
               title="애플 헬스 · Health Connect"
@@ -274,6 +276,7 @@ export default function ProfileTab() {
               있으면 된다. 행 전체가 복사 버튼이다 — 작은 칩보다 누르기 쉽다. */}
           {user?.support_code ? (
             <ListRow
+                divider
               icon="person"
               tint="grey"
               title="계정번호"
@@ -285,6 +288,7 @@ export default function ProfileTab() {
           ) : null}
 
           <ListRow
+                divider
             icon="document"
             tint="grey"
             title="이용약관"
@@ -292,6 +296,7 @@ export default function ProfileTab() {
             onPress={() => router.push('/legal/terms')}
           />
           <ListRow
+                divider
             icon="document"
             tint="grey"
             title="개인정보처리방침"
@@ -299,6 +304,7 @@ export default function ProfileTab() {
             onPress={() => router.push('/legal/privacy')}
           />
           <ListRow
+                divider
             icon="logout"
             tint="grey"
             title="로그아웃"

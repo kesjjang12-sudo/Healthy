@@ -18,7 +18,8 @@ type Props = {
 
 /**
  * 설문 선택지용 큰 버튼.
- * 평소엔 회색 면, 고르면 옅은 파란 면 + 파란 글자로 바뀐다. 테두리는 쓰지 않는다.
+ * 평소엔 회색 면, 고르면 옅은 파란 면 + 파란 글자 + 파란 테두리로 바뀐다.
+ * (테두리는 디자인 피드백으로 추가 — 면 색만으로는 선택 표시가 약하다)
  */
 export function ChoiceButton({
   label,
@@ -47,12 +48,6 @@ export function ChoiceButton({
         disabled && styles.disabled,
         style,
       ]}>
-      {isCheckbox ? (
-        <View style={[styles.box, selected && styles.boxChecked]}>
-          {selected ? <CheckMark size={22} thickness={2.5} /> : null}
-        </View>
-      ) : null}
-
       <View style={isCheckbox ? styles.checkboxText : styles.centeredText}>
         <Text
           style={[styles.label, isCheckbox && styles.leftAligned, selected && styles.selectedLabel]}
@@ -71,6 +66,13 @@ export function ChoiceButton({
           </Text>
         ) : null}
       </View>
+
+      {/* 체크 표시는 오른쪽 — 왼쪽에 있으면 글줄 시작이 들쭉날쭉해진다(피드백 참고안). */}
+      {isCheckbox ? (
+        <View style={[styles.box, selected && styles.boxChecked]}>
+          {selected ? <CheckMark size={22} thickness={2.5} /> : null}
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -78,6 +80,9 @@ export function ChoiceButton({
 const styles = StyleSheet.create({
   button: {
     minHeight: 92,
+    // 고르기 전에도 같은 두께의 투명 테두리를 둔다 — 고르는 순간 칸이 안 튀게.
+    borderWidth: 2,
+    borderColor: 'transparent',
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.lg,
     gap: Spacing.xs,
@@ -93,6 +98,7 @@ const styles = StyleSheet.create({
   },
   selected: {
     backgroundColor: Colors.primaryFaint,
+    borderColor: Colors.primary,
   },
   pressed: {
     backgroundColor: Colors.surfacePressed,
@@ -109,9 +115,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: Radius.sm,
     backgroundColor: Colors.background,
+    // 회색 면 위의 흰 네모는 체크박스로 안 읽힌다는 피드백 — 테두리를 준다.
+    borderWidth: 2,
+    borderColor: Colors.grey[300],
   },
   boxChecked: {
     backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
   },
   centeredText: {
     alignItems: 'center',

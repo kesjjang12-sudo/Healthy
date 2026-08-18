@@ -144,8 +144,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfacePressed,
   },
   badge: {
-    width: 52,
-    height: 52,
+    // 피드백: 숫자가 주인공이 아닌데 52는 과했다.
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: Radius.full,
@@ -155,7 +156,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success,
   },
   badgeText: {
-    fontSize: FontSize.subtitle,
+    fontSize: FontSize.body,
     fontWeight: '700',
     letterSpacing: LetterSpacing.subtitle,
     color: Colors.textOnPrimary,

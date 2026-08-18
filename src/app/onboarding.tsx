@@ -1,5 +1,5 @@
 import { Redirect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -81,6 +81,20 @@ function OnboardingFlow({ user }: { user: User }) {
   // 지난번에 중간에 나갔다면 남은 문항부터 이어서 묻는다.
   const [stepIndex, setStepIndex] = useState(() => findFirstUnansweredIndex(user.profile_data));
   const [answers, setAnswers] = useState<Partial<ProfileData>>(() => ({ ...user.profile_data }));
+
+  // 확인 화면의 "고치기"로 돌아온 상태. 이때는 답을 고른 뒤 다음 문항으로
+  // 걸어가지 않고 곧장 확인 화면으로 복귀한다 — 남은 문항을 다시 다 지나게
+  // 하면 뭘 고쳤는지 확인하러 가는 길이 너무 멀다(디자인 피드백).
+  const editingFromSummary = useRef(false);
+
+  const advance = useCallback(() => {
+    if (editingFromSummary.current) {
+      editingFromSummary.current = false;
+      setStepIndex(lastStepIndex);
+    } else {
+      setStepIndex((c) => c + 1);
+    }
+  }, [lastStepIndex]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -102,11 +116,15 @@ function OnboardingFlow({ user }: { user: User }) {
   );
 
   // 값은 문항 정의에서 키와 짝지어 오므로 여기서는 원시값으로만 받는다.
+  /**
+   * 단일 선택도 이제 자동으로 안 넘어간다. 예전엔 고르는 순간 다음 문항으로
+   * 갔는데, 잘못 눌렀을 때 무슨 일이 일어났는지 볼 새가 없었다(오너 피드백).
+   * 고르면 파란 테두리로 멈춰서 보여주고, "다음"을 눌러야 넘어간다.
+   */
   const handleSingleSelect = useCallback(
     (key: 'gender' | 'age_group', value: string | number) => {
       setAnswers((current) => ({ ...current, [key]: value }));
       saveInBackground({ [key]: value });
-      setStepIndex((current) => current + 1);
     },
     [saveInBackground],
   );
@@ -159,8 +177,8 @@ function OnboardingFlow({ user }: { user: User }) {
   const handleFontNext = useCallback(() => {
     setAnswers((current) => ({ ...current, font_scale: fontScale }));
     saveInBackground({ font_scale: fontScale });
-    setStepIndex((current) => current + 1);
-  }, [fontScale, saveInBackground]);
+    advance();
+  }, [fontScale, saveInBackground, advance]);
 
   const handleNext = useCallback(
     (question: ProfileQuestion) => {
@@ -169,9 +187,9 @@ function OnboardingFlow({ user }: { user: User }) {
       saveInBackground({
         [question.key]: question.mode === 'text' && typeof value === 'string' ? value.trim() : value,
       });
-      setStepIndex((current) => current + 1);
+      advance();
     },
-    [answers, saveInBackground],
+    [answers, saveInBackground, advance],
   );
 
   const handleBodyNext = useCallback(() => {
@@ -181,13 +199,18 @@ function OnboardingFlow({ user }: { user: User }) {
 
     setAnswers((current) => ({ ...current, height_cm: height, weight_kg: weight }));
     saveInBackground({ height_cm: height, weight_kg: weight });
-    setStepIndex((current) => current + 1);
-  }, [heightText, weightText, saveInBackground]);
+    advance();
+  }, [heightText, weightText, saveInBackground, advance]);
 
   const handleBack = useCallback(() => {
     setErrorMessage(null);
+    if (editingFromSummary.current) {
+      editingFromSummary.current = false;
+      setStepIndex(lastStepIndex);
+      return;
+    }
     setStepIndex((current) => Math.max(0, current - 1));
-  }, []);
+  }, [lastStepIndex]);
 
   /**
    * 첫 문항에서는 설문 안에 돌아갈 곳이 없다. 그렇다고 버튼을 아예 안 두면
@@ -295,6 +318,7 @@ function OnboardingFlow({ user }: { user: User }) {
                   size="compact"
                   onPress={() => {
                     setErrorMessage(null);
+                    editingFromSummary.current = true;
                     setStepIndex(index);
                   }}
                 />
@@ -324,11 +348,6 @@ function OnboardingFlow({ user }: { user: User }) {
         {progress}
 
         <View style={styles.headings}>
-          {stepIndex === 0 ? (
-            <Text style={styles.eyebrow} maxFontSizeMultiplier={1.3}>
-              등록이 끝났어요
-            </Text>
-          ) : null}
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
             {question.title}
           </Text>
@@ -425,8 +444,7 @@ function OnboardingFlow({ user }: { user: User }) {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-        {/* 단일 선택만 "다음"이 없다 — 고르는 순간 넘어가기 때문이다. */}
-        {question.mode === 'multi' || question.mode === 'text' ? (
+        {question.mode === 'multi' || question.mode === 'text' || question.mode === 'single' ? (
           <PrimaryButton
             label="다음"
             onPress={() => handleNext(question)}
@@ -470,7 +488,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    gap: Spacing.xl,
+    gap: Spacing.xxl,
     paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.xl,
     maxWidth: 900,
@@ -506,12 +524,6 @@ const styles = StyleSheet.create({
   headings: {
     gap: Spacing.sm,
   },
-  eyebrow: {
-    fontSize: FontSize.caption,
-    fontWeight: '600',
-    letterSpacing: LetterSpacing.body,
-    color: Colors.primary,
-  },
   title: {
     fontSize: FontSize.title,
     fontWeight: '700',
@@ -537,7 +549,7 @@ const styles = StyleSheet.create({
     gap: Spacing.lg,
   },
   fontPreview: {
-    gap: Spacing.xs,
+    gap: Spacing.md,
     padding: Spacing.xl,
     borderRadius: Radius.lg,
     backgroundColor: Colors.surface,

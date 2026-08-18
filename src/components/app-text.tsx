@@ -2,6 +2,7 @@ import { Children, useMemo } from 'react';
 import { Platform, StyleSheet, Text as RNText, type TextProps } from 'react-native';
 
 import { useFontScale } from '@/features/settings/font-scale';
+import type { FontScale } from '@/lib/database.types';
 
 /**
  * 한글 어절이 중간에 끊기지 않게 하는 앱 공통 Text.
@@ -23,6 +24,23 @@ import { useFontScale } from '@/features/settings/font-scale';
  * 일일이 심는 대신, 모든 텍스트가 지나가는 이 길목에서 처리한다.
  */
 
+/**
+ * 단계별 글자 크기 표 (디자인 피드백 5번).
+ *
+ * 예전엔 배율(×1.15, ×1.3)을 곱했는데, 그러면 큰 글자는 너무 커지고 작은
+ * 글자는 덜 커진다. 피드백의 방식대로 **단계마다 손으로 정한 크기 표**로
+ * 바꾼다 — 제목은 22→24→26 처럼 조금씩, 보조는 14→16→18 처럼 많이 커져서
+ * 단계가 올라가도 위계가 안 무너진다.
+ *
+ * 열쇠는 기준(작게) 크기다. theme.ts 의 FontSize 값들과 짝을 이룬다.
+ * 표에 없는 크기는 예전처럼 배율로 어림한다.
+ */
+const SIZE_STEPS: Record<FontScale, Record<number, number>> = {
+  small: {}, // 기준 그대로
+  medium: { 14: 16, 16: 18, 17: 19, 18: 20, 19: 21, 22: 24, 26: 28, 40: 42 },
+  large: { 14: 18, 16: 20, 17: 21, 18: 22, 19: 23, 22: 26, 26: 30, 40: 44 },
+};
+
 const HAS_HANGUL = /[가-힣]/;
 
 function keepWordTogether(word: string): string {
@@ -37,7 +55,7 @@ function keepAll(text: string): string {
 }
 
 export function Text({ children, style, ...props }: TextProps) {
-  const { multiplier } = useFontScale();
+  const { scale, multiplier } = useFontScale();
 
   const content = useMemo(() => {
     if (Platform.OS !== 'android') return children;
@@ -47,23 +65,26 @@ export function Text({ children, style, ...props }: TextProps) {
   }, [children]);
 
   const scaled = useMemo(() => {
-    if (multiplier === 1) return style;
+    if (scale === 'small') return style;
 
     const flat = StyleSheet.flatten(style);
     if (!flat) return style;
 
     // fontSize 를 안 정한 텍스트는 건드리지 않는다. 그런 텍스트는 대개 감싼
-    // Text 의 크기를 물려받는데, 그 부모가 이미 곱해진 값이라 여기서 또
-    // 곱하면 두 번 커진다.
+    // Text 의 크기를 물려받는데, 그 부모가 이미 키워진 값이라 여기서 또
+    // 키우면 두 번 커진다.
     if (typeof flat.fontSize !== 'number') return style;
 
-    const next = { ...flat, fontSize: Math.round(flat.fontSize * multiplier) };
-    // 줄 간격을 같이 안 키우면 글자가 커진 만큼 줄끼리 붙어 오히려 읽기 나빠진다.
+    const size = flat.fontSize;
+    const stepped = SIZE_STEPS[scale][size] ?? Math.round(size * multiplier);
+
+    const next = { ...flat, fontSize: stepped };
+    // 줄 간격은 글자가 커진 비율만큼 같이 키운다. 안 키우면 줄끼리 붙는다.
     if (typeof flat.lineHeight === 'number') {
-      next.lineHeight = Math.round(flat.lineHeight * multiplier);
+      next.lineHeight = Math.round(flat.lineHeight * (stepped / size));
     }
     return next;
-  }, [style, multiplier]);
+  }, [style, scale, multiplier]);
 
   return (
     <RNText lineBreakStrategyIOS="hangul-word" style={scaled} {...props}>

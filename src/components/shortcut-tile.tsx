@@ -40,7 +40,7 @@ export function ShortcutTile({ icon, tint = 'blue', label, accessibilityLabel, o
       accessibilityLabel={accessibilityLabel ?? label}
       style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}>
       <View style={[styles.iconTile, { backgroundColor: IconTint[tint] }]}>
-        <Icon name={icon} size={26} color="#FFFFFF" strokeWidth={2} />
+        <Icon name={icon} size={20} color="#FFFFFF" strokeWidth={2} />
       </View>
       <Text style={styles.label} maxFontSizeMultiplier={1.2} numberOfLines={1}>
         {label}
@@ -64,14 +64,15 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfacePressed,
   },
   iconTile: {
-    width: 44,
-    height: 44,
+    // 피드백: 바로가기가 운동 목록보다 튀면 안 된다 — 아이콘·글자 모두 축소.
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
   },
   label: {
-    fontSize: FontSize.body,
+    fontSize: FontSize.caption,
     fontWeight: '600',
     letterSpacing: LetterSpacing.body,
     color: Colors.text,

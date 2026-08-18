@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    gap: Spacing.xl,
+    gap: Spacing.xxl,
     paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.xl,
     maxWidth: 700,
@@ -279,7 +279,8 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   group: {
-    gap: Spacing.sm,
+    // 동의 박스 사이 간격. 8이었는데 박스끼리 붙어 보인다는 피드백으로 넓혔다.
+    gap: Spacing.lg,
   },
   groupTitle: {
     fontSize: FontSize.body,
@@ -323,9 +324,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: Radius.sm,
     backgroundColor: Colors.background,
+    // 흰 네모만 있으면 눌러야 하는 칸인지 모른다는 피드백 — 테두리를 준다.
+    borderWidth: 2,
+    borderColor: Colors.grey[300],
   },
   boxChecked: {
     backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
   },
   rowTexts: {
     flex: 1,
@@ -348,11 +353,12 @@ const styles = StyleSheet.create({
     fontSize: FontSize.caption,
     fontWeight: '700',
     letterSpacing: LetterSpacing.body,
-    color: Colors.primary,
+    // 옅은 파란 박스 위라 primary 는 묻힌다 — 다크블루로(피드백).
+    color: Colors.primaryPressed,
   },
   rowDetail: {
     fontSize: FontSize.caption,
-    fontWeight: '500',
+    fontWeight: '600',
     lineHeight: FontSize.caption * 1.6,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
