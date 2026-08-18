@@ -41,7 +41,7 @@ export default function Root({ children }: PropsWithChildren) {
         {/* "홈 화면에 추가"로 열었을 때 사파리 주소창 없이 앱처럼 뜨게 한다. */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="핏루틴" />
+        <meta name="apple-mobile-web-app-title" content="헬스반장" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="theme-color" content="#3182F6" />
 

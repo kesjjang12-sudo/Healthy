@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "핏루틴",
+    "name": "헬스반장",
     "slug": "fitroutine",
     "version": "0.1.0",
     "scheme": "fitroutine",
@@ -22,7 +22,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0B5FD1",
+        "backgroundColor": "#3182F6",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -39,7 +39,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0B5FD1",
+          "backgroundColor": "#3182F6",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 120
         }

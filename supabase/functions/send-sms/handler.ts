@@ -113,7 +113,7 @@ export async function handleSendSms(request: Request): Promise<Response> {
       message: {
         to: toKoreanLocalNumber(event.user.phone),
         from: sender,
-        text: `[핏루틴] 인증번호 ${event.sms.otp} 를 입력해 주세요.`,
+        text: `[헬스반장] 인증번호 ${event.sms.otp} 를 입력해 주세요.`,
       },
     }),
   });

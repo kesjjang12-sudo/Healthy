@@ -1,0 +1,28 @@
+<!doctype html><meta charset="utf-8">
+<style>html,body{margin:0;padding:0;background:transparent}svg{display:block}</style>
+<script>
+const q = new URLSearchParams(location.search);
+const SIZE = Number(q.get('size') ?? 432);
+const BG = q.get('bg') === '1';
+const FRAC = Number(q.get('frac') ?? 0.66);
+// 3D 장면과 같은 비례: 봉 반지름 .54/원판 2.05·1.65, 위치 ±1.75/±2.8, 봉 반길이 3.8
+const U = 10; // 3D 1유닛 = 10 (100 좌표계)
+const parts = [
+  {x:-3.8, w:7.6, r:0.54},                    // 봉
+  {x:-1.75-0.5, w:1.0, r:2.05}, {x:1.75-0.5, w:1.0, r:2.05},   // 안쪽 원판
+  {x:-2.8-0.45, w:0.9, r:1.65}, {x:2.8-0.45, w:0.9, r:1.65},   // 바깥 원판
+];
+const rawW = 7.6 * U, tilt = 20;
+const rad = a => a*Math.PI/180;
+const tiltedW = rawW*Math.cos(rad(tilt)) + 2*2.05*U*Math.sin(rad(tilt));
+const scale = FRAC*100/tiltedW;
+const rects = parts.map(p => {
+  const x = 50 + p.x*U*0 + (p.x)*U;  // 중심 기준
+  const w = p.w*U, r = p.r*U;
+  return `<rect x="${(50+p.x*U).toFixed(1)}" y="${(50-r).toFixed(1)}" width="${w.toFixed(1)}" height="${(2*r).toFixed(1)}" rx="${Math.min(w/2, r*0.45).toFixed(1)}"/>`;
+}).join('');
+document.write(`<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 100 100">
+${BG ? '<defs><linearGradient id="g" x1="0" y1="0" x2="0.25" y2="1"><stop offset="0" stop-color="#6AB2FF"/><stop offset="1" stop-color="#2668E8"/></linearGradient></defs><rect width="100" height="100" fill="url(#g)"/>' : ''}
+<g fill="#FFFFFF" transform="translate(50 50) scale(${scale.toFixed(4)}) rotate(-${tilt}) translate(-50 -50)">${rects}</g>
+</svg>`);
+</script>

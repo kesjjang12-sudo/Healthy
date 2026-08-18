@@ -1,6 +1,6 @@
 {
-  "name": "핏루틴",
-  "short_name": "핏루틴",
+  "name": "헬스반장",
+  "short_name": "헬스반장",
   "description": "아파트 단지 헬스장을 위한 운동 루틴 앱",
   "start_url": ".",
   "display": "standalone",

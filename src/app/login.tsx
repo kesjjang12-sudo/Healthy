@@ -83,7 +83,7 @@ export default function LoginScreen() {
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xxl }]}>
         <View style={styles.headings}>
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-            핏루틴
+            헬스반장
           </Text>
           <Text style={styles.subtitle} maxFontSizeMultiplier={1.3}>
             로그인하고 오늘의 운동을 시작하세요

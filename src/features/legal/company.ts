@@ -14,7 +14,7 @@ export const COMPANY = {
   /** 회사 이름 */
   name: '실버캐슬',
   /** 서비스(앱) 이름 */
-  serviceName: '핏루틴',
+  serviceName: '헬스반장',
   representative: '{{대표자명}}',
   businessNumber: '{{사업자등록번호}}',
   address: '{{사업장 주소}}',
