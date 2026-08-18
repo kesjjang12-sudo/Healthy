@@ -115,9 +115,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: Radius.sm,
     backgroundColor: Colors.background,
+    // 회색 면 위의 흰 네모는 체크박스로 안 읽힌다는 피드백 — 테두리를 준다.
+    borderWidth: 2,
+    borderColor: Colors.grey[300],
   },
   boxChecked: {
     backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
   },
   centeredText: {
     alignItems: 'center',

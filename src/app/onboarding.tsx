@@ -116,13 +116,17 @@ function OnboardingFlow({ user }: { user: User }) {
   );
 
   // 값은 문항 정의에서 키와 짝지어 오므로 여기서는 원시값으로만 받는다.
+  /**
+   * 단일 선택도 이제 자동으로 안 넘어간다. 예전엔 고르는 순간 다음 문항으로
+   * 갔는데, 잘못 눌렀을 때 무슨 일이 일어났는지 볼 새가 없었다(오너 피드백).
+   * 고르면 파란 테두리로 멈춰서 보여주고, "다음"을 눌러야 넘어간다.
+   */
   const handleSingleSelect = useCallback(
     (key: 'gender' | 'age_group', value: string | number) => {
       setAnswers((current) => ({ ...current, [key]: value }));
       saveInBackground({ [key]: value });
-      advance();
     },
-    [saveInBackground, advance],
+    [saveInBackground],
   );
 
   /**
@@ -440,8 +444,7 @@ function OnboardingFlow({ user }: { user: User }) {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-        {/* 단일 선택만 "다음"이 없다 — 고르는 순간 넘어가기 때문이다. */}
-        {question.mode === 'multi' || question.mode === 'text' ? (
+        {question.mode === 'multi' || question.mode === 'text' || question.mode === 'single' ? (
           <PrimaryButton
             label="다음"
             onPress={() => handleNext(question)}

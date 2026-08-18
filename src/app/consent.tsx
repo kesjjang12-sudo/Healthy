@@ -324,9 +324,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: Radius.sm,
     backgroundColor: Colors.background,
+    // 흰 네모만 있으면 눌러야 하는 칸인지 모른다는 피드백 — 테두리를 준다.
+    borderWidth: 2,
+    borderColor: Colors.grey[300],
   },
   boxChecked: {
     backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
   },
   rowTexts: {
     flex: 1,
