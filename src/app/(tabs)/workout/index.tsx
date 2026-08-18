@@ -292,7 +292,7 @@ export default function WorkoutTab() {
                   </Text>
                 ) : (
                   <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-                    바꾸면 오늘 목록이 바로 다시 짜입니다. 이미 마친 운동은 그대로 남아요.
+                    바꿔도 이미 마친 운동은 그대로 남아요.
                   </Text>
                 )}
               </View>
@@ -379,9 +379,6 @@ export default function WorkoutTab() {
               </View>
             </View>
 
-            <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-              운동을 누르면 하는 방법이 나옵니다.
-            </Text>
           </>
         )}
       </ScrollView>
@@ -396,7 +393,8 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    gap: Spacing.xl,
+    // 단락 사이는 일부러 넉넉하게 — 붙어 있으면 화면이 빽빽해 보인다.
+    gap: Spacing.xxl,
     paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.xl,
     maxWidth: 900,
@@ -591,7 +589,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: LetterSpacing.body,
     color: Colors.grey[500],
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   notice: {
     padding: Spacing.lg,
