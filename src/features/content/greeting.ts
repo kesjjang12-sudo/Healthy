@@ -10,7 +10,12 @@
  */
 
 export type Greeting = {
-  /** 이름을 부르는 줄. 이름이 없으면 이름 없이 인사만 한다. */
+  /**
+   * 이름을 부르는 줄. 이름이 없으면 이름 없이 인사만 한다.
+   *
+   * 한 줄로 유지한다. 예전엔 "홍길동 님," / "안녕하세요" 로 줄을 나눴는데,
+   * 두 줄짜리 인사가 화면 맨 위에서 너무 큰 자리를 차지했다.
+   */
   headline: string;
   /** 그 아래 한 줄. 방문 이력에 따라 달라진다. */
   sub: string;
@@ -38,12 +43,16 @@ const SALUTATIONS: Record<TimeOfDay, string> = {
   night: '늦은 시간에도 대단하세요',
 };
 
-/** 두 번째 줄. 특별한 날(첫날·복귀)이 아니면 여기서 무작위로 고른다. */
+/**
+ * 두 번째 줄. 특별한 날(첫날·복귀)이 아니면 여기서 무작위로 고른다.
+ *
+ * 첫 줄이 인사를 맡으므로 여기서는 인사를 되풀이하지 않는다 — 바로 오늘
+ * 무엇을 할지 묻거나, 부담을 덜어 주는 말만 둔다.
+ */
 const REGULAR_SUBS: readonly string[] = [
-  '오늘도 나오셨네요',
+  '오늘은 어디부터 하실까요?',
   '오늘도 딱 하실 만큼만 하시면 됩니다',
   '천천히 하셔도 다 됩니다',
-  '오늘은 어디부터 해 볼까요',
   '꾸준한 게 제일 어려운데, 잘하고 계세요',
   '무리하지 않는 게 제일 빠른 길입니다',
 ] as const;
@@ -64,9 +73,9 @@ export function pickGreeting({ name, visitDays, now, seed }: GreetingInput = {})
   const salutation = SALUTATIONS[timeOfDay((now ?? new Date()).getHours())];
 
   // 이름을 아직 안 받은 사람에게 "회원 님"이라고 부르지 않는다. 그렇게 부르면
-  // 이름을 넣을 수 있다는 사실 자체를 모른 채로 계속 쓰게 된다 — 화면 쪽에서
-  // 이름 등록을 권하는 버튼을 따로 띄운다.
-  const headline = trimmed ? `${trimmed} 님,\n${salutation}` : salutation;
+  // 이름을 넣을 수 있다는 사실 자체를 모른 채로 계속 쓰게 된다 — 이름은
+  // 프로필 탭에서 넣는다.
+  const headline = trimmed ? `${salutation}, ${trimmed} 님` : salutation;
 
   return { headline, sub: pickSub(visitDays, seed) };
 }

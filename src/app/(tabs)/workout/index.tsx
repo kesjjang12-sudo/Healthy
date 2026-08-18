@@ -11,14 +11,12 @@ import { ListRow } from '@/components/list-row';
 import { PrimaryButton } from '@/components/primary-button';
 import { RoutineCard } from '@/components/routine-card';
 import { ShortcutTile } from '@/components/shortcut-tile';
-import { StrengthHookBanner } from '@/components/strength-hook-banner';
 import { WeightNudgeModal } from '@/components/weight-nudge-modal';
 import { WittyLoading } from '@/components/witty-loading';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useCheckInListener } from '@/features/attendance/use-checkin-listener';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { pickGreeting } from '@/features/content/greeting';
-import { pickHookMessage } from '@/features/content/hooking-copy';
 import { setRoutineCourse } from '@/features/routine/api';
 import { useDailyRoutine } from '@/features/routine/use-daily-routine';
 import { useVisitStats } from '@/features/routine/use-visit-stats';
@@ -44,7 +42,6 @@ export default function WorkoutTab() {
   const { user, refresh: refreshProfile } = useAuthSession();
   const { result, isLoading, errorMessage, retry, refresh } = useDailyRoutine(user!.id);
   const { stats: visitStats, refresh: refreshVisitStats } = useVisitStats(user!.id);
-  const hookMessage = useMemo(() => pickHookMessage(), []);
 
   // 운동을 하나 마치고 돌아오면 상세 화면이 이름과 점수를 붙여 보낸다.
   // 목록의 완료 표시만으로는 "방금 그게 기록됐다"는 확인이 약하다.
@@ -144,22 +141,12 @@ export default function WorkoutTab() {
     return () => clearTimeout(timer);
   }, [justCheckedIn]);
 
-  // 인사말이 쓰는 값(real_name)이 비었는지로 판단한다. 예전엔 nickname 을
-  // 봤는데, 이제 가입할 때 닉네임이 자동으로 붙으므로 그걸로 보면 이 권유가
-  // 영영 안 뜬다 — 정작 이름 없이 "회원님"으로 불리는 분에게 필요한 안내다.
-  const name = user!.profile_data?.real_name?.trim() ?? '';
-
   return (
     <View style={styles.screen}>
       {/* 몸무게 기록이 7일 넘게 없으면 하루 한 번 업데이트를 권한다. */}
       <WeightNudgeModal />
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xxl }]}>
         <View style={styles.headings}>
-          {visitStats ? (
-            <Text style={styles.dayBadge} maxFontSizeMultiplier={1.2}>
-              DAY {visitStats.total_days}
-            </Text>
-          ) : null}
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
             {greeting.headline}
           </Text>
@@ -167,17 +154,6 @@ export default function WorkoutTab() {
             {greeting.sub}
           </Text>
 
-          {/* 설문이 생기기 전에 가입하신 분들은 이름이 비어 있다. "회원 님"으로
-              계속 부르는 대신 한 번만 권해 본다. */}
-          {name === '' ? (
-            <PrimaryButton
-              label="이름 등록하기"
-              variant="secondary"
-              size="compact"
-              style={styles.nameButton}
-              onPress={() => router.push('/profile')}
-            />
-          ) : null}
         </View>
 
         {justCheckedIn ? (
@@ -208,8 +184,6 @@ export default function WorkoutTab() {
         {/* 포인트를 경험치로 읽어 명예 호칭을 올린다. 숫자만 있던 "내 포인트"
             줄이 "다음 호칭까지 얼마"라는 목표가 있는 카드가 됐다. */}
         <GrowthCard xp={user!.total_points ?? 0} />
-
-        <StrengthHookBanner message={hookMessage} size="compact" />
 
         {isLoading ? (
           <WittyLoading />
@@ -289,16 +263,14 @@ export default function WorkoutTab() {
                   <Text style={styles.noticeError} maxFontSizeMultiplier={1.3}>
                     {courseError}
                   </Text>
-                ) : (
+                ) : pendingCourse ? (
                   <Text
                     style={styles.footNote}
                     maxFontSizeMultiplier={1.3}
                     accessibilityLiveRegion="polite">
-                    {pendingCourse
-                      ? '오늘 목록을 다시 짜고 있어요…'
-                      : '바꿔도 이미 마친 운동은 그대로 남아요.'}
+                    오늘 목록을 다시 짜고 있어요…
                   </Text>
-                )}
+                ) : null}
               </View>
             ) : null}
 
@@ -408,12 +380,6 @@ const styles = StyleSheet.create({
   headings: {
     gap: Spacing.sm,
   },
-  dayBadge: {
-    fontSize: FontSize.caption,
-    fontWeight: '700',
-    letterSpacing: LetterSpacing.body,
-    color: Colors.primary,
-  },
   title: {
     fontSize: FontSize.title,
     fontWeight: '700',
@@ -427,10 +393,6 @@ const styles = StyleSheet.create({
     lineHeight: FontSize.body * 1.5,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
-  },
-  nameButton: {
-    alignSelf: 'flex-start',
-    marginTop: Spacing.xs,
   },
   points: {
     flexDirection: 'row',
