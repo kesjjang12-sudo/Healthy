@@ -7,6 +7,9 @@ import { supabase } from '@/lib/supabase';
 WebBrowser.maybeCompleteAuthSession();
 
 export type OAuthProvider = 'kakao' | 'google';
+
+/** 오류 문구에 쓰는 이름. 구글은 워드마크를 그대로 쓴다(가이드). */
+const LABEL: Record<OAuthProvider, string> = { kakao: '카카오', google: 'Google' };
 export type OAuthOutcome = 'signed_in' | 'cancelled';
 
 export class OAuthError extends Error {
@@ -39,7 +42,16 @@ async function signInWithProvider(provider: OAuthProvider): Promise<OAuthOutcome
   });
 
   if (error || !data.url) {
-    throw new OAuthError('로그인을 시작하지 못했어요.', error);
+    // Supabase 대시보드에서 그 제공자를 안 켰을 때가 압도적으로 흔하다
+    // ("Unsupported provider: provider is not enabled"). 그냥 "실패"라고만
+    // 하면 회원은 자기 잘못인 줄 알고 계속 다시 누르고, 우리는 원인을 못 찾는다.
+    const notEnabled = /not enabled|unsupported provider/i.test(error?.message ?? '');
+    throw new OAuthError(
+      notEnabled
+        ? `${LABEL[provider]} 로그인이 아직 준비되지 않았어요. 문자로 로그인해 주세요.`
+        : '로그인을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.',
+      error,
+    );
   }
 
   const result = await WebBrowser.openAuthSessionAsync(data.url, REDIRECT_TO);

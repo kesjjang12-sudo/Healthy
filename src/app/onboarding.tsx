@@ -1,31 +1,34 @@
 import { Redirect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
   StyleSheet,
-  Text,
   useWindowDimensions,
   View,
 } from 'react-native';
+import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChoiceButton } from '@/components/choice-button';
-import { TextField } from '@/components/text-field';
+import { FontScalePicker } from '@/components/font-scale-picker';
 import { PrimaryButton } from '@/components/primary-button';
+import { TextField } from '@/components/text-field';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { logBodyWeight, parseHeightInput, parseWeightInput, sanitizeWeightText } from '@/features/body/api';
+import { needsConsent } from '@/features/legal/api';
 import { updateProfileData } from '@/features/onboarding/api';
+import { useFontScale } from '@/features/settings/font-scale';
 import {
-  CONFIRM_STEP_INDEX,
+  confirmStepIndex,
   findFirstUnansweredIndex,
   formatAnswer,
   isAnswered,
-  PROFILE_QUESTIONS,
+  questionsFor,
   type ProfileQuestion,
 } from '@/features/onboarding/questions';
-import type { ProfileData, User } from '@/lib/database.types';
+import type { FontScale, ProfileData, User } from '@/lib/database.types';
 
 /** 가로가 이만큼 넓으면 선택지를 2열로 편다. */
 const WIDE_LAYOUT_MIN_WIDTH = 900;
@@ -49,6 +52,8 @@ export default function OnboardingScreen() {
 
   if (isRestoring) return null;
   if (!user) return <Redirect href="/login" />;
+  // 아픈 곳을 묻기 전에 동의를 받아야 한다.
+  if (needsConsent(user)) return <Redirect href="/consent" />;
   if (user.profile_data?.onboarded_at) return <Redirect href="/workout" />;
 
   return <OnboardingFlow user={user} />;
@@ -67,6 +72,11 @@ function OnboardingFlow({ user }: { user: User }) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { setUser, signOut } = useAuthSession();
+  const { scale: fontScale, setScale } = useFontScale();
+
+  // 아픈 곳에 동의하지 않으신 분께는 그 문항을 아예 띄우지 않는다.
+  const questions = useMemo(() => questionsFor(user.profile_data), [user.profile_data]);
+  const lastStepIndex = confirmStepIndex(questions);
 
   // 지난번에 중간에 나갔다면 남은 문항부터 이어서 묻는다.
   const [stepIndex, setStepIndex] = useState(() => findFirstUnansweredIndex(user.profile_data));
@@ -101,6 +111,14 @@ function OnboardingFlow({ user }: { user: User }) {
     [saveInBackground],
   );
 
+  /**
+   * 이름은 한 글자 칠 때마다 서버로 보내지 않는다 — 자판을 두드리는 내내
+   * 요청이 나간다. "다음"을 누를 때 handleNext 가 한 번에 저장한다.
+   */
+  const handleTextChange = useCallback((text: string) => {
+    setAnswers((current) => ({ ...current, nickname: text }));
+  }, []);
+
   const handleMultiToggle = useCallback(
     (question: ProfileQuestion, value: string) => {
       setAnswers((current) => {
@@ -120,9 +138,37 @@ function OnboardingFlow({ user }: { user: User }) {
     [],
   );
 
+  /**
+   * 글자 크기는 고르는 즉시 화면에 반영한다 — 이 문항의 요지가 "눌러 보고
+   * 확인한다"라서, 다음 화면에 가서야 커지면 고를 수가 없다.
+   * 답으로도 기록해 두어야 최종 확인 화면과 서버 저장에 함께 실린다.
+   */
+  const handlePickFontScale = useCallback(
+    (next: FontScale) => {
+      setScale(next);
+      setAnswers((current) => ({ ...current, font_scale: next }));
+    },
+    [setScale],
+  );
+
+  /**
+   * 화면에 지금 적용돼 있는 크기를 그대로 답으로 굳힌다. handleNext 를 안 쓰는
+   * 이유는, 안 누르고 넘어가신 분의 answers 에는 아직 값이 없어서다 — 그때도
+   * 눈으로 보고 계신 크기(기본 '중간')가 저장돼야 다음에 켰을 때 안 달라진다.
+   */
+  const handleFontNext = useCallback(() => {
+    setAnswers((current) => ({ ...current, font_scale: fontScale }));
+    saveInBackground({ font_scale: fontScale });
+    setStepIndex((current) => current + 1);
+  }, [fontScale, saveInBackground]);
+
   const handleNext = useCallback(
     (question: ProfileQuestion) => {
-      saveInBackground({ [question.key]: answers[question.key] });
+      const value = answers[question.key];
+      // 이름 앞뒤 공백은 여기서 턴다. 저장해 두면 "김철수 님"이 "김철수  님"이 된다.
+      saveInBackground({
+        [question.key]: question.mode === 'text' && typeof value === 'string' ? value.trim() : value,
+      });
       setStepIndex((current) => current + 1);
     },
     [answers, saveInBackground],
@@ -161,6 +207,7 @@ function OnboardingFlow({ user }: { user: User }) {
     try {
       const updated = await updateProfileData(user.id, {
         ...answers,
+        ...(typeof answers.nickname === 'string' ? { nickname: answers.nickname.trim() } : {}),
         onboarded_at: new Date().toISOString(),
       });
 
@@ -180,7 +227,7 @@ function OnboardingFlow({ user }: { user: User }) {
   }, [answers, router, setUser, user.id]);
 
   const isWide = width >= WIDE_LAYOUT_MIN_WIDTH;
-  const isConfirmStep = stepIndex >= CONFIRM_STEP_INDEX;
+  const isConfirmStep = stepIndex >= lastStepIndex;
 
   if (isSubmitting) {
     return (
@@ -196,8 +243,8 @@ function OnboardingFlow({ user }: { user: User }) {
   const progress = (
     <View
       style={styles.progress}
-      accessibilityLabel={`전체 ${CONFIRM_STEP_INDEX + 1}단계 중 ${Math.min(stepIndex, CONFIRM_STEP_INDEX) + 1}번째`}>
-      {[...PROFILE_QUESTIONS, null].map((item, index) => (
+      accessibilityLabel={`전체 ${lastStepIndex + 1}단계 중 ${Math.min(stepIndex, lastStepIndex) + 1}번째`}>
+      {[...questions, null].map((item, index) => (
         <View
           key={item?.key ?? 'confirm'}
           style={[styles.progressSegment, index <= stepIndex && styles.progressSegmentActive]}
@@ -231,7 +278,7 @@ function OnboardingFlow({ user }: { user: User }) {
           </View>
 
           <View style={styles.summary}>
-            {PROFILE_QUESTIONS.map((question, index) => (
+            {questions.map((question, index) => (
               <View key={question.key} style={styles.summaryRow}>
                 <View style={styles.summaryTexts}>
                   <Text style={styles.summaryLabel} maxFontSizeMultiplier={1.3}>
@@ -265,7 +312,7 @@ function OnboardingFlow({ user }: { user: User }) {
     );
   }
 
-  const question = PROFILE_QUESTIONS[stepIndex];
+  const question = questions[stepIndex];
   const multiValues = question.mode === 'multi' ? selectedValues(question, answers) : undefined;
   const isNoneSelected = multiValues?.length === 0;
   const isBodyStep = question.mode === 'body';
@@ -285,14 +332,34 @@ function OnboardingFlow({ user }: { user: User }) {
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
             {question.title}
           </Text>
-          {question.mode === 'multi' || question.mode === 'body' ? (
+          {question.mode === 'multi' ||
+          question.mode === 'body' ||
+          question.mode === 'text' ||
+          question.mode === 'font' ? (
             <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
               {question.helper}
             </Text>
           ) : null}
         </View>
 
-        {isBodyStep ? (
+        {/* 문항 종류가 셋이다: 키·몸무게(숫자 두 칸), 닉네임(글자 한 칸),
+            나머지(선택지). 순서대로 좁혀 나간다. */}
+        {question.mode === 'font' ? (
+          <View style={styles.fontFields}>
+            <FontScalePicker value={fontScale} onChange={handlePickFontScale} />
+
+            {/* 낱글자만으로는 실제로 읽을 때 어떤지 알기 어렵다. 앱에서 실제로
+                나오는 문장을 그대로 보여 준다. */}
+            <View style={styles.fontPreview}>
+              <Text style={styles.fontPreviewLabel} maxFontSizeMultiplier={1.2}>
+                이렇게 보여요
+              </Text>
+              <Text style={styles.fontPreviewText} maxFontSizeMultiplier={1.3}>
+                다리로 밀기{'\n'}40kg · 3세트 · 12회
+              </Text>
+            </View>
+          </View>
+        ) : isBodyStep ? (
           <View style={styles.bodyFields}>
             <TextField
               label="키 (cm)"
@@ -309,44 +376,57 @@ function OnboardingFlow({ user }: { user: User }) {
               keyboardType="decimal-pad"
             />
           </View>
+        ) : question.mode === 'text' ? (
+          <TextField
+            label={question.summaryLabel}
+            value={typeof answers.nickname === 'string' ? answers.nickname : ''}
+            onChangeText={handleTextChange}
+            placeholder={question.placeholder}
+            maxLength={question.maxLength}
+            returnKeyType="done"
+            onSubmitEditing={() => {
+              if (isAnswered(question, answers)) handleNext(question);
+            }}
+          />
         ) : (
-        <View style={styles.options} accessibilityRole="radiogroup">
-          {question.mode === 'multi' && question.noneLabel ? (
-            <ChoiceButton
-              label={question.noneLabel}
-              role="checkbox"
-              selected={isNoneSelected}
-              onPress={() => handleSelectNone(question)}
-              style={styles.optionFull}
-            />
-          ) : null}
+          <View style={styles.options} accessibilityRole="radiogroup">
+            {question.mode === 'multi' && question.noneLabel ? (
+              <ChoiceButton
+                label={question.noneLabel}
+                role="checkbox"
+                selected={isNoneSelected}
+                onPress={() => handleSelectNone(question)}
+                style={styles.optionFull}
+              />
+            ) : null}
 
-          {/* isBodyStep 분기의 else 쪽이라 여기서 question 은 선택지 문항으로 좁혀져 있다. */}
-          {question.options.map((option) => (
-            <ChoiceButton
-              key={String(option.value)}
-              label={option.label}
-              caption={option.caption}
-              role={question.mode === 'multi' ? 'checkbox' : 'radio'}
-              selected={
-                question.mode === 'single'
-                  ? answers[question.key] === option.value
-                  : (multiValues?.includes(String(option.value)) ?? false)
-              }
-              onPress={() =>
-                question.mode === 'single'
-                  ? handleSingleSelect(question.key, option.value)
-                  : handleMultiToggle(question, String(option.value))
-              }
-              style={isWide ? styles.optionWide : styles.optionFull}
-            />
-          ))}
-        </View>
+            {/* 위 두 분기의 else 쪽이라 여기서 question 은 선택지 문항으로 좁혀져 있다. */}
+            {question.options.map((option) => (
+              <ChoiceButton
+                key={String(option.value)}
+                label={option.label}
+                caption={option.caption}
+                role={question.mode === 'multi' ? 'checkbox' : 'radio'}
+                selected={
+                  question.mode === 'single'
+                    ? answers[question.key] === option.value
+                    : (multiValues?.includes(String(option.value)) ?? false)
+                }
+                onPress={() =>
+                  question.mode === 'single'
+                    ? handleSingleSelect(question.key, option.value)
+                    : handleMultiToggle(question, String(option.value))
+                }
+                style={isWide ? styles.optionWide : styles.optionFull}
+              />
+            ))}
+          </View>
         )}
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-        {question.mode === 'multi' ? (
+        {/* 단일 선택만 "다음"이 없다 — 고르는 순간 넘어가기 때문이다. */}
+        {question.mode === 'multi' || question.mode === 'text' ? (
           <PrimaryButton
             label="다음"
             onPress={() => handleNext(question)}
@@ -355,6 +435,11 @@ function OnboardingFlow({ user }: { user: User }) {
         ) : null}
         {isBodyStep ? (
           <PrimaryButton label="다음" onPress={handleBodyNext} disabled={!bodyReady} />
+        ) : null}
+        {/* 글자 크기는 아무것도 안 누르셔도 넘어갈 수 있다. 지금 화면이 이미
+            '중간'으로 그려져 있으니, 그대로 두는 것도 하나의 답이다. */}
+        {question.mode === 'font' ? (
+          <PrimaryButton label="다음" onPress={handleFontNext} />
         ) : null}
         {stepIndex > 0 ? (
           <PrimaryButton
@@ -447,6 +532,28 @@ const styles = StyleSheet.create({
   },
   bodyFields: {
     gap: Spacing.lg,
+  },
+  fontFields: {
+    gap: Spacing.lg,
+  },
+  fontPreview: {
+    gap: Spacing.xs,
+    padding: Spacing.xl,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.surface,
+  },
+  fontPreviewLabel: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+  },
+  fontPreviewText: {
+    fontSize: FontSize.subtitle,
+    fontWeight: '700',
+    lineHeight: FontSize.subtitle * 1.5,
+    letterSpacing: LetterSpacing.subtitle,
+    color: Colors.text,
   },
   optionFull: {
     flexGrow: 1,

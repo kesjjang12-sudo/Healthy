@@ -45,16 +45,25 @@
   `profile_data.real_name`. `update_profile_data` 는 nickname 키를 떼고
   저장한다(닉네임은 update_nickname RPC 전용 — 비속어 필터·2주 제한).
 
-## ⚠️ main 의 마이그레이션 체인이 지금 끊겨 있다 (2026-08-13)
+## 마이그레이션 체인 (2026-08-14 복구됨)
 
-`20260813000008_catalog_lookup` / `000009_catalog_expansion_images` /
-`000010_expose_image_url` 가 `public.exercise_catalog` 를 참조하는데, 그 테이블을
-**만드는 마이그레이션이 main 에 없다**. 만드는 쪽은 미병합 브랜치
-`claude/toss-app-ui-ux-design-zikopg`("운동 도감을 분리한다")에 있다.
+`toss-app-ui-ux-design-zikopg` 를 병합하면서 `20260812000026_exercise_catalog`
+(테이블을 만드는 파일)가 main 에 들어왔다. 이제 참조하는 파일들(`...000007`
+~`...000010`, `...000029`~`...000032`)보다 번호가 앞서서 빈 DB 에 처음부터
+돌려도 통과한다. 예전에 적혀 있던 "체인이 끊겨 있다" 경고는 해소됐다.
 
-라이브 DB 는 이미 그 테이블을 갖고 있어서 운영은 멀쩡하지만, 빈 DB 에
-마이그레이션을 처음부터 돌리면 저 셋이 실패한다. toss-app-ui 브랜치를 병합할 때
-순서를 바로잡을 것.
+## ⚠️ 같은 함수를 두 갈래가 각자 고치면 조용히 기능이 사라진다
+
+실제로 났던 사고다. `20260813000010_expose_image_url` 이 응답에 `image_url` 을
+넣었는데, 나중에 적용된 `20260814000029_how_to_steps` 가 같은 함수를 통째로
+다시 쓰면서 그 줄을 빠뜨렸다. 컬럼도 데이터도(75개 전부) 멀쩡하고 앱 코드도
+사진을 그리고 있었는데 서버가 값을 안 보내서 **화면에서만 사진이 사라졌다.**
+없는 키를 읽으면 undefined 라 오류가 안 나서 한참 뒤에야 발견됐다.
+`20260814000032_restore_image_url` 로 되돌렸다.
+
+교훈: `create or replace` 로 함수를 다시 쓸 때는 **반드시 `pg_get_functiondef`
+로 서버의 현재 정의부터 읽고** 거기에 얹을 것. 저장소의 옛 파일을 출발점으로
+삼으면 그 사이 다른 세션이 넣은 필드가 통째로 날아간다.
 
 ## 마이그레이션 번호는 먼저 확인하고 붙인다
 
@@ -62,13 +71,43 @@
 `git fetch origin && ls supabase/migrations/` 로 origin/main 의 마지막 번호를
 확인하고, 충돌하면 **내 것을 뒤로 민다**(남의 것이 이미 서버에 올라갔을 수 있다).
 
-## 남은 미병합 브랜치 (2026-08-13 기준)
+## 남은 미병합 브랜치 (2026-08-14 기준)
 
-아래 브랜치의 세션들은 각자 `origin/main` 을 병합하고 위 절차로 배포할 것:
+아래 브랜치의 세션들은 각자 `origin/main` 을 병합하고 위 절차로 배포할 것.
+**toss 가 main 에 들어가면서 UI 전체(theme.ts, 모든 화면, app-text/ListRow/Icon
+도입)가 바뀌었다** — 아래 브랜치들은 병합 전에 diff 를 다시 볼 것:
 
-- `claude/healthy-conversation-bkg4p8` — 동의 문서화, 유산소 실측, 인사말
-- `claude/npm-db-check-c0k38z` — 이사 랭킹, 태블릿 단지 기억 (main 에 같은
-  이름의 커밋이 이미 있다 — 내용 diff 로 겹침부터 확인할 것)
-- `claude/sms-function-deploy-secrets-ju9gqa` — 솔라피 Edge Function 배포분
-  (main 의 phone-login 가입 폼과 같은 화면을 고쳤다 — 충돌 주의)
-- `claude/toss-app-ui-ux-design-zikopg` — 토스식 UI, 운동 도감 분리
+- `claude/npm-db-check-c0k38z` — 이사 랭킹, 태블릿 단지 기억
+- `claude/sms-function-deploy-secrets-ju9gqa` — 솔라피 OTP (main 의
+  phone-login 과 같은 화면을 고쳤다 — 충돌 주의)
+- `claude/aws-server-automation-4iw38d` — AWS Terraform. Supabase 를 쓰는데 왜
+  필요한지 저장소에 설명이 없다. 방향부터 정할 것.
+
+이미 main 에 다 들어간 브랜치(지워도 된다):
+`claude/fitroutine-db-schema-epbb3p`, `claude/github-friend-invite-wrmsh4`,
+`claude/toss-app-ui-ux-design-zikopg`, `claude/healthy-conversation-bkg4p8`
+
+## setup.sql 은 손으로 고치지 않는다
+
+`scripts/build-setup-sql.mjs` 가 `migrations/` + `seed.sql` 을 이어 붙여 만든다.
+마이그레이션을 추가했으면 `node scripts/build-setup-sql.mjs` 를 돌리고 같이
+커밋할 것. `--check` 로 최신인지 검사만 할 수도 있다.
+
+손으로 관리하던 시절에 두 갈래가 각자 마이그레이션을 추가하면 이 파일 하나에서
+충돌이 20곳씩 났고, 실제로 마이그레이션 여러 개가 빠진 채 3천 줄쯤 뒤처져
+있었다. 그 상태의 파일로 빈 DB 를 세우면 그 사람만 다른 스키마를 갖게 된다.
+
+## 배포 경로가 둘이다 (2026-08-14부터 CI 가 자동으로 한다)
+
+- **gh-pages** = PWA(웹)
+- **EAS Update** = 태블릿·폰에 설치된 앱. `app.json` 의 `updates.url` 로 받는다.
+
+앱의 자동 업데이트는 **받는 쪽만 자동**이다. 올리는 쪽(`eas update`)은 누가
+돌려야 하는데 그동안 아무도 안 돌려서 설치형 앱이 오래 멈춰 있었다.
+
+이제 `.github/workflows/deploy.yml` 이 **main 에 푸시되면 둘 다 배포한다.**
+그러니 웬만하면 손으로 배포하지 말고 main 에 푸시만 할 것 — 위의 gh-pages 수동
+절차는 CI 가 멈췄을 때의 대비책으로 남겨 둔다.
+
+CI 가 앱 업데이트까지 하려면 저장소 시크릿 `EXPO_TOKEN` 이 있어야 한다.
+없으면 웹만 나가고 경고만 남긴다(빌드는 실패하지 않는다).

@@ -1,0 +1,155 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; }
+  #stage { position: relative; overflow: hidden; }
+  #bg { position: absolute; inset: 0; }
+  canvas { position: absolute; inset: 0; display: block; }
+</style>
+<div id="stage"><div id="bg"></div></div>
+<script type="importmap">
+  { "imports": { "three": "../../node_modules/three/build/three.module.js",
+                 "three/addons/": "../../node_modules/three/examples/jsm/" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const q = new URLSearchParams(location.search);
+const SIZE = Number(q.get('size') ?? 1024);      // 캔버스 픽셀 크기
+const VARIANT = q.get('variant') ?? 'sky';       // sky | pastel
+const SHOW_BG = q.get('bg') !== '0';             // 0 이면 투명 배경(레이어용)
+const FRAC = Number(q.get('frac') ?? 0.78);      // 덤벨이 차지하는 화면 비율
+const SHOW_OBJ = q.get('obj') !== '0';           // 0 이면 배경만(적응형 배경용)
+
+// ── 시안 색 ──────────────────────────────────────────────────────────────
+const VARIANTS = {
+  // 브랜드 파랑 바탕 + 흰 덤벨
+  sky: {
+    bgCss: 'linear-gradient(160deg, #4D95FF 0%, #0066FF 60%, #0054D1 100%)',
+    plate: 0xf2f6fc, bar: 0xdde6f2,
+    shadowOpacity: 0.28,
+  },
+  // 파스텔 바탕 + 하늘색 덤벨 (참고 이미지 느낌)
+  pastel: {
+    bgCss: 'radial-gradient(circle at 50% 38%, #FFFFFF 0%, #DCEBFF 78%, #CCE2FF 100%)',
+    plate: 0x4f9cf9, bar: 0xf4f8fe,
+    shadowOpacity: 0.18,
+  },
+};
+const V = VARIANTS[VARIANT];
+
+const stage = document.getElementById('stage');
+stage.style.width = stage.style.height = SIZE + 'px';
+document.getElementById('bg').style.background = SHOW_BG ? V.bgCss : 'none';
+
+// ── 렌더러 / 장면 ────────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(1);
+renderer.setSize(SIZE, SIZE);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.VSMShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+// 스튜디오 환경맵 — 이게 있어야 플라스틱/금속의 부드러운 반사가 생긴다
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.05).texture;
+
+const camera = new THREE.PerspectiveCamera(26, 1, 0.1, 100);
+camera.position.set(0, 1.1, 14);
+camera.lookAt(0, 0, 0);
+
+// ── 덤벨 지오메트리 ──────────────────────────────────────────────────────
+// 모서리를 둥글린 원기둥: (반지름, 축방향) 단면을 그려서 회전시킨다.
+function roundedCylinder(R, T, fillet, segs = 96) {
+  const pts = [];
+  const f = Math.min(fillet, T / 2, R / 2);
+  const h = T / 2;
+  pts.push(new THREE.Vector2(0.001, -h));
+  pts.push(new THREE.Vector2(R - f, -h));
+  for (let i = 1; i <= 10; i++) {           // 아래 모서리 필렛
+    const a = (i / 10) * (Math.PI / 2);
+    pts.push(new THREE.Vector2(R - f + f * Math.sin(a), -h + f - f * Math.cos(a)));
+  }
+  pts.push(new THREE.Vector2(R, h - f));
+  for (let i = 1; i <= 10; i++) {           // 위 모서리 필렛
+    const a = (i / 10) * (Math.PI / 2);
+    pts.push(new THREE.Vector2(R - f * (1 - Math.cos(a)), h - f + f * Math.sin(a)));
+  }
+  pts.push(new THREE.Vector2(0.001, h));
+  const g = new THREE.LatheGeometry(pts, segs);
+  g.rotateZ(Math.PI / 2);                   // 축을 X 로 눕힌다
+  return g;
+}
+
+const plateMat = new THREE.MeshPhysicalMaterial({
+  color: V.plate, roughness: 0.42, metalness: 0.0,
+  clearcoat: 0.55, clearcoatRoughness: 0.35,
+});
+const barMat = new THREE.MeshPhysicalMaterial({
+  color: V.bar, roughness: 0.3, metalness: 0.05,
+  clearcoat: 0.6, clearcoatRoughness: 0.3,
+});
+
+const dumbbell = new THREE.Group();
+function add(geo, mat, x) {
+  const m = new THREE.Mesh(geo, mat);
+  m.position.x = x;
+  m.castShadow = m.receiveShadow = true;
+  dumbbell.add(m);
+}
+
+// 봉 (끝을 둥글린 가는 원기둥)
+add(roundedCylinder(0.54, 7.6, 0.5), barMat, 0);
+// 안쪽 큰 원판 / 바깥 작은 원판 — 통통하게, 모서리 크게 둥글려서
+const inner = roundedCylinder(2.05, 1.0, 0.4);
+const outer = roundedCylinder(1.65, 0.9, 0.36);
+add(inner, plateMat, -1.75);  add(inner, plateMat, 1.75);
+add(outer, plateMat, -2.8);  add(outer, plateMat, 2.8);
+
+// 참고 이미지처럼: 화면에서 비스듬히 + 앞면이 살짝 보이게
+dumbbell.rotation.z = THREE.MathUtils.degToRad(-20);
+dumbbell.rotation.y = THREE.MathUtils.degToRad(14);
+dumbbell.rotation.x = THREE.MathUtils.degToRad(4);
+scene.add(dumbbell);
+
+// 화면에서 원하는 비율(FRAC)이 되도록 카메라 거리를 맞춘다
+const sphere = new THREE.Box3().setFromObject(dumbbell).getBoundingSphere(new THREE.Sphere());
+const fovY = THREE.MathUtils.degToRad(camera.fov);
+const dist = sphere.radius / (FRAC * Math.tan(fovY / 2));
+camera.position.set(0, dist * 0.08, dist);
+camera.lookAt(sphere.center.x, sphere.center.y, sphere.center.z);
+
+// ── 조명 ────────────────────────────────────────────────────────────────
+const key = new THREE.DirectionalLight(0xffffff, 2.2);   // 왼쪽 위 주광
+key.position.set(-2.5, 10, 5.5);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.radius = 40; key.shadow.blurSamples = 48;
+key.shadow.camera.left = key.shadow.camera.bottom = -7;
+key.shadow.camera.right = key.shadow.camera.top = 7;
+key.shadow.bias = -0.0004;
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xdfeeff, 0.5); // 오른쪽 보조광
+fill.position.set(6, 2, 4);
+scene.add(fill);
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+// 그림자만 받는 투명 바닥 — 덤벨 바로 아래에 붙인다
+const box = new THREE.Box3().setFromObject(dumbbell);
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(40, 40),
+  new THREE.ShadowMaterial({ opacity: V.shadowOpacity }),
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = box.min.y - 0.12;
+ground.receiveShadow = true;
+scene.add(ground);
+
+if (!SHOW_OBJ) { dumbbell.visible = false; ground.visible = false; }
+renderer.render(scene, camera);
+document.title = 'RENDER-DONE';
+</script>

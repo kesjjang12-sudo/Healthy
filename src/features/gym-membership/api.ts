@@ -53,7 +53,7 @@ export async function joinGym(aptId: string): Promise<void> {
  * 헬스장에서는 빠진다(그 단지 랭킹에 더는 안 나온다). 방문 이력과 운동 기록은
  * 그대로 남는다.
  *
- * 떠나게 된 헬스장 수를 돌려준다. 화면이 "이전 헬스장에서 빠졌습니다"를
+ * 떠나게 된 헬스장 수를 돌려준다. 화면이 "이전 헬스장에서 빠졌어요"를
  * 실제로 그런 경우에만 말할 수 있게 하기 위해서다.
  */
 export async function makeGymPrimary(userId: string, aptId: string): Promise<number> {

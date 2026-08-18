@@ -1,7 +1,9 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '@/components/app-text';
 
 import { CheckMark } from '@/components/check-mark';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing, TouchTarget } from '@/constants/theme';
+import { placeChip, placeText, primaryName, secondaryName } from '@/features/routine/labels';
 import type { RoutineItem } from '@/lib/database.types';
 
 type Props = {
@@ -15,7 +17,17 @@ type Props = {
 /** 목표를 한 줄로 읽히게 만든다: "30kg · 3세트 · 10회", 유산소는 "15분" */
 function formatTarget(item: RoutineItem): string {
   // 유산소는 세트/횟수 개념이 없다 — "1세트"라고 뜨면 오히려 헷갈린다.
-  if (item.target_duration_minutes !== null) return `${item.target_duration_minutes}분`;
+  if (item.target_duration_minutes !== null) {
+    // 끝난 운동은 처방이 아니라 실제로 움직인 시간을 보여준다. 달력에서
+    // 지난 날을 볼 때 "15분 처방"이 아니라 "8분 했음"이 알고 싶은 값이다.
+    // (이 기록이 생기기 전에 완료한 옛 기록은 실제값이 없어 처방값으로 남는다.
+    //  DB 마이그레이션이 아직 안 된 서버라면 이 칸 자체가 안 내려오므로
+    //  null 이 아니라 타입으로 확인한다 — "undefined분"이 뜨면 안 된다.)
+    const actual = item.actual_duration_minutes;
+    if (item.is_completed && typeof actual === 'number') return `${actual}분`;
+
+    return `${item.target_duration_minutes}분`;
+  }
 
   const parts: string[] = [];
 
@@ -27,19 +39,18 @@ function formatTarget(item: RoutineItem): string {
   return parts.join(' · ');
 }
 
-/**
- * "[가슴] 체스트 프레스" 처럼 부위를 앞에 붙인다.
- *
- * 외래어 이름만 있으면 시니어에게는 무슨 운동인지 안 와닿는다. 부위를 앞에
- * 세우면 이름을 몰라도 어디를 쓰는 운동인지는 바로 읽힌다.
- */
-function formatName(item: RoutineItem): string {
-  return item.target_muscle ? `[${item.target_muscle}] ${item.name}` : item.name;
-}
-
 export function RoutineCard({ item, order, onPress }: Props) {
   const done = Boolean(item.is_completed);
-  const label = `${order}번째 운동, ${formatName(item)}, ${formatTarget(item)}${done ? ', 완료' : ''}`;
+  const title = primaryName(item);
+  const equipName = secondaryName(item);
+  const place = placeChip(item);
+  const spoken = placeText(item);
+
+  // 읽어 줄 때는 쉬운 이름과 기구 이름을 둘 다 부른다 — 기구 앞에 서서
+  // 이름표와 맞춰봐야 하는 분에게는 기구 이름도 필요하다.
+  const label = `${order}번째 운동, ${title}${equipName ? `, ${equipName}` : ''}, ${formatTarget(
+    item,
+  )}${spoken ? `, ${spoken}` : ''}${done ? ', 완료' : ''}`;
 
   const body = (
     <>
@@ -54,26 +65,53 @@ export function RoutineCard({ item, order, onPress }: Props) {
       </View>
 
       <View style={styles.texts}>
-        <Text style={[styles.name, done && styles.nameDone]} maxFontSizeMultiplier={1.3}>
-          {formatName(item)}
+        {/* 무슨 동작인지가 가장 크다. 기구 이름은 그 아래 작게 —
+            "레그 프레스"는 헬스장을 오래 다닌 사람의 말이라 처음 오신 분에게는
+            아무것도 알려주지 못한다. */}
+        <Text style={[styles.title, done && styles.titleDone]} maxFontSizeMultiplier={1.3}>
+          {title}
         </Text>
-        {/* 한글 직역과 종류(맨몸/케이블 등). 종류는 "기구 앞에 줄이 길면
-            맨몸으로 대신할 수 있다"를 판단하는 근거이기도 하다. */}
-        {item.name_ko || item.station_kind ? (
-          <Text style={styles.subName} maxFontSizeMultiplier={1.3}>
-            {[item.name_ko, item.station_kind].filter(Boolean).join('  ·  ')}
+        {equipName ? (
+          <Text style={styles.equipName} maxFontSizeMultiplier={1.3}>
+            {equipName}
+            {item.target_muscle ? `  ·  ${item.target_muscle}` : ''}
+          </Text>
+        ) : item.target_muscle ? (
+          <Text style={styles.equipName} maxFontSizeMultiplier={1.3}>
+            {item.target_muscle}
           </Text>
         ) : null}
         <Text style={styles.target} maxFontSizeMultiplier={1.3}>
           {formatTarget(item)}
         </Text>
       </View>
+
+      {/* 기구에 붙은 번호표와 같은 숫자를 오른쪽에 크게. 목록을 훑는 동안
+          "몇 번으로 가면 되는지"가 눈에 먼저 들어와야 한다. */}
+      {place ? (
+        <View style={[styles.placeChip, done && styles.placeChipDone]}>
+          <Text
+            style={[styles.placeMain, done && styles.placeTextDone]}
+            maxFontSizeMultiplier={1.2}>
+            {place.main}
+          </Text>
+          {place.sub ? (
+            <Text
+              style={[styles.placeSub, done && styles.placeTextDone]}
+              maxFontSizeMultiplier={1.2}>
+              {place.sub}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
     </>
   );
 
+  // accessible 을 켜야 위 label 한 줄로 읽힌다. 안 켜면 위치 칩이
+  // "22번" / "구역" 두 조각으로 따로 읽혀 무슨 말인지 알 수 없다.
   if (!onPress) {
     return (
-      <View style={styles.row} accessibilityLabel={label}>
+      <View style={styles.row} accessible accessibilityLabel={label}>
         {body}
       </View>
     );
@@ -126,16 +164,17 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
-  name: {
-    fontSize: FontSize.subtitle,
+  title: {
+    fontSize: FontSize.headline,
     fontWeight: '700',
+    lineHeight: FontSize.headline * 1.3,
     letterSpacing: LetterSpacing.subtitle,
     color: Colors.text,
   },
-  nameDone: {
+  titleDone: {
     color: Colors.textSecondary,
   },
-  subName: {
+  equipName: {
     fontSize: FontSize.caption,
     fontWeight: '500',
     letterSpacing: LetterSpacing.body,
@@ -143,8 +182,37 @@ const styles = StyleSheet.create({
   },
   target: {
     fontSize: FontSize.caption,
-    fontWeight: '500',
+    fontWeight: '600',
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
+  },
+  placeChip: {
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // 숫자가 한 자리든 두 자리든 칩 너비가 같아야 목록의 오른쪽 끝이 흔들리지 않는다.
+    minWidth: 74,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.primaryFaint,
+  },
+  placeChipDone: {
+    backgroundColor: Colors.surfacePressed,
+  },
+  placeMain: {
+    fontSize: FontSize.subtitle,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.subtitle,
+    color: Colors.primary,
+  },
+  placeSub: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.primary,
+  },
+  placeTextDone: {
+    color: Colors.textTertiary,
   },
 });

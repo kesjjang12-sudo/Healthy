@@ -1,0 +1,20 @@
+-- 운동을 마쳐도 "기록하지 못했습니다"가 뜨던 것을 고친다.
+--
+-- 20260814000033_cardio_actual_duration 이 유산소 시간을 받으려고
+-- complete_routine 에 p_actual_duration_minutes 를 더했는데, create or replace
+-- 는 인자 목록이 다르면 "교체"가 아니라 "새 함수 추가"다. 그래서 서버에
+-- 두 개가 남았다:
+--
+--   complete_routine(uuid, numeric, integer)             -- 옛것
+--   complete_routine(uuid, numeric, integer, integer)    -- 새것
+--
+-- 둘 다 뒤 인자에 기본값이 있어서, 근력 운동처럼 세 개만 보내면(무게·횟수,
+-- 시간 없음) 어느 쪽을 부를지 정할 수 없다. PostgREST 는 그걸 그대로
+-- PGRST203("Could not choose the best candidate function") 로 돌려주고,
+-- 앱은 그 오류를 받아 완료 화면에 "기록하지 못했습니다"를 띄웠다.
+--
+-- 실제로는 운동이 저장되지 않은 게 맞다 — 함수가 아예 실행되지 않았다.
+--
+-- 옛것을 지운다. 새것이 옛것의 동작을 모두 포함한다(시간 인자는 기본값
+-- NULL 이라 근력 호출에도 그대로 맞는다).
+drop function if exists public.complete_routine(uuid, numeric, integer);

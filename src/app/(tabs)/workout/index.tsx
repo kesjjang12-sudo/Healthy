@@ -1,17 +1,22 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CheckMark } from '@/components/check-mark';
+import { CourseToggle } from '@/components/course-toggle';
+import { GrowthCard } from '@/components/growth-card';
+import { ListRow } from '@/components/list-row';
 import { PrimaryButton } from '@/components/primary-button';
 import { RoutineCard } from '@/components/routine-card';
-import { StrengthHookBanner } from '@/components/strength-hook-banner';
+import { ShortcutTile } from '@/components/shortcut-tile';
 import { WeightNudgeModal } from '@/components/weight-nudge-modal';
-import { Colors, FontSize, LetterSpacing, Radius, Spacing, TouchTarget } from '@/constants/theme';
+import { WittyLoading } from '@/components/witty-loading';
+import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useCheckInListener } from '@/features/attendance/use-checkin-listener';
 import { useAuthSession } from '@/features/auth/auth-session';
-import { pickHookMessage } from '@/features/content/hooking-copy';
+import { pickGreeting } from '@/features/content/greeting';
 import { setRoutineCourse } from '@/features/routine/api';
 import { useDailyRoutine } from '@/features/routine/use-daily-routine';
 import { useVisitStats } from '@/features/routine/use-visit-stats';
@@ -34,10 +39,9 @@ const COURSE_LABELS: Record<RoutineCourse, string> = {
 export default function WorkoutTab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user } = useAuthSession();
-  const { result, isLoading, errorMessage, retry } = useDailyRoutine(user!.id);
+  const { user, refresh: refreshProfile } = useAuthSession();
+  const { result, isLoading, errorMessage, retry, refresh } = useDailyRoutine(user!.id);
   const { stats: visitStats, refresh: refreshVisitStats } = useVisitStats(user!.id);
-  const hookMessage = useMemo(() => pickHookMessage(), []);
 
   // 운동을 하나 마치고 돌아오면 상세 화면이 이름과 점수를 붙여 보낸다.
   // 목록의 완료 표시만으로는 "방금 그게 기록됐다"는 확인이 약하다.
@@ -61,20 +65,42 @@ export default function WorkoutTab() {
   const doneCount = routines.filter((item) => item.is_completed).length;
   const allDone = routines.length > 0 && doneCount === routines.length;
 
+  /**
+   * 코스 바꾸기.
+   *
+   * refresh(조용히 갈아 끼우기)를 쓴다. 예전엔 retry 를 불러서 화면이 통째로
+   * 로딩으로 바뀌었다가 돌아왔다 — 짧게↔충분히 를 오갈 때마다 새로고침처럼
+   * 번쩍인 게 이것이다. 다 읽을 때까지 기다렸다가 pending 을 푸는 것도 같은
+   * 이유다. 먼저 풀면 아직 옛 목록인데 토글만 새 값으로 앉아 있게 된다.
+   */
   const changeCourse = useCallback(
     async (course: RoutineCourse) => {
       setPendingCourse(course);
       setCourseError(null);
       try {
         await setRoutineCourse(course);
-        retry();
+        await refresh();
       } catch {
         setCourseError('코스를 바꾸지 못했어요. 다시 시도해 주세요.');
       } finally {
         setPendingCourse(null);
       }
     },
-    [retry],
+    [refresh],
+  );
+
+  // 인사말은 출석일 수가 도착하면 한 번 더 고른다("첫 방문이시네요"를 제대로
+  // 띄우려면 그 값이 있어야 한다). 그 뒤로는 이 화면에 있는 동안 안 바뀐다 —
+  // 읽는 도중에 글자가 바뀌면 처음부터 다시 읽게 된다.
+  const greeting = useMemo(
+    () =>
+      pickGreeting({
+        // 본인만 보는 인사말이라 실명을 쓴다. 닉네임은 랭킹에 노출되는 값이라
+        // 카카오·구글이 준 이름을 거기 채우지 않는다(bootstrap_oauth_profile 참고).
+        name: user!.profile_data?.real_name ?? user!.profile_data?.nickname,
+        visitDays: visitStats?.total_days ?? null,
+      }),
+    [user, visitStats],
   );
 
   // 태블릿에서 체크인이 찍히면 여기서 바로 받아 화면을 맞춘다.
@@ -85,10 +111,28 @@ export default function WorkoutTab() {
   const handleCheckIn = useCallback(() => {
     setJustCheckedIn(true);
     refreshVisitStats();
-    retry();
-  }, [refreshVisitStats, retry]);
+    void refresh();
+  }, [refreshVisitStats, refresh]);
 
   useCheckInListener(user!.id, handleCheckIn);
+
+  // 운동을 마치고 돌아오면 이 화면은 그동안 계속 떠 있던 상태다. 포인트를 다시
+  // 읽지 않으면 방금 받은 점수가 안 보여서, 저장이 안 된 줄 알고 같은 운동을
+  // 또 하게 된다. 첫 진입은 위 훅들이 이미 불러오므로 건너뛴다.
+  //
+  // 루틴 목록은 여기서 안 부른다 — useDailyRoutine 이 자기 useFocusEffect 에서
+  // 조용히 다시 읽는다. 예전엔 여기서 retry 까지 불러 같은 요청이 두 번 나갔고,
+  // 그중 하나가 화면을 로딩으로 갈아치워서 돌아올 때마다 번쩍였다.
+  const hasFocusedOnce = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasFocusedOnce.current) {
+        hasFocusedOnce.current = true;
+        return;
+      }
+      void refreshProfile();
+    }, [refreshProfile]),
+  );
 
   // 안내는 잠깐만 띄운다. 계속 남아 있으면 다음에 열었을 때 방금 찍은 것처럼 보인다.
   useEffect(() => {
@@ -97,22 +141,19 @@ export default function WorkoutTab() {
     return () => clearTimeout(timer);
   }, [justCheckedIn]);
 
-  const name = user!.profile_data?.nickname ?? '회원';
-
   return (
     <View style={styles.screen}>
       {/* 몸무게 기록이 7일 넘게 없으면 하루 한 번 업데이트를 권한다. */}
       <WeightNudgeModal />
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xxl }]}>
         <View style={styles.headings}>
-          {visitStats ? (
-            <Text style={styles.dayBadge} maxFontSizeMultiplier={1.2}>
-              DAY {visitStats.total_days}
-            </Text>
-          ) : null}
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-            {name} 님{'\n'}오늘도 나오셨네요
+            {greeting.headline}
           </Text>
+          <Text style={styles.greetingSub} maxFontSizeMultiplier={1.3}>
+            {greeting.sub}
+          </Text>
+
         </View>
 
         {justCheckedIn ? (
@@ -140,24 +181,12 @@ export default function WorkoutTab() {
           </View>
         ) : null}
 
-        <View style={styles.points}>
-          <Text style={styles.pointsLabel} maxFontSizeMultiplier={1.2}>
-            내 포인트
-          </Text>
-          <Text style={styles.pointsValue} maxFontSizeMultiplier={1.2}>
-            {(user!.total_points ?? 0).toLocaleString('ko-KR')}점
-          </Text>
-        </View>
-
-        <StrengthHookBanner message={hookMessage} size="compact" />
+        {/* 포인트를 경험치로 읽어 명예 호칭을 올린다. 숫자만 있던 "내 포인트"
+            줄이 "다음 호칭까지 얼마"라는 목표가 있는 카드가 됐다. */}
+        <GrowthCard xp={user!.total_points ?? 0} />
 
         {isLoading ? (
-          <View style={styles.centered}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={styles.centeredText} maxFontSizeMultiplier={1.3}>
-              오늘의 운동을 준비하고 있어요
-            </Text>
-          </View>
+          <WittyLoading />
         ) : errorMessage ? (
           <View style={styles.errorBox}>
             <Text
@@ -173,14 +202,14 @@ export default function WorkoutTab() {
             {/* 오늘 얼마나 왔는지. 목록만 있으면 몇 개 남았는지 세어야 한다. */}
             {routines.length > 0 ? (
               <View style={styles.progress}>
-                <View style={styles.progressHead}>
-                  <Text style={styles.progressLabel} maxFontSizeMultiplier={1.2}>
-                    {allDone ? '오늘 운동 끝!' : '오늘의 진행'}
-                  </Text>
-                  <Text style={styles.progressCount} maxFontSizeMultiplier={1.2}>
-                    {doneCount} / {routines.length}
-                  </Text>
-                </View>
+                {/* 시안 구조: 라벨 → 큰 카운트 → 진행 바 → 힌트, 전부 왼쪽 정렬. */}
+                <Text style={styles.progressLabel} maxFontSizeMultiplier={1.2}>
+                  {allDone ? '오늘 운동 끝!' : '오늘의 운동'}
+                </Text>
+                <Text style={styles.progressCount} maxFontSizeMultiplier={1.2}>
+                  {doneCount}
+                  <Text style={styles.progressCountSub}> / {routines.length} 완료</Text>
+                </Text>
                 <View style={styles.progressTrack}>
                   <View
                     style={[
@@ -207,45 +236,41 @@ export default function WorkoutTab() {
                 <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
                   오늘은 얼마나 하실 건가요?
                 </Text>
-                <View style={styles.courseRow}>
-                  {result.course_options.map((option) => {
-                    const selected = result.course === option.course;
-                    return (
-                      <Pressable
-                        key={option.course}
-                        onPress={() => void changeCourse(option.course)}
-                        disabled={pendingCourse !== null}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected }}
-                        accessibilityLabel={`${COURSE_LABELS[option.course]}, 약 ${option.minutes}분 코스`}
-                        style={({ pressed }) => [
-                          styles.courseCard,
-                          selected && styles.courseCardSelected,
-                          pressed && styles.courseCardPressed,
-                        ]}>
-                        <Text
-                          style={[styles.courseName, selected && styles.courseNameSelected]}
-                          maxFontSizeMultiplier={1.2}>
-                          {COURSE_LABELS[option.course]}
-                        </Text>
-                        <Text
-                          style={[styles.courseMinutes, selected && styles.courseMinutesSelected]}
-                          maxFontSizeMultiplier={1.2}>
-                          약 {option.minutes}분
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                {/* 카드 두 장 대신 FIT ROTEIN 시안의 슬라이딩 토글.
+                    course_options 는 short/long 두 가지뿐이다(COURSE_LABELS 참고). */}
+                <CourseToggle
+                  options={[
+                    {
+                      value: result.course_options[0].course,
+                      label: COURSE_LABELS[result.course_options[0].course],
+                      sub: `약 ${result.course_options[0].minutes}분`,
+                    },
+                    {
+                      value: result.course_options[1].course,
+                      label: COURSE_LABELS[result.course_options[1].course],
+                      sub: `약 ${result.course_options[1].minutes}분`,
+                    },
+                  ]}
+                  // 서버 응답을 기다리지 않고 누른 쪽으로 먼저 미끄러진다.
+                  // result.course 만 보면 목록을 다시 받을 때까지 썸이 그대로라
+                  // 눌러도 아무 일 없는 것처럼 보인다. 실패하면 pendingCourse 가
+                  // 풀리면서 서버 값으로 돌아온다.
+                  value={pendingCourse ?? result.course}
+                  onChange={(course) => void changeCourse(course)}
+                  busy={pendingCourse !== null}
+                />
                 {courseError ? (
                   <Text style={styles.noticeError} maxFontSizeMultiplier={1.3}>
                     {courseError}
                   </Text>
-                ) : (
-                  <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-                    바꾸면 오늘 목록이 바로 다시 짜여요. 이미 마친 운동은 그대로 남아요.
+                ) : pendingCourse ? (
+                  <Text
+                    style={styles.footNote}
+                    maxFontSizeMultiplier={1.3}
+                    accessibilityLiveRegion="polite">
+                    오늘 목록을 다시 짜고 있어요…
                   </Text>
-                )}
+                ) : null}
               </View>
             ) : null}
 
@@ -286,32 +311,50 @@ export default function WorkoutTab() {
               ))}
             </View>
 
-            <PrimaryButton
-              label="기구 사용법 모아보기"
-              variant="secondary"
-              onPress={() => router.push('/workout/guide')}
-            />
-
-            <View style={styles.buttonRow}>
-              <PrimaryButton
-                label="기구 QR 찍기"
-                variant="secondary"
-                style={styles.buttonHalf}
-                onPress={() => router.push('/workout/scan')}
-              />
-              <PrimaryButton
-                label="스트레칭 보기"
-                variant="secondary"
-                style={styles.buttonHalf}
-                onPress={() => router.push('/workout/stretching')}
-              />
+            {/* 바로가기. 원래 설명 달린 목록 행 4줄이었는데, 그 덩치가 화면의
+                주인공인 "오늘의 운동"보다 커져서 타일 한 줄로 줄였다.
+                "오늘 운동 카드"는 운동을 하나라도 마친 뒤에만 나타난다 —
+                아무것도 안 했는데 자랑 카드부터 권하는 건 이상하고,
+                다 마친 순간 새로 나타나는 게 작은 보상이 된다. */}
+            <View style={styles.shortcuts}>
+              <Text style={styles.sectionCaption} maxFontSizeMultiplier={1.2}>
+                이런 것도 할 수 있어요
+              </Text>
+              {doneCount > 0 ? (
+                <ListRow
+                  icon="chart"
+                  tint="green"
+                  title="오늘 운동 카드"
+                  subtitle="오늘 한 운동을 한 장으로 모아 자랑할 수 있어요"
+                  chevron
+                  onPress={() => router.push('/workout/summary')}
+                />
+              ) : null}
+              <View style={styles.shortcutTiles}>
+                <ShortcutTile
+                  icon="dumbbell"
+                  tint="teal"
+                  label="기구 사용법"
+                  accessibilityLabel="기구 사용법 모아보기. 오늘 목록에 없는 기구도 부위별로 찾아볼 수 있어요"
+                  onPress={() => router.push('/workout/guide')}
+                />
+                <ShortcutTile
+                  icon="qr"
+                  tint="blue"
+                  label="기구 QR 찍기"
+                  accessibilityLabel="기구 QR 찍기. 목록에 없는 기구도 사용법과 영상을 볼 수 있어요"
+                  onPress={() => router.push('/workout/scan')}
+                />
+                <ShortcutTile
+                  icon="play"
+                  tint="green"
+                  label="스트레칭"
+                  accessibilityLabel="스트레칭 보기. 운동 전후 5분, 다치지 않게 풀어 주세요"
+                  onPress={() => router.push('/workout/stretching')}
+                />
+              </View>
             </View>
 
-            <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-              {'운동을 누르면 하는 방법이 나와요. 오늘 목록에 없는 기구는 "기구 사용법 ' +
-                '모아보기"에서 부위별로 찾거나, 기구 앞에 붙은 QR 을 찍어서 볼 수 있어요. ' +
-                '운동 전후로 스트레칭도 잊지 마세요.'}
-            </Text>
           </>
         )}
       </ScrollView>
@@ -326,7 +369,8 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    gap: Spacing.xl,
+    // 단락 사이는 일부러 넉넉하게 — 붙어 있으면 화면이 빽빽해 보인다.
+    gap: Spacing.xxl,
     paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.xl,
     maxWidth: 900,
@@ -336,18 +380,19 @@ const styles = StyleSheet.create({
   headings: {
     gap: Spacing.sm,
   },
-  dayBadge: {
-    fontSize: FontSize.caption,
-    fontWeight: '700',
-    letterSpacing: LetterSpacing.body,
-    color: Colors.primary,
-  },
   title: {
     fontSize: FontSize.title,
     fontWeight: '700',
     lineHeight: FontSize.title * 1.3,
     letterSpacing: LetterSpacing.title,
     color: Colors.text,
+  },
+  greetingSub: {
+    fontSize: FontSize.body,
+    fontWeight: '500',
+    lineHeight: FontSize.body * 1.5,
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
   },
   points: {
     flexDirection: 'row',
@@ -365,18 +410,12 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },
-  pointsValue: {
-    fontSize: FontSize.subtitle,
-    fontWeight: '700',
-    letterSpacing: LetterSpacing.subtitle,
-    color: Colors.primary,
-    fontVariant: ['tabular-nums'],
-  },
+  /** 토스의 "금융 서비스" 같은 회색 섹션 캡션 — 내용보다 조용해야 한다. */
   sectionTitle: {
-    fontSize: FontSize.body,
-    fontWeight: '700',
-    letterSpacing: LetterSpacing.subtitle,
-    color: Colors.text,
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.grey[500],
     marginBottom: -Spacing.sm,
   },
   list: {
@@ -409,91 +448,55 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.body,
     color: Colors.success,
   },
+  /** FIT ROTEIN 시안의 히어로 카드 — 파란 면 위에 흰 글씨·흰 진행 바. */
   progress: {
-    gap: Spacing.sm,
+    gap: Spacing.md,
     padding: Spacing.xl,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.surface,
-  },
-  progressHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    backgroundColor: Colors.primary,
   },
   progressLabel: {
-    fontSize: FontSize.body,
-    fontWeight: '700',
+    fontSize: FontSize.caption,
+    fontWeight: '600',
     letterSpacing: LetterSpacing.body,
-    color: Colors.text,
+    color: 'rgba(255,255,255,0.8)',
   },
   progressCount: {
-    fontSize: FontSize.subtitle,
+    // 시안 히어로 카드의 카운트(36px).
+    fontSize: 36,
     fontWeight: '700',
+    lineHeight: 40,
     letterSpacing: LetterSpacing.subtitle,
-    color: Colors.primary,
+    color: Colors.textOnPrimary,
     fontVariant: ['tabular-nums'],
   },
+  progressCountSub: {
+    fontSize: FontSize.subtitle,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.7)',
+  },
   progressTrack: {
-    height: 14,
+    height: 12,
     borderRadius: Radius.full,
-    backgroundColor: Colors.background,
+    backgroundColor: 'rgba(255,255,255,0.28)',
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
     borderRadius: Radius.full,
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.background,
   },
   progressFillDone: {
-    backgroundColor: Colors.success,
+    backgroundColor: Colors.background,
   },
   progressHint: {
     fontSize: FontSize.caption,
-    fontWeight: '500',
+    fontWeight: '600',
     letterSpacing: LetterSpacing.body,
-    color: Colors.textSecondary,
+    color: 'rgba(255,255,255,0.9)',
   },
   courseSection: {
     gap: Spacing.md,
-  },
-  courseRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  courseCard: {
-    flex: 1,
-    gap: Spacing.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.md,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.surface,
-    minHeight: TouchTarget.min,
-  },
-  courseCardSelected: {
-    backgroundColor: Colors.primary,
-  },
-  courseCardPressed: {
-    opacity: 0.85,
-  },
-  courseName: {
-    fontSize: FontSize.subtitle,
-    fontWeight: '700',
-    letterSpacing: LetterSpacing.subtitle,
-    color: Colors.text,
-  },
-  courseNameSelected: {
-    color: Colors.textOnPrimary,
-  },
-  courseMinutes: {
-    fontSize: FontSize.caption,
-    fontWeight: '600',
-    letterSpacing: LetterSpacing.body,
-    color: Colors.textSecondary,
-  },
-  courseMinutesSelected: {
-    color: Colors.textOnPrimary,
   },
   noticeError: {
     fontSize: FontSize.caption,
@@ -501,12 +504,22 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.body,
     color: Colors.danger,
   },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
+  shortcuts: {
+    gap: Spacing.xs,
   },
-  buttonHalf: {
-    flex: 1,
+  /** 바로가기 타일 3개를 한 줄에 나란히 */
+  shortcutTiles: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginTop: Spacing.xs,
+  },
+  /** 토스의 "금융 서비스" 같은 회색 섹션 캡션 */
+  sectionCaption: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.grey[500],
+    marginBottom: Spacing.md,
   },
   notice: {
     padding: Spacing.lg,
@@ -526,18 +539,6 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.body,
     lineHeight: FontSize.caption * 1.55,
     color: Colors.textTertiary,
-  },
-  centered: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.lg,
-    paddingVertical: Spacing.xxxl,
-  },
-  centeredText: {
-    fontSize: FontSize.body,
-    fontWeight: '600',
-    letterSpacing: LetterSpacing.body,
-    color: Colors.textSecondary,
   },
   errorBox: {
     gap: Spacing.lg,

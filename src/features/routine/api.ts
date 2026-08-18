@@ -19,6 +19,7 @@ const RPC_ERROR_CODES = [
   'AUTH_REQUIRED',
   'FORBIDDEN',
   'ROUTINE_NOT_FOUND',
+  'INVALID_DURATION',
 ] as const;
 
 type RpcErrorCode = (typeof RPC_ERROR_CODES)[number];
@@ -29,6 +30,7 @@ const MESSAGES: Record<RpcErrorCode, string> = {
   AUTH_REQUIRED: '로그인 후 다시 시도해 주세요.',
   FORBIDDEN: '이 정보를 볼 수 없어요.',
   ROUTINE_NOT_FOUND: '운동을 찾지 못했어요.',
+  INVALID_DURATION: '운동한 시간을 1분에서 240분 사이로 입력해 주세요.',
 };
 
 export class RoutineError extends Error {
@@ -82,16 +84,27 @@ export async function setRoutineCourse(course: RoutineCourse): Promise<GenerateR
   return data;
 }
 
-/** 세트를 다 마친 뒤 실제 기록을 저장하고 포인트를 받는다. */
+/**
+ * 실제 수행 기록. 근력이면 무게(핀 칸)와 횟수를, 유산소면 실제로 움직인
+ * 시간(분)을 담는다 — 한 운동이 둘 다 갖는 경우는 없다.
+ */
+export type ActualRecord = {
+  actualWeightKg?: number | null;
+  actualReps?: number | null;
+  /** 유산소 실제 수행 시간(분). 서버가 1~240 범위를 다시 확인한다. */
+  actualDurationMinutes?: number | null;
+};
+
+/** 운동을 마친 뒤 실제 기록을 저장하고 포인트를 받는다. */
 export async function completeRoutine(
   routineId: string,
-  actualWeightKg: number | null,
-  actualReps: number | null,
+  actual: ActualRecord = {},
 ): Promise<{ routine: DailyRoutine; pointsAwarded: number }> {
   const { data, error } = await supabase.rpc('complete_routine', {
     p_routine_id: routineId,
-    p_actual_weight_kg: actualWeightKg ?? undefined,
-    p_actual_reps: actualReps ?? undefined,
+    p_actual_weight_kg: actual.actualWeightKg ?? undefined,
+    p_actual_reps: actual.actualReps ?? undefined,
+    p_actual_duration_minutes: actual.actualDurationMinutes ?? undefined,
   });
 
   if (error) throw toRoutineError(error);

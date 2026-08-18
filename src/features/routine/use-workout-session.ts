@@ -18,10 +18,52 @@ export type SessionPhase = 'ready' | 'working' | 'resting' | 'logging';
  */
 const REST_SECONDS = 60;
 
-/** 남은 시간을 "1:05" 로. 1분 미만이면 "45초". */
-export function formatRest(seconds: number): string {
+/** 시간을 "1:05" 로. 1분 미만이면 "45초". 쉬는 시간(줄어듦)과 경과 시간(늘어남) 양쪽에 쓴다. */
+export function formatClock(seconds: number): string {
   if (seconds < 60) return `${seconds}초`;
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+/**
+ * 유산소를 실제로 몇 분 했는지 앱이 직접 잰다.
+ *
+ * 시니어에게 "몇 분 하셨어요?"만 묻고 끝내면 대개 처방 시간을 그대로 답한다
+ * (기억이 아니라 화면에 적힌 숫자를 읽는 것에 가깝다). 시작~완료 사이를 앱이
+ * 재서 채워 두면 대부분 그대로 두면 되고, 틀렸을 때만 고치면 된다.
+ *
+ * `active` 가 false 로 바뀌면 그 시점 값에서 멈추고 그대로 유지한다.
+ */
+export function useElapsedSeconds(active: boolean): number {
+  const [elapsed, setElapsed] = useState(0);
+  const startedAt = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!active) {
+      // 멈추는 순간 값을 한 번 더 맞춘다. 안 그러면 마지막 틱 이후 흐른 시간
+      // (최대 1초)이 빠진 채로 굳는다.
+      if (startedAt.current !== null) {
+        setElapsed(Math.floor((Date.now() - startedAt.current) / 1000));
+      }
+      return;
+    }
+
+    // 시작 시각 기준으로 계산한다. 화면이 잠깐 멈춰도(앱을 내렸다 올려도)
+    // 실제로 흐른 시간이 그대로 나온다 — 틱 수를 세면 멈춘 동안이 빠진다.
+    startedAt.current ??= Date.now();
+
+    const tick = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startedAt.current!) / 1000));
+    }, 1000);
+
+    return () => clearInterval(tick);
+  }, [active]);
+
+  return elapsed;
+}
+
+/** 잰 시간을 기록용 분으로. 30초라도 눌렀으면 0분이 아니라 1분으로 친다. */
+export function elapsedToMinutes(seconds: number): number {
+  return Math.max(1, Math.round(seconds / 60));
 }
 
 export function useWorkoutSession(totalSets: number) {

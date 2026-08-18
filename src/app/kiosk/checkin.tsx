@@ -1,12 +1,16 @@
 import { Redirect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Icon } from '@/components/icon';
 import { Keypad } from '@/components/keypad';
 import { PrimaryButton } from '@/components/primary-button';
-import { Colors, FontSize, LetterSpacing, Spacing } from '@/constants/theme';
+import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { CheckInError, kioskCheckIn } from '@/features/auth/kiosk-api';
+import { recordKioskConsent } from '@/features/legal/api';
+import { KIOSK_CONSENT_NOTICE } from '@/features/legal/consent-items';
 import { formatPhoneNumber, isValidPhoneNumber, PHONE_MAX_DIGITS } from '@/features/auth/phone';
 import { useDeviceRole } from '@/features/device-role/context';
 import type { KioskCheckInResult } from '@/lib/database.types';
@@ -83,6 +87,11 @@ export default function KioskCheckinScreen() {
     try {
       const checkIn = await kioskCheckIn(aptId, digits);
       setDigits('');
+
+      // 화면에 상시로 떠 있는 수집 고지에 대한 동의를 남긴다. 태블릿 앞에 줄이
+      // 서 있으므로 기록이 실패해도 체크인을 막지 않는다 — 기록이 목적이지
+      // 관문이 아니다.
+      void recordKioskConsent(checkIn.user_id).catch(() => {});
 
       if (checkIn.needs_pairing && checkIn.pairing_code) {
         // 처음 오신 분(또는 아직 폰 앱과 연결 안 된 분)은 바로 QR 화면으로.
@@ -204,6 +213,44 @@ export default function KioskCheckinScreen() {
     />
   );
 
+  // FIT ROTEIN 시안(3g)의 오른쪽 절반 — 처음 온 분을 위한 최초 1회 안내.
+  // QR 자체는 체크인 뒤 사람마다 새로 발급되므로(아래 handleSubmit 참고),
+  // 여기에는 순서를 세 줄로 세워 둔다. 실제 순서와 다르게 쓰면 안 된다 —
+  // 번호가 먼저고 QR 이 그 다음이다.
+  const firstVisitPanel = (
+    <View style={styles.firstVisit}>
+      <View style={styles.firstVisitBadge}>
+        <Text style={styles.firstVisitBadgeText} maxFontSizeMultiplier={1.2}>
+          처음 오셨나요?
+        </Text>
+      </View>
+      <Text style={styles.firstVisitTitle} maxFontSizeMultiplier={1.2}>
+        딱 한 번만{'\n'}폰과 연결하면 돼요
+      </Text>
+      <View style={styles.firstVisitIcon}>
+        <Icon name="qr" size={120} color={Colors.primary} strokeWidth={1.4} />
+      </View>
+      <View style={styles.firstVisitSteps}>
+        {[
+          '왼쪽에 전화번호를 누르세요',
+          '이어서 뜨는 QR을 폰으로 찍으세요',
+          '다음부터는 번호만 누르면 출석 끝',
+        ].map((step, index) => (
+          <View key={step} style={styles.firstVisitStep}>
+            <View style={styles.stepNumber}>
+              <Text style={styles.stepNumberText} maxFontSizeMultiplier={1.2}>
+                {index + 1}
+              </Text>
+            </View>
+            <Text style={styles.stepText} maxFontSizeMultiplier={1.3}>
+              {step}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.screen}>
       <ScrollView
@@ -214,9 +261,15 @@ export default function KioskCheckinScreen() {
         ]}
         keyboardShouldPersistTaps="handled">
         {isWide ? (
+          // 시안 3g: 왼쪽 절반이 전화번호(제목·번호·키패드), 오른쪽 절반이
+          // 최초 1회 안내. 전화번호가 왼쪽이라는 요구가 확정이다.
           <>
-            <View style={styles.column}>{prompt}</View>
-            <View style={styles.column}>{keypad}</View>
+            <View style={styles.column}>
+              {prompt}
+              {keypad}
+            </View>
+            <View style={styles.columnDivider} />
+            <View style={styles.column}>{firstVisitPanel}</View>
           </>
         ) : (
           <>
@@ -227,6 +280,12 @@ export default function KioskCheckinScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
+        {/* 수집 고지는 버튼 바로 위에 상시로 둔다. 공용 태블릿에서 약관 전문을
+            스크롤하게 하는 건 줄을 세우는 일이라, 받는 항목이 전화번호 하나뿐인
+            이 화면에서는 그 한 줄을 늘 보이게 하는 편이 실제로 읽힌다. */}
+        <Text style={styles.notice} maxFontSizeMultiplier={1.3}>
+          {KIOSK_CONSENT_NOTICE}
+        </Text>
         <PrimaryButton
           label="체크인"
           onPress={() => void handleSubmit()}
@@ -242,6 +301,14 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  notice: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    lineHeight: FontSize.caption * 1.55,
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textTertiary,
+    textAlign: 'center',
   },
   content: {
     flexGrow: 1,
@@ -261,9 +328,75 @@ const styles = StyleSheet.create({
   column: {
     flex: 1,
     justifyContent: 'center',
+    gap: Spacing.xl,
+  },
+  columnDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    marginVertical: Spacing.xl,
+    backgroundColor: Colors.divider,
   },
   promptBlock: {
     gap: Spacing.xl,
+  },
+  /** 오른쪽 절반 — 처음 온 분 안내(시안 3g). */
+  firstVisit: {
+    gap: Spacing.lg,
+    alignItems: 'flex-start',
+  },
+  firstVisitBadge: {
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primaryFaint,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+  },
+  firstVisitBadgeText: {
+    fontSize: FontSize.body,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.primaryPressed,
+  },
+  firstVisitTitle: {
+    fontSize: FontSize.title,
+    fontWeight: '700',
+    lineHeight: FontSize.title * 1.35,
+    letterSpacing: LetterSpacing.title,
+    color: Colors.text,
+  },
+  firstVisitIcon: {
+    alignSelf: 'center',
+    padding: Spacing.xl,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.surface,
+    marginVertical: Spacing.md,
+  },
+  firstVisitSteps: {
+    gap: Spacing.md,
+  },
+  firstVisitStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  stepNumber: {
+    width: 30,
+    height: 30,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primaryFaint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepNumberText: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
+    color: Colors.primaryPressed,
+    fontVariant: ['tabular-nums'],
+  },
+  stepText: {
+    fontSize: FontSize.subtitle,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
   },
   titleBlock: {
     gap: Spacing.sm,

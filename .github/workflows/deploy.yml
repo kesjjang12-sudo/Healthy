@@ -1,0 +1,107 @@
+# main 에 들어온 것을 웹(PWA)과 설치형 앱에 함께 배포한다.
+#
+# 왜 만들었나. 배포 경로가 둘인데 그동안 사람이 웹만 올리고 있었다. 그래서
+# 태블릿·폰에 깔린 앱은 마지막으로 eas update 를 돌린 시점에 멈춰 있었고,
+# 웹만 계속 새로워져서 "어플하고 PWA 가 다르다"는 상태가 오래 갔다.
+#
+# 앱의 자동 업데이트(expo-updates)는 "받는" 쪽만 자동이다. "올리는" 쪽은
+# 누군가 eas update 를 돌려야 하는데, 그 누군가가 없었던 것이 원인이다.
+# 그 한 사람을 여기로 옮긴다 — 이제 main 에 푸시하면 둘 다 나간다.
+
+name: 배포
+
+on:
+  push:
+    branches: [main]
+  # 코드 변경 없이 다시 올리고 싶을 때(빌드 깨짐 복구 등) 손으로도 돌린다.
+  workflow_dispatch:
+
+# 배포가 겹치면 나중 것이 먼저 것을 덮어써 순서가 뒤집힌다. 줄을 세우되
+# 취소하지는 않는다 — 취소하면 그 커밋이 영영 배포되지 않는다.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    env:
+      # EXPO_PUBLIC_* 는 번들에 그대로 박히는 공개값이다(anon key 는 RLS 로
+      # 막힌다). 이미 eas.json 에 평문으로 들어 있는 값이라 여기 둔다고 새로
+      # 노출되는 것은 없다. service_role key 는 절대 여기 두지 말 것.
+      EXPO_PUBLIC_SUPABASE_URL: https://hhjmhdxcxjuhhhgjsilu.supabase.co
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhoam1oZHhjeGp1aGhoZ2pzaWx1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1MDQ2MTUsImV4cCI6MjEwMjA4MDYxNX0.0ypZLRSxjlu_UqJ7v37YxQjqYqM-i3h83Qwo8RBZWUA
+      EXPO_PUBLIC_FITROUTINE_APT_ID: 11111111-1111-4111-8111-111111111111
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # 타입이 깨진 채로 배포되면 화면이 흰 채로 뜬다. 여기서 먼저 막는다.
+      - name: 타입 검사
+        run: npx tsc --noEmit
+
+      - name: 웹 번들 빌드
+        run: npx expo export --platform web
+
+      - name: gh-pages 에 올린다
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # 기존 gh-pages 를 가져와 그 위에 얹는다. 새로 만들지 않는 이유:
+          # 히스토리를 날리면 되돌릴 수가 없다.
+          git fetch origin gh-pages --depth=1 || true
+          rm -rf .deploy
+          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
+            git worktree add .deploy origin/gh-pages --detach
+          else
+            git worktree add .deploy --detach
+            git -C .deploy checkout --orphan gh-pages
+            git -C .deploy rm -rf . || true
+          fi
+
+          # .nojekyll 은 빌드 산출물에 없고 gh-pages 브랜치에만 있는 파일이다.
+          # 이게 없으면 GitHub Pages 가 _expo/ 같은 밑줄 폴더를 통째로 무시한다.
+          find .deploy -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.nojekyll' -exec rm -rf {} +
+          cp -r dist/. .deploy/
+          touch .deploy/.nojekyll
+
+          cd .deploy
+          git add -A
+          if git diff --cached --quiet; then
+            echo "바뀐 것이 없어 gh-pages 는 건너뛴다."
+          else
+            git commit -m "$(git -C .. log -1 --pretty=%s) 배포"
+            git push origin HEAD:gh-pages
+          fi
+
+      - name: 설치형 앱(태블릿·폰)에 업데이트를 올린다
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${EXPO_TOKEN:-}" ]; then
+            echo "::warning title=설치형 앱 업데이트 건너뜀::EXPO_TOKEN 시크릿이 없습니다. 저장소 Settings → Secrets and variables → Actions 에 EXPO_TOKEN 을 넣으면 앞으로 앱도 자동으로 갱신됩니다."
+            exit 0
+          fi
+
+          npx --yes eas-cli@latest update \
+            --branch preview \
+            --environment preview \
+            --message "$(git log -1 --pretty=%s)" \
+            --non-interactive
