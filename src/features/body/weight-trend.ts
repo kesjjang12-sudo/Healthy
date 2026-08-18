@@ -137,21 +137,21 @@ export function buildWeightTrend(
  * 하는 말("처음보다 얼마나 달라졌는가")을 한 문장으로 대신 준다.
  */
 export function describeWeightTrend(logs: BodyWeightLog[]): string {
-  if (logs.length === 0) return '몸무게 추이 그래프. 아직 기록이 없습니다.';
+  if (logs.length === 0) return '몸무게 추이 그래프. 아직 기록이 없어요.';
 
   const ordered = oldestFirst(logs);
   const first = ordered[0];
   const last = ordered[ordered.length - 1];
 
   if (ordered.length === 1) {
-    return `몸무게 추이 그래프. ${formatMonthDay(first.log_date)} ${first.weight_kg}킬로그램 한 번만 기록했습니다.`;
+    return `몸무게 추이 그래프. ${formatMonthDay(first.log_date)} ${first.weight_kg}킬로그램 한 번만 기록했어요.`;
   }
 
   const delta = Math.round((last.weight_kg - first.weight_kg) * 10) / 10;
   const change =
     delta === 0
-      ? '처음과 같습니다'
-      : `${Math.abs(delta)}킬로그램 ${delta < 0 ? '줄었습니다' : '늘었습니다'}`;
+      ? '처음과 같아요'
+      : `${Math.abs(delta)}킬로그램 ${delta < 0 ? '줄었어요' : '늘었어요'}`;
 
   return (
     `몸무게 추이 그래프. ${formatMonthDay(first.log_date)} ${first.weight_kg}킬로그램에서 ` +

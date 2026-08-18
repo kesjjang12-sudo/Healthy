@@ -98,10 +98,10 @@ export function WeightNudgeModal() {
           {isDone ? (
             <>
               <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-                기록했습니다!
+                기록했어요!
               </Text>
               <Text style={styles.body} maxFontSizeMultiplier={1.3}>
-                변화는 분석 탭에서 언제든 볼 수 있어요. 오늘 운동도 화이팅입니다.
+                변화는 분석 탭에서 언제든 볼 수 있어요. 오늘 운동도 화이팅이에요.
               </Text>
               <PrimaryButton label="운동하러 가기" onPress={close} />
             </>
@@ -112,7 +112,7 @@ export function WeightNudgeModal() {
               </Text>
               <Text style={styles.body} maxFontSizeMultiplier={1.3}>
                 현재 몸무게를 업데이트해 볼까요? 변화를 눈으로 확인하면 운동 의지가 다시
-                불타오릅니다.
+                불타올라요.
               </Text>
 
               <TextField

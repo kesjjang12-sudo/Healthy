@@ -95,7 +95,7 @@ export default function PhoneLoginScreen() {
 
       setIsVerified(true);
     } catch (error) {
-      setErrorMessage(error instanceof PhoneOtpError ? error.message : '인증을 마치지 못했습니다.');
+      setErrorMessage(error instanceof PhoneOtpError ? error.message : '인증을 마치지 못했어요.');
     } finally {
       setBusy(null);
     }
@@ -125,7 +125,7 @@ export default function PhoneLoginScreen() {
       setUser(updated);
       router.replace(updated.profile_data?.onboarded_at ? '/workout' : '/onboarding');
     } catch {
-      setErrorMessage('가입을 마치지 못했습니다. 다시 시도해 주세요.');
+      setErrorMessage('가입을 마치지 못했어요. 다시 시도해 주세요.');
     } finally {
       setBusy(null);
     }
@@ -198,7 +198,7 @@ export default function PhoneLoginScreen() {
         {isVerified ? (
           <View style={styles.verifiedBox}>
             <Text style={styles.verifiedText} maxFontSizeMultiplier={1.3}>
-              전화번호 인증이 끝났습니다.
+              전화번호 인증이 끝났어요.
             </Text>
           </View>
         ) : null}

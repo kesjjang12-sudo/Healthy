@@ -79,7 +79,7 @@ export default function KioskPairingScreen() {
               연결 완료
             </Text>
             <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-              다음 방문부터는 QR 없이 바로 체크인됩니다.
+              다음 방문부터는 QR 없이 바로 체크인돼요.
             </Text>
           </View>
         ) : status === 'expired' ? (
@@ -102,7 +102,7 @@ export default function KioskPairingScreen() {
               </Text>
               {isRelink ? (
                 <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-                  기록은 그대로 남아 있어요. 이 폰을 계정에 다시 잇기만 하면 됩니다.
+                  기록은 그대로 남아 있어요. 이 폰을 계정에 다시 잇기만 하면 돼요.
                 </Text>
               ) : null}
             </View>

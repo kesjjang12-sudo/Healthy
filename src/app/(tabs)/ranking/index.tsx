@@ -49,13 +49,13 @@ export default function RankingTab() {
           우리 단지 랭킹
         </Text>
         <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          같은 헬스장을 쓰는 이웃끼리, 출석한 날 수로 비교됩니다.
+          같은 헬스장을 쓰는 이웃끼리, 출석한 날 수로 비교돼요.
         </Text>
       </View>
 
       {!user!.apt_id ? (
         <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          아직 주 소속 헬스장이 없습니다.
+          아직 주 소속 헬스장이 없어요.
         </Text>
       ) : errorMessage ? (
         <Text style={styles.errorText} maxFontSizeMultiplier={1.3} accessibilityLiveRegion="polite">

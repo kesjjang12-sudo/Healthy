@@ -19,9 +19,9 @@ export type PairingErrorCode = (typeof RPC_ERROR_CODES)[number] | 'NETWORK' | 'U
 
 const MESSAGES: Record<PairingErrorCode, string> = {
   AUTH_REQUIRED: '로그인 후 다시 시도해 주세요.',
-  PAIRING_NOT_FOUND: '연결 코드를 찾을 수 없습니다. 태블릿에서 다시 확인해 주세요.',
-  PAIRING_ALREADY_USED: '이미 연결된 코드입니다.',
-  PAIRING_EXPIRED: '연결 시간이 지났습니다. 태블릿에서 다시 시도해 주세요.',
+  PAIRING_NOT_FOUND: '연결 코드를 찾을 수 없어요. 태블릿에서 다시 확인해 주세요.',
+  PAIRING_ALREADY_USED: '이미 연결된 코드예요.',
+  PAIRING_EXPIRED: '연결 시간이 지났어요. 태블릿에서 다시 시도해 주세요.',
   NETWORK: NETWORK_ERROR_MESSAGE,
   UNKNOWN: GENERIC_ERROR_MESSAGE,
 };

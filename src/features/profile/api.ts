@@ -21,7 +21,7 @@ const MESSAGES: Record<(typeof RPC_ERROR_CODES)[number], string> = {
   NICKNAME_PROFANITY: '닉네임에 쓸 수 없는 단어가 들어 있어요. 다른 이름을 골라 주세요.',
   NICKNAME_RATE_LIMITED: '닉네임은 2주에 한 번 바꿀 수 있어요.',
   AUTH_REQUIRED: '로그인 후 다시 시도해 주세요.',
-  USER_NOT_FOUND: '회원 정보를 찾지 못했습니다. 다시 로그인해 주세요.',
+  USER_NOT_FOUND: '회원 정보를 찾지 못했어요. 다시 로그인해 주세요.',
 };
 
 export class NicknameError extends Error {
@@ -42,7 +42,7 @@ function rateLimitMessage(error: RpcError): string {
   const next = raw ? new Date(raw) : null;
   if (!next || Number.isNaN(next.getTime())) return MESSAGES.NICKNAME_RATE_LIMITED;
 
-  return `닉네임은 2주에 한 번 바꿀 수 있어요. ${next.getMonth() + 1}월 ${next.getDate()}일부터 다시 바꿀 수 있습니다.`;
+  return `닉네임은 2주에 한 번 바꿀 수 있어요. ${next.getMonth() + 1}월 ${next.getDate()}일부터 다시 바꿀 수 있어요.`;
 }
 
 /** 닉네임을 바꾼다. 비속어·변경 주기 검사는 전부 서버가 한다. */

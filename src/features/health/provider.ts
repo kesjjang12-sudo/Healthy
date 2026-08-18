@@ -33,7 +33,7 @@ export function getHealthConnectionStatus(): HealthConnectionStatus {
 
 /** 아직 연결할 수 없다 — 항상 실패한다. UI 는 이 함수를 호출하기 전에 상태를 먼저 봐야 한다. */
 export async function connectHealth(): Promise<never> {
-  throw new Error('아직 지원하지 않는 기능입니다.');
+  throw new Error('아직 지원하지 않는 기능이에요.');
 }
 
 export async function getTodayActivitySummary(): Promise<DailyActivitySummary> {

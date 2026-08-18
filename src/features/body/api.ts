@@ -12,7 +12,7 @@ const RPC_ERROR_CODES = ['AUTH_REQUIRED', 'USER_NOT_FOUND', 'INVALID_WEIGHT', 'I
 
 const MESSAGES: Record<(typeof RPC_ERROR_CODES)[number], string> = {
   AUTH_REQUIRED: '로그인 후 다시 시도해 주세요.',
-  USER_NOT_FOUND: '회원 정보를 찾지 못했습니다.',
+  USER_NOT_FOUND: '회원 정보를 찾지 못했어요.',
   INVALID_WEIGHT: '몸무게는 25~250kg 사이로 입력해 주세요.',
   INVALID_HEIGHT: '키는 100~220cm 사이로 입력해 주세요.',
 };

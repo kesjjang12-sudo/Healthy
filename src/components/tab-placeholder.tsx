@@ -13,7 +13,7 @@ export function TabPlaceholder({ title }: { title: string }) {
         {title}
       </Text>
       <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-        준비 중입니다
+        준비 중이에요
       </Text>
     </View>
   );

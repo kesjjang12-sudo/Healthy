@@ -136,7 +136,7 @@ export default function EquipmentGuideScreen() {
             기구 사용법
           </Text>
           <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-            운동을 누르면 하는 방법과 영상이 나옵니다. 파란 칸은 기구 없이 하는 운동이라
+            운동을 누르면 하는 방법과 영상이 나와요. 파란 칸은 기구 없이 하는 운동이라
             집에서도 할 수 있어요.
           </Text>
         </View>
@@ -171,8 +171,8 @@ export default function EquipmentGuideScreen() {
           <View style={styles.emptyBox}>
             <Text style={styles.emptyText} maxFontSizeMultiplier={1.3}>
               {scope === 'mine'
-                ? '우리 헬스장에 등록된 기구가 아직 없습니다. 범위를 "전체 운동"으로 바꿔 보세요.'
-                : '고르신 조건에 맞는 운동이 없습니다.'}
+                ? '우리 헬스장에 등록된 기구가 아직 없어요. 범위를 "전체 운동"으로 바꿔 보세요.'
+                : '고르신 조건에 맞는 운동이 없어요.'}
             </Text>
           </View>
         ) : (

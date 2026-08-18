@@ -49,7 +49,7 @@ export async function ensureSessionForPairing(): Promise<PairingSessionStart> {
 
   const { error } = await supabase.auth.signInAnonymously();
   if (error) {
-    throw new Error('연결을 시작하지 못했습니다. 다시 시도해 주세요.');
+    throw new Error('연결을 시작하지 못했어요. 다시 시도해 주세요.');
   }
   return { createdSession: true };
 }
@@ -101,7 +101,7 @@ export async function signInAsTestUser(): Promise<User | null> {
   //
   // join_gym 은 서버에 마이그레이션이 올라가야 존재하는 함수다. 아직 안 올린
   // 상태에서 이걸 그냥 await 하면 함수가 없다는 오류가 그대로 올라와,
-  // "테스트 로그인에 실패했습니다"가 뜨고 로그인 자체를 못 하게 된다 —
+  // "테스트 로그인에 실패했어요"가 뜨고 로그인 자체를 못 하게 된다 —
   // 소속이 없으면 루틴이 비는 것뿐인데 그것 때문에 문을 막을 이유가 없다.
   // 루틴이 비면 운동 탭이 이유를 설명해 준다.
   // 시범단지 id 는 이제 필수 env 가 아니다(태블릿이 등록 코드로 단지를 정한다).

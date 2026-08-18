@@ -13,7 +13,7 @@ const RPC_ERROR_CODES = ['EQUIPMENT_NOT_FOUND'] as const;
 type RpcErrorCode = (typeof RPC_ERROR_CODES)[number];
 
 const MESSAGES: Record<RpcErrorCode, string> = {
-  EQUIPMENT_NOT_FOUND: '이 QR 은 등록된 기구가 아닙니다.',
+  EQUIPMENT_NOT_FOUND: '이 QR 은 등록된 기구가 아니에요.',
 };
 
 export class EquipmentError extends Error {

@@ -91,14 +91,14 @@ export const PROFILE_QUESTIONS: readonly ProfileQuestion[] = [
     mode: 'body',
     title: '키와 몸무게를 알려주세요',
     summaryLabel: '키 · 몸무게',
-    helper: '운동 무게와 소모 칼로리 계산에 쓰입니다. 다른 회원에게는 보이지 않아요.',
+    helper: '운동 무게와 소모 칼로리 계산에 쓰여요. 다른 회원에게는 보이지 않아요.',
   },
   {
     key: 'goals',
     mode: 'multi',
     title: '어떤 목적으로 운동하시나요?',
     summaryLabel: '운동 목적',
-    helper: '여러 개 고르셔도 됩니다.',
+    helper: '여러 개 고르셔도 돼요.',
     options: [
       { value: 'diet', label: '체중 줄이기', caption: '뱃살, 체중 관리' },
       { value: 'muscle', label: '근력 키우기', caption: '힘, 근육량 늘리기' },
@@ -111,8 +111,8 @@ export const PROFILE_QUESTIONS: readonly ProfileQuestion[] = [
     mode: 'multi',
     title: '아프거나 불편한 곳이 있나요?',
     summaryLabel: '아픈 곳',
-    helper: '고르신 곳은 무게를 낮춰서 루틴을 만들어 드립니다. 여러 개 고르셔도 됩니다.',
-    noneLabel: '없습니다',
+    helper: '고르신 곳은 무게를 낮춰서 루틴을 만들어 드려요. 여러 개 고르셔도 돼요.',
+    noneLabel: '없어요',
     options: [
       { value: 'knee', label: '무릎' },
       { value: 'lower_back', label: '허리' },
@@ -127,7 +127,7 @@ export const PROFILE_QUESTIONS: readonly ProfileQuestion[] = [
 /** 설문 문항 뒤에 붙는 최종 확인 화면의 인덱스 */
 export const CONFIRM_STEP_INDEX = PROFILE_QUESTIONS.length;
 
-/** 이 문항에 답을 했는지. 목적은 최소 1개, 아픈 곳은 "없습니다"(빈 배열)도 답으로 친다. */
+/** 이 문항에 답을 했는지. 목적은 최소 1개, 아픈 곳은 "없어요"(빈 배열)도 답으로 친다. */
 export function isAnswered(question: ProfileQuestion, values: Partial<ProfileData>): boolean {
   if (question.mode === 'body') {
     return values.height_cm !== undefined && values.weight_kg !== undefined;

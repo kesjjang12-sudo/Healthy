@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
 import { ExercisePhoto } from '@/components/exercise-photo';
 import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
@@ -87,7 +88,7 @@ export default function EquipmentExploreScreen() {
         <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xl }]}>
           <View style={styles.errorBox}>
             <Text style={styles.errorText} maxFontSizeMultiplier={1.3} accessibilityLiveRegion="polite">
-              {errorMessage ?? '이 QR 은 등록된 기구가 아닙니다.'}
+              {errorMessage ?? '이 QR 은 등록된 기구가 아니에요.'}
             </Text>
           </View>
         </ScrollView>
@@ -104,12 +105,15 @@ export default function EquipmentExploreScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xl }]}>
+      <View style={[styles.header, { paddingTop: insets.top + Spacing.sm }]}>
+        <BackButton onPress={goBack} />
+      </View>
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: Spacing.md }]}>
         <View style={styles.notice}>
           <Text style={styles.noticeText} maxFontSizeMultiplier={1.3}>
             {fromGuide
-              ? '헬스장에서 이 기구 앞에 붙은 QR 을 찍어도 이 화면이 바로 열립니다.'
-              : '오늘 루틴에는 없는 운동입니다. 궁금해서 보시는 거라면 자유롭게 살펴보세요.'}
+              ? '헬스장에서 이 기구 앞에 붙은 QR 을 찍어도 이 화면이 바로 열려요.'
+              : '오늘 루틴에는 없는 운동이에요. 궁금해서 보시는 거라면 자유롭게 살펴보세요.'}
           </Text>
         </View>
 
@@ -158,8 +162,8 @@ export default function EquipmentExploreScreen() {
           <View style={styles.hintBox}>
             <Text style={styles.hintStrong} maxFontSizeMultiplier={1.3}>
               {equipment.base_weight_kg === null
-                ? '기구에 무게가 없는 운동입니다. 몸으로만 천천히 하세요.'
-                : `${equipment.base_weight_kg}kg 근처가 일반적인 시작 무게입니다.`}
+                ? '기구에 무게가 없는 운동이에요. 몸으로만 천천히 하세요.'
+                : `${equipment.base_weight_kg}kg 근처가 일반적인 시작 무게예요.`}
             </Text>
             <Text style={styles.hintText} maxFontSizeMultiplier={1.3}>
               오늘 처방된 운동이 아니라 개인 맞춤 무게는 알려드릴 수 없어요. 직접 해보고 싶으시면
@@ -180,13 +184,8 @@ export default function EquipmentExploreScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-        <PrimaryButton label="영상으로 보기" variant="secondary" onPress={openVideo} />
-        <PrimaryButton
-          label={fromGuide ? '기구 목록으로' : '운동 목록으로'}
-          variant="quiet"
-          size="compact"
-          onPress={goBack}
-        />
+        {/* 되돌아가기는 상단 화살표가 맡는다. 여기 남는 유일한 동작이라 주 버튼으로 승격. */}
+        <PrimaryButton label="영상으로 보기" onPress={openVideo} />
       </View>
     </View>
   );
@@ -196,6 +195,12 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  header: {
+    paddingHorizontal: Spacing.lg,
+    maxWidth: 900,
+    width: '100%',
+    alignSelf: 'center',
   },
   content: {
     flexGrow: 1,

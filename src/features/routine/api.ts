@@ -24,11 +24,11 @@ const RPC_ERROR_CODES = [
 type RpcErrorCode = (typeof RPC_ERROR_CODES)[number];
 
 const MESSAGES: Record<RpcErrorCode, string> = {
-  USER_NOT_FOUND: '회원 정보를 찾지 못했습니다. 다시 로그인해 주세요.',
-  ROUTINE_TEMPLATE_NOT_FOUND: '운동을 준비하지 못했습니다. 관리사무소에 알려주세요.',
+  USER_NOT_FOUND: '회원 정보를 찾지 못했어요. 다시 로그인해 주세요.',
+  ROUTINE_TEMPLATE_NOT_FOUND: '운동을 준비하지 못했어요. 관리사무소에 알려주세요.',
   AUTH_REQUIRED: '로그인 후 다시 시도해 주세요.',
-  FORBIDDEN: '이 정보를 볼 수 없습니다.',
-  ROUTINE_NOT_FOUND: '운동을 찾지 못했습니다.',
+  FORBIDDEN: '이 정보를 볼 수 없어요.',
+  ROUTINE_NOT_FOUND: '운동을 찾지 못했어요.',
 };
 
 export class RoutineError extends Error {
@@ -71,7 +71,7 @@ export async function loadDailyRoutine(userId: string): Promise<GenerateRoutineR
 
 /**
  * 코스(짧게 / 충분히)를 바꾸고 오늘 루틴을 그 자리에서 다시 짠다.
- * "내일부터 적용됩니다" 는 이미 헬스장에 와 있는 사람에게 쓸모가 없다.
+ * "내일부터 적용돼요" 는 이미 헬스장에 와 있는 사람에게 쓸모가 없다.
  */
 export async function setRoutineCourse(course: RoutineCourse): Promise<GenerateRoutineResult> {
   const { data, error } = await supabase.rpc('set_routine_course', { p_course: course });

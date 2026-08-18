@@ -43,7 +43,7 @@ export default function PairCodeScreen() {
         router.replace(user.profile_data?.onboarded_at ? '/workout' : '/onboarding');
       } catch (error) {
         await discardSessionIfCreated(sessionStart).catch(() => {});
-        setErrorMessage(error instanceof PairingError ? error.message : '연결하지 못했습니다.');
+        setErrorMessage(error instanceof PairingError ? error.message : '연결하지 못했어요.');
       }
     })();
   }, [code, router, setUser]);
@@ -52,7 +52,7 @@ export default function PairCodeScreen() {
     return (
       <View style={[styles.centered, { paddingTop: insets.top }]}>
         <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          잘못된 연결입니다.
+          잘못된 연결이에요.
         </Text>
       </View>
     );
@@ -74,7 +74,7 @@ export default function PairCodeScreen() {
         <>
           <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-            연결하는 중입니다
+            연결하는 중이에요
           </Text>
         </>
       )}

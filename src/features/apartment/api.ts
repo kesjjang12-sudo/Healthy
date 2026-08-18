@@ -12,9 +12,9 @@ export type EnrollmentErrorCode = 'INVALID' | 'PIN_NOT_SET' | 'LOCKED' | 'NETWOR
 const MESSAGES: Record<EnrollmentErrorCode, string> = {
   // 코드가 없는 건지 PIN 이 틀린 건지 구분해 주지 않는다. 구분해 주면 코드를
   // 훑어서 어느 단지가 존재하는지 알아낼 수 있다.
-  INVALID: '단지 코드 또는 PIN이 올바르지 않습니다.',
-  PIN_NOT_SET: '이 단지는 아직 관리자 PIN이 설정되지 않았습니다. 본사에 문의해 주세요.',
-  LOCKED: '시도가 너무 많습니다. 15분 뒤에 다시 시도해 주세요.',
+  INVALID: '단지 코드 또는 PIN이 올바르지 않아요.',
+  PIN_NOT_SET: '이 단지는 아직 관리자 PIN이 설정되지 않았어요. 본사에 문의해 주세요.',
+  LOCKED: '시도가 너무 많아요. 15분 뒤에 다시 시도해 주세요.',
   NETWORK: NETWORK_ERROR_MESSAGE,
   UNKNOWN: GENERIC_ERROR_MESSAGE,
 };

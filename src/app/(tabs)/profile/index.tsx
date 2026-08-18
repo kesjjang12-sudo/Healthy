@@ -62,7 +62,7 @@ export default function ProfileTab() {
       })
       .catch((error) => {
         if (!cancelled) {
-          setMembershipError(error instanceof GymMembershipError ? error.message : '불러오지 못했습니다.');
+          setMembershipError(error instanceof GymMembershipError ? error.message : '불러오지 못했어요.');
         }
       });
     return () => {
@@ -76,13 +76,13 @@ export default function ProfileTab() {
     try {
       const updated = await updateNickname(nickname.trim());
       setUser(updated);
-      setNicknameNotice({ kind: 'done', text: '닉네임을 바꿨습니다.' });
+      setNicknameNotice({ kind: 'done', text: '닉네임을 바꿨어요.' });
     } catch (error) {
       // 예전엔 조용히 삼켰지만, 이제 서버가 이유(비속어·2주 제한)를 말해 주므로
       // 그대로 보여준다 — 말없이 안 바뀌면 고장으로 오해한다.
       setNicknameNotice({
         kind: 'error',
-        text: error instanceof NicknameError ? error.message : '저장하지 못했습니다. 다시 시도해 주세요.',
+        text: error instanceof NicknameError ? error.message : '저장하지 못했어요. 다시 시도해 주세요.',
       });
     } finally {
       setIsSavingNickname(false);
@@ -146,7 +146,7 @@ export default function ProfileTab() {
             ) ?? current,
         );
       } catch (error) {
-        setMembershipError(error instanceof GymMembershipError ? error.message : '바꾸지 못했습니다.');
+        setMembershipError(error instanceof GymMembershipError ? error.message : '바꾸지 못했어요.');
       } finally {
         setSwitchingAptId(null);
       }
@@ -239,7 +239,7 @@ export default function ProfileTab() {
           </Text>
         ) : memberships === null ? null : memberships.length === 0 ? (
           <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-            아직 체크인한 헬스장이 없습니다.
+            아직 체크인한 헬스장이 없어요.
           </Text>
         ) : (
           <View style={styles.gymList}>
@@ -283,8 +283,8 @@ export default function ProfileTab() {
         {getHealthConnectionStatus() === 'unavailable' ? (
           <View style={styles.comingSoonBox}>
             <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-              애플 헬스 · Google Health Connect 연동을 준비하고 있습니다. 연결되면 걸음 수와 활동
-              시간을 자동으로 불러옵니다.
+              애플 헬스 · Google Health Connect 연동을 준비하고 있어요. 연결되면 걸음 수와 활동
+              시간을 자동으로 불러와요.
             </Text>
           </View>
         ) : null}
@@ -314,7 +314,7 @@ export default function ProfileTab() {
 
       {providerLabel ? (
         <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          {providerLabel}로 로그인되어 있습니다.
+          {providerLabel}로 로그인되어 있어요.
         </Text>
       ) : null}
 

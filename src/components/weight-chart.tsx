@@ -47,7 +47,7 @@ export function WeightChart({ logs }: Props) {
   if (logs.length === 1) {
     return (
       <Text style={styles.singleLog} maxFontSizeMultiplier={1.3}>
-        기록이 하루치뿐이에요. 며칠 더 재면 여기에 변화가 그려집니다.
+        기록이 하루치뿐이에요. 며칠 더 재면 여기에 변화가 그려져요.
       </Text>
     );
   }

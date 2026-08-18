@@ -53,7 +53,7 @@ export function BodySection() {
       setStatus(next);
       setWeightText('');
       setIsError(false);
-      setMessage('기록했습니다.');
+      setMessage('기록했어요.');
     } catch (error) {
       setIsError(true);
       setMessage(error instanceof BodyError ? error.message : '잠시 후 다시 시도해 주세요.');
@@ -162,7 +162,7 @@ export function BodySection() {
       ) : null}
 
       <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-        몸무게는 하루에도 1~2kg 오르내립니다. 매일 아침 같은 조건에서 재는 것이 가장
+        몸무게는 하루에도 1~2kg 오르내려요. 매일 아침 같은 조건에서 재는 것이 가장
         정확해요. 하루하루 숫자보다 몇 주 흐름을 보세요.
       </Text>
     </View>

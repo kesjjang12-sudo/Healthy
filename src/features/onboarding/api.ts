@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabase';
 const RPC_ERROR_CODES = ['USER_NOT_FOUND', 'INVALID_PROFILE_PATCH'] as const;
 
 const MESSAGES: Record<(typeof RPC_ERROR_CODES)[number], string> = {
-  USER_NOT_FOUND: '회원 정보를 찾지 못했습니다. 번호부터 다시 눌러주세요.',
+  USER_NOT_FOUND: '회원 정보를 찾지 못했어요. 번호부터 다시 눌러주세요.',
   INVALID_PROFILE_PATCH: GENERIC_ERROR_MESSAGE,
 };
 

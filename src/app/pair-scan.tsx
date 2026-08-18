@@ -26,7 +26,7 @@ const CODE_MAX_DIGITS = 6;
  * 있는 교착에 빠진다. 그래서 얻는 방법을 화면에 직접 적어 둔다.
  */
 const PAIRING_GUIDE =
-  '헬스장 입구 태블릿에 전화번호를 누르면 QR이 떠요. 이미 가입하셨더라도 폰을 바꾸거나 앱이 로그아웃됐다면 이 연결을 한 번 더 해야 합니다.';
+  '헬스장 입구 태블릿에 전화번호를 누르면 QR이 떠요. 이미 가입하셨더라도 폰을 바꾸거나 앱이 로그아웃됐다면 이 연결을 한 번 더 해야 해요.';
 
 /**
  * 로그인 화면에서 "전화번호로 시작하기"를 고르면 오는 화면.
@@ -67,7 +67,7 @@ export default function PairScanScreen() {
         setErrorMessage(
           error instanceof PairingError
             ? error.message
-            : '연결하지 못했습니다. 인터넷 연결을 확인해 주세요.',
+            : '연결하지 못했어요. 인터넷 연결을 확인해 주세요.',
         );
         hasHandledScan.current = false;
         setIsProcessing(false);

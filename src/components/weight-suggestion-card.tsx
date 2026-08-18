@@ -39,7 +39,7 @@ export function WeightSuggestionCard({ equipId, suggestion, onApplied }: Props) 
       onApplied();
     } catch (error) {
       setErrorMessage(
-        error instanceof RoutineError ? error.message : '바꾸지 못했습니다. 다시 시도해 주세요.',
+        error instanceof RoutineError ? error.message : '바꾸지 못했어요. 다시 시도해 주세요.',
       );
       setIsApplying(false);
     }
@@ -65,8 +65,8 @@ export function WeightSuggestionCard({ equipId, suggestion, onApplied }: Props) 
           거절하기 어려워하시는 경우가 많아서, "안 해도 된다"를 글로 봐야 한다. */}
       <Text style={styles.note} maxFontSizeMultiplier={1.3}>
         {isIncrease
-          ? '해 보시다가 무거우면 바로 내려놓으세요. 그대로 하셔도 괜찮습니다.'
-          : '무리하지 않는 것이 가장 빠른 길입니다.'}
+          ? '해 보시다가 무거우면 바로 내려놓으세요. 그대로 하셔도 괜찮아요.'
+          : '무리하지 않는 것이 가장 빠른 길이에요.'}
       </Text>
 
       {errorMessage ? (

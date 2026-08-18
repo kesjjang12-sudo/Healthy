@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
 import { CheckMark } from '@/components/check-mark';
 import { ExercisePhoto } from '@/components/exercise-photo';
 import { Keypad } from '@/components/keypad';
@@ -83,7 +84,7 @@ export default function RoutineDetailScreen() {
               style={styles.errorText}
               maxFontSizeMultiplier={1.3}
               accessibilityLiveRegion="polite">
-              {errorMessage ?? '오늘 목록에 없는 운동입니다.'}
+              {errorMessage ?? '오늘 목록에 없는 운동이에요.'}
             </Text>
             {errorMessage ? (
               <PrimaryButton label="다시 시도" variant="secondary" onPress={retry} />
@@ -163,7 +164,7 @@ function WorkoutSession({
         setUser({ ...user, total_points: (user.total_points ?? 0) + awarded });
       }
     } catch (error) {
-      setSaveError(error instanceof RoutineError ? error.message : '기록을 저장하지 못했습니다.');
+      setSaveError(error instanceof RoutineError ? error.message : '기록을 저장하지 못했어요.');
     } finally {
       setIsSaving(false);
       setIsFinished(true);
@@ -192,9 +193,22 @@ function WorkoutSession({
   // 바로 "기록하고 마치기"를 누를 수 있게 한다.
   const showKeypad = session.phase === 'logging' && !isFinished && !isCardio;
 
+  // 뒤로가기는 시작 전에만 보인다 — 세트 도중 실수로 눌러 진행을 날리는 것을
+  // 막는다(예전 "목록으로" 버튼을 시작 전에만 두던 것과 같은 이유).
+  const showBack = session.phase === 'ready' && !isFinished;
+
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xl }]}>
+      {showBack ? (
+        <View style={[styles.header, { paddingTop: insets.top + Spacing.sm }]}>
+          <BackButton onPress={onExit} />
+        </View>
+      ) : null}
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: showBack ? Spacing.md : insets.top + Spacing.xl },
+        ]}>
         {body}
       </ScrollView>
 
@@ -219,13 +233,23 @@ function WorkoutSession({
             }
           />
         ) : session.phase === 'ready' ? (
-          <>
+          item.video_url ? (
+            <View style={styles.footerRow}>
+              <PrimaryButton
+                label="영상으로 보기"
+                variant="secondary"
+                onPress={openVideo}
+                style={styles.footerRowButton}
+              />
+              <PrimaryButton
+                label={isCardio ? '시작' : '운동 시작'}
+                onPress={() => session.start()}
+                style={styles.footerRowButton}
+              />
+            </View>
+          ) : (
             <PrimaryButton label={isCardio ? '시작' : '운동 시작'} onPress={() => session.start()} />
-            {item.video_url ? (
-              <PrimaryButton label="영상으로 보기" variant="secondary" onPress={openVideo} />
-            ) : null}
-            <PrimaryButton label="목록으로" variant="quiet" size="compact" onPress={onExit} />
-          </>
+          )
         ) : session.phase === 'working' ? (
           <PrimaryButton
             label={isCardio ? '다 했어요' : `${session.currentSet}세트 완료`}
@@ -441,7 +465,7 @@ function RestingView({
           {formatRest(seconds)}
         </Text>
         <Text style={styles.heroSub} maxFontSizeMultiplier={1.2}>
-          다음은 {nextSet}세트입니다
+          다음은 {nextSet}세트예요
         </Text>
       </View>
 
@@ -457,7 +481,7 @@ function RestingView({
       <SetDots total={totalSets} done={nextSet - 1} />
 
       <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-        숨이 돌아올 때까지 쉬세요. 다 쉬면 저절로 다음 세트로 넘어갑니다.
+        숨이 돌아올 때까지 쉬세요. 다 쉬면 저절로 다음 세트로 넘어가요.
       </Text>
     </>
   );
@@ -469,10 +493,10 @@ function LoggingView({ item, pin }: { item: RoutineItem; pin: string }) {
     return (
       <View style={styles.headings}>
         <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-          수고하셨습니다
+          수고하셨어요
         </Text>
         <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          아래 버튼을 누르면 오늘 유산소가 기록됩니다.
+          아래 버튼을 누르면 오늘 유산소가 기록돼요.
         </Text>
       </View>
     );
@@ -482,10 +506,10 @@ function LoggingView({ item, pin }: { item: RoutineItem; pin: string }) {
     <>
       <View style={styles.headings}>
         <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-          {item.target_sets ?? 1}세트 모두 끝났습니다
+          {item.target_sets ?? 1}세트 모두 끝났어요
         </Text>
         <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          오늘 꽂으신 핀이 몇 번째 칸이었나요? 다음에 시작점으로 알려드립니다.
+          오늘 꽂으신 핀이 몇 번째 칸이었나요? 다음에 시작점으로 알려드려요.
         </Text>
       </View>
 
@@ -522,12 +546,12 @@ function FinishedView({
       )}
 
       <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-        {saveError ? '기록하지 못했습니다' : '수고하셨습니다'}
+        {saveError ? '기록하지 못했어요' : '수고하셨어요'}
       </Text>
       <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
         {isCardioItem(item)
-          ? `${item.name} ${item.target_duration_minutes}분을 마치셨습니다.`
-          : `${item.name} ${item.target_sets ?? 1}세트를 ${pin}칸으로 마치셨습니다.`}
+          ? `${item.name} ${item.target_duration_minutes}분을 마치셨어요.`
+          : `${item.name} ${item.target_sets ?? 1}세트를 ${pin}칸으로 마치셨어요.`}
       </Text>
       {pointsAwarded ? (
         <View style={styles.pointsPill}>
@@ -847,5 +871,20 @@ const styles = StyleSheet.create({
     maxWidth: 900,
     width: '100%',
     alignSelf: 'center',
+  },
+  header: {
+    paddingHorizontal: Spacing.lg,
+    maxWidth: 900,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  footerRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  footerRowButton: {
+    // 반반 나눠도 라벨이 잘리지 않게 기본 좌우 여백을 줄인다.
+    flex: 1,
+    paddingHorizontal: Spacing.sm,
   },
 });

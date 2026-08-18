@@ -20,7 +20,7 @@ export type CheckInErrorCode = (typeof RPC_ERROR_CODES)[number] | 'NETWORK' | 'U
 
 const MESSAGES: Record<CheckInErrorCode, string> = {
   INVALID_PHONE_NUMBER: '전화번호를 다시 확인해 주세요.',
-  APARTMENT_NOT_FOUND: '태블릿 설정에 문제가 있습니다. 관리사무소에 알려주세요.',
+  APARTMENT_NOT_FOUND: '태블릿 설정에 문제가 있어요. 관리사무소에 알려주세요.',
   PAIRING_CODE_GENERATION_FAILED: '잠시 후 다시 시도해 주세요.',
   NETWORK: NETWORK_ERROR_MESSAGE,
   UNKNOWN: GENERIC_ERROR_MESSAGE,

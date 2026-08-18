@@ -55,7 +55,7 @@ export default function CalendarDayScreen() {
           </View>
         ) : routines.length === 0 ? (
           <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-            이 날은 기록이 없습니다.
+            이 날은 기록이 없어요.
           </Text>
         ) : (
           <View style={styles.list}>

@@ -39,7 +39,7 @@ async function signInWithProvider(provider: OAuthProvider): Promise<OAuthOutcome
   });
 
   if (error || !data.url) {
-    throw new OAuthError('로그인을 시작하지 못했습니다.', error);
+    throw new OAuthError('로그인을 시작하지 못했어요.', error);
   }
 
   const result = await WebBrowser.openAuthSessionAsync(data.url, REDIRECT_TO);
@@ -51,12 +51,12 @@ async function signInWithProvider(provider: OAuthProvider): Promise<OAuthOutcome
 
   const code = new URL(result.url).searchParams.get('code');
   if (!code) {
-    throw new OAuthError('로그인 응답이 올바르지 않습니다.');
+    throw new OAuthError('로그인 응답이 올바르지 않아요.');
   }
 
   const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
   if (exchangeError) {
-    throw new OAuthError('로그인을 완료하지 못했습니다.', exchangeError);
+    throw new OAuthError('로그인을 완료하지 못했어요.', exchangeError);
   }
 
   return 'signed_in';

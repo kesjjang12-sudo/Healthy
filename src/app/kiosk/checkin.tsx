@@ -190,7 +190,7 @@ export default function KioskCheckinScreen() {
         style={[styles.helper, errorMessage ? styles.helperError : null]}
         maxFontSizeMultiplier={1.3}
         accessibilityLiveRegion="polite">
-        {errorMessage ?? '번호를 누르면 출석이 기록됩니다.'}
+        {errorMessage ?? '번호를 누르면 출석이 기록돼요.'}
       </Text>
     </View>
   );

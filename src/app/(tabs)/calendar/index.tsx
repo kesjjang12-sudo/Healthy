@@ -93,7 +93,7 @@ export default function CalendarTab() {
       )}
 
       <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-        파란 동그라미가 출석한 날입니다. 날짜를 누르면 그날 한 운동을 볼 수 있어요.
+        파란 동그라미가 출석한 날이에요. 날짜를 누르면 그날 한 운동을 볼 수 있어요.
       </Text>
     </ScrollView>
   );

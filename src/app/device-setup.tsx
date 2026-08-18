@@ -56,7 +56,7 @@ export default function DeviceSetupScreen() {
       await setKiosk({ aptId: apartment.apt_id, aptName: apartment.apt_name });
     } catch (error) {
       setErrorMessage(
-        error instanceof EnrollmentError ? error.message : '확인하지 못했습니다. 다시 시도해 주세요.',
+        error instanceof EnrollmentError ? error.message : '확인하지 못했어요. 다시 시도해 주세요.',
       );
       setPin('');
 
@@ -85,7 +85,7 @@ export default function DeviceSetupScreen() {
               이 기기는{'\n'}무엇인가요?
             </Text>
             <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-              처음 한 번만 물어봅니다.
+              처음 한 번만 물어봐요.
             </Text>
           </View>
 
@@ -97,7 +97,7 @@ export default function DeviceSetupScreen() {
                 setMode('enroll-code');
               }}
             />
-            <PrimaryButton label="제 휴대폰입니다" variant="secondary" onPress={choosePersonal} />
+            <PrimaryButton label="제 휴대폰이에요" variant="secondary" onPress={choosePersonal} />
           </View>
         </ScrollView>
       </View>
@@ -122,7 +122,7 @@ export default function DeviceSetupScreen() {
               style={[styles.helper, errorMessage ? styles.helperError : null]}
               maxFontSizeMultiplier={1.3}
               accessibilityLiveRegion="polite">
-              {errorMessage ?? '관리사무소에서 받은 6자리 코드입니다.'}
+              {errorMessage ?? '관리사무소에서 받은 6자리 코드예요.'}
             </Text>
           </View>
 
@@ -168,7 +168,7 @@ export default function DeviceSetupScreen() {
             style={[styles.helper, errorMessage ? styles.helperError : null]}
             maxFontSizeMultiplier={1.3}
             accessibilityLiveRegion="polite">
-            {errorMessage ?? `단지 코드 ${enrollCode} · 관리사무소에서 정한 번호입니다.`}
+            {errorMessage ?? `단지 코드 ${enrollCode} · 관리사무소에서 정한 번호예요.`}
           </Text>
         </View>
 

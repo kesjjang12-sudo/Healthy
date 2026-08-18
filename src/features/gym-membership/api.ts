@@ -20,7 +20,7 @@ export class GymMembershipError extends Error {
 
 function toMembershipError(error: RpcError): GymMembershipError {
   const code = matchErrorCode(error, RPC_ERROR_CODES);
-  if (code) return new GymMembershipError('처리하지 못했습니다. 다시 시도해 주세요.', error);
+  if (code) return new GymMembershipError('처리하지 못했어요. 다시 시도해 주세요.', error);
   return new GymMembershipError(
     isNetworkError(error) ? NETWORK_ERROR_MESSAGE : GENERIC_ERROR_MESSAGE,
     error,

@@ -38,7 +38,7 @@ export default function LoginScreen() {
       // 취소했으면 세션이 안 생겼을 뿐이니 이 화면에 그대로 남는다. 오류가 아니다.
       if (outcome === 'cancelled') return;
     } catch (error) {
-      setErrorMessage(error instanceof OAuthError ? error.message : '로그인에 실패했습니다.');
+      setErrorMessage(error instanceof OAuthError ? error.message : '로그인에 실패했어요.');
     } finally {
       setPendingProvider(null);
     }
@@ -61,7 +61,7 @@ export default function LoginScreen() {
       // 계정은 정확히 그 상태이므로, 여기서 직접 보낸다.
       router.replace(testUser?.profile_data?.onboarded_at ? '/workout' : '/onboarding');
     } catch {
-      setErrorMessage('테스트 로그인에 실패했습니다. 다시 시도해 주세요.');
+      setErrorMessage('테스트 로그인에 실패했어요. 다시 시도해 주세요.');
     } finally {
       setIsTestSigningIn(false);
     }

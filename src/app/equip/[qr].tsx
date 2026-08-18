@@ -60,7 +60,7 @@ export default function EquipmentDeepLinkScreen() {
     <View style={[styles.centered, { paddingTop: insets.top }]}>
       <ActivityIndicator size="large" color={Colors.primary} />
       <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-        기구 정보를 불러오는 중입니다
+        기구 정보를 불러오는 중이에요
       </Text>
     </View>
   );

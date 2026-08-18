@@ -135,13 +135,13 @@ export default function AnalysisTab() {
             </View>
           ) : (
             <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-              이 기간에 완료한 운동이 없습니다.
+              이 기간에 완료한 운동이 없어요.
             </Text>
           )}
 
           <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-            칼로리는 정확한 측정값이 아니라 대략치입니다. 러닝 등 유산소 기록은 아직 지원하지
-            않습니다.
+            칼로리는 정확한 측정값이 아니라 대략치예요. 러닝 등 유산소 기록은 아직 지원하지
+            않아요.
           </Text>
         </>
       )}

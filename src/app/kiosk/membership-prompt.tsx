@@ -71,10 +71,10 @@ export default function KioskMembershipPromptScreen() {
         </Text>
         <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
           이사하셨다면 다음부터 여기가 기본으로 뜨게 바꿔드릴게요. 이전 헬스장 랭킹에서는
-          빠지지만, 지금까지의 출석과 운동 기록은 그대로 남습니다.
+          빠지지만, 지금까지의 출석과 운동 기록은 그대로 남아요.
         </Text>
         <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          오늘만 오신 거면 그냥 두세요 — 나중에 폰 앱에서도 바꿀 수 있습니다.
+          오늘만 오신 거면 그냥 두세요 — 나중에 폰 앱에서도 바꿀 수 있어요.
         </Text>
 
         {errorMessage ? (

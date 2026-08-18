@@ -69,7 +69,7 @@ export default function WorkoutTab() {
         await setRoutineCourse(course);
         retry();
       } catch {
-        setCourseError('코스를 바꾸지 못했습니다. 다시 시도해 주세요.');
+        setCourseError('코스를 바꾸지 못했어요. 다시 시도해 주세요.');
       } finally {
         setPendingCourse(null);
       }
@@ -121,7 +121,7 @@ export default function WorkoutTab() {
               style={styles.checkedInText}
               maxFontSizeMultiplier={1.3}
               accessibilityLiveRegion="polite">
-              체크인되었습니다. 오늘도 잘 오셨어요!
+              체크인됐어요. 오늘도 잘 오셨어요!
             </Text>
           </View>
         ) : null}
@@ -192,7 +192,7 @@ export default function WorkoutTab() {
                 </View>
                 <Text style={styles.progressHint} maxFontSizeMultiplier={1.3}>
                   {allDone
-                    ? '오늘 몫을 다 하셨습니다. 스트레칭으로 마무리하세요.'
+                    ? '오늘 몫을 다 하셨어요. 스트레칭으로 마무리하세요.'
                     : result?.estimated_minutes
                       ? `다 하시면 약 ${result.estimated_minutes}분 걸려요.`
                       : ''}
@@ -243,7 +243,7 @@ export default function WorkoutTab() {
                   </Text>
                 ) : (
                   <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-                    바꾸면 오늘 목록이 바로 다시 짜입니다. 이미 마친 운동은 그대로 남아요.
+                    바꾸면 오늘 목록이 바로 다시 짜여요. 이미 마친 운동은 그대로 남아요.
                   </Text>
                 )}
               </View>
@@ -261,7 +261,7 @@ export default function WorkoutTab() {
               <View style={styles.notice}>
                 <Text style={styles.noticeText} maxFontSizeMultiplier={1.3}>
                   아직 다니는 헬스장이 등록되지 않아 오늘의 운동을 짤 수 없어요. 입구 태블릿에
-                  전화번호를 한 번 눌러 주시면 그때부터 루틴이 만들어집니다.
+                  전화번호를 한 번 눌러 주시면 그때부터 루틴이 만들어져요.
                 </Text>
               </View>
             ) : null}
@@ -269,7 +269,7 @@ export default function WorkoutTab() {
             {result?.needs_trainer_review ? (
               <View style={styles.notice}>
                 <Text style={styles.noticeText} maxFontSizeMultiplier={1.3}>
-                  불편하신 곳이 여러 군데라 무게를 많이 낮췄습니다. 관리사무소에 한 번 문의해
+                  불편하신 곳이 여러 군데라 무게를 많이 낮췄어요. 관리사무소에 한 번 문의해
                   보시는 걸 권해 드려요.
                 </Text>
               </View>
@@ -308,7 +308,7 @@ export default function WorkoutTab() {
             </View>
 
             <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-              {'운동을 누르면 하는 방법이 나옵니다. 오늘 목록에 없는 기구는 "기구 사용법 ' +
+              {'운동을 누르면 하는 방법이 나와요. 오늘 목록에 없는 기구는 "기구 사용법 ' +
                 '모아보기"에서 부위별로 찾거나, 기구 앞에 붙은 QR 을 찍어서 볼 수 있어요. ' +
                 '운동 전후로 스트레칭도 잊지 마세요.'}
             </Text>

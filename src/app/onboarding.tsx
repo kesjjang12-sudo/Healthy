@@ -112,7 +112,7 @@ function OnboardingFlow({ user }: { user: User }) {
     [],
   );
 
-  /** "없습니다" 는 다른 선택지와 같이 고를 수 없다. 빈 배열로 저장한다. */
+  /** "없어요" 는 다른 선택지와 같이 고를 수 없다. 빈 배열로 저장한다. */
   const handleSelectNone = useCallback(
     (question: ProfileQuestion) => {
       setAnswers((current) => ({ ...current, [question.key]: [] }));
@@ -279,7 +279,7 @@ function OnboardingFlow({ user }: { user: User }) {
         <View style={styles.headings}>
           {stepIndex === 0 ? (
             <Text style={styles.eyebrow} maxFontSizeMultiplier={1.3}>
-              등록이 끝났습니다
+              등록이 끝났어요
             </Text>
           ) : null}
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
