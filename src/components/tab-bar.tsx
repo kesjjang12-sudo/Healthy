@@ -4,7 +4,7 @@ import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon, type IconName } from '@/components/icon';
-import { Colors, FontSize, LetterSpacing, Spacing, TouchTarget } from '@/constants/theme';
+import { Colors, LetterSpacing, Spacing, TouchTarget } from '@/constants/theme';
 
 /**
  * 하단 탭 바를 직접 그린다.
@@ -95,7 +95,9 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   label: {
-    fontSize: FontSize.caption,
+    // 아이콘(26)이 주인공이라 글자는 한 단계 작게 간다. caption(14)은 아이콘보다
+    // 글자가 커 보여 탭바가 무거웠다. 여기만 스케일 밖 값을 쓴다.
+    fontSize: 12,
     fontWeight: '600',
     letterSpacing: LetterSpacing.body,
     color: Colors.textTertiary,

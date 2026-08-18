@@ -334,6 +334,8 @@ const styles = StyleSheet.create({
   },
   heroValue: {
     fontSize: FontSize.display,
+    // 줄높이를 안 주면 큰 글자에서 한글 받침이 아래로 잘린다.
+    lineHeight: FontSize.display * 1.2,
     fontWeight: '700',
     letterSpacing: LetterSpacing.title,
     color: Colors.primary,
@@ -391,12 +393,12 @@ const styles = StyleSheet.create({
   section: {
     gap: Spacing.md,
   },
-  /** 토스의 "금융 서비스" 같은 회색 섹션 캡션 — 내용보다 조용해야 한다. */
+  /** 소분류 제목. 회색이면 흐려서 안 읽힌다는 피드백으로 검정으로 올렸다. */
   sectionTitle: {
     fontSize: FontSize.caption,
     fontWeight: '600',
     letterSpacing: LetterSpacing.body,
-    color: Colors.grey[500],
+    color: Colors.text,
   },
   trendHeadline: {
     fontSize: FontSize.subtitle,

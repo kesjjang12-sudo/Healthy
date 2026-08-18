@@ -411,12 +411,12 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },
-  /** 토스의 "금융 서비스" 같은 회색 섹션 캡션 — 내용보다 조용해야 한다. */
+  /** 소분류 제목. 회색이면 흐려서 안 읽힌다는 피드백으로 검정으로 올렸다. */
   sectionTitle: {
     fontSize: FontSize.caption,
     fontWeight: '600',
     letterSpacing: LetterSpacing.body,
-    color: Colors.grey[500],
+    color: Colors.text,
     marginBottom: -Spacing.sm,
   },
   list: {

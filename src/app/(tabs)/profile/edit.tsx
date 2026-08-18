@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
     fontSize: FontSize.caption,
     fontWeight: '600',
     letterSpacing: LetterSpacing.body,
-    color: Colors.grey[500],
+    color: Colors.text,
   },
   choiceRow: {
     flexDirection: 'row',

@@ -537,7 +537,9 @@ function ReadyView({ item, onWeightChanged }: { item: RoutineItem; onWeightChang
           <Text style={styles.heroLabel} maxFontSizeMultiplier={1.2}>
             오늘 할 양
           </Text>
-          <Text style={styles.heroValue} maxFontSizeMultiplier={1.2}>
+          {/* "3세트 × 10회"는 숫자 하나가 아니라 글귀라, 56px 로 그리면 폭을
+              넘겨 두 줄로 접히고 아랫줄이 잘린다. 글귀는 한 단계 작게 간다. */}
+          <Text style={styles.heroPhrase} maxFontSizeMultiplier={1.2}>
             {volume}
           </Text>
         </View>
@@ -1191,10 +1193,23 @@ const styles = StyleSheet.create({
   heroValue: {
     // 시안의 무게 숫자(56px) — 이 화면의 주인공이라 토큰 스케일 밖에서 크게 간다.
     fontSize: 56,
+    // 줄높이를 안 주면 한글 받침이 아래로 잘린다(글자가 커질수록 눈에 띈다).
+    lineHeight: 66,
     fontWeight: '700',
     letterSpacing: LetterSpacing.title,
     color: Colors.primary,
     fontVariant: ['tabular-nums'],
+    textAlign: 'center',
+  },
+  /** 숫자 하나가 아니라 글귀로 된 값("3세트 × 10회"). 폭에 맞게 한 단계 작다. */
+  heroPhrase: {
+    fontSize: 34,
+    lineHeight: 42,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.title,
+    color: Colors.primary,
+    fontVariant: ['tabular-nums'],
+    textAlign: 'center',
   },
   heroUnit: {
     fontSize: FontSize.subtitle,

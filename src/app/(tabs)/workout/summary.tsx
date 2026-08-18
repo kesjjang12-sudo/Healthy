@@ -337,6 +337,8 @@ const styles = StyleSheet.create({
   },
   heroValue: {
     fontSize: FontSize.display,
+    // 줄높이를 안 주면 큰 글자에서 한글 받침이 아래로 잘린다.
+    lineHeight: FontSize.display * 1.2,
     fontWeight: '700',
     letterSpacing: LetterSpacing.title,
     color: Colors.primary,

@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/app-text';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { FontScalePicker } from '@/components/font-scale-picker';
 import { GrowthBadge } from '@/components/growth-badge';
 import { Icon } from '@/components/icon';
@@ -44,6 +45,8 @@ export default function ProfileTab() {
   const { scale: fontScale, setScale: setFontScale } = useFontScale();
 
   const [codeCopied, setCodeCopied] = useState(false);
+  // 로그아웃은 되돌리려면 다시 로그인해야 한다 — 누르자마자 나가지 않고 한 번 묻는다.
+  const [isLogoutAsking, setIsLogoutAsking] = useState(false);
   const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [providerLabel, setProviderLabel] = useState<string | null>(null);
   const [memberships, setMemberships] = useState<GymMembershipSummary[] | null>(null);
@@ -310,10 +313,22 @@ export default function ProfileTab() {
             title="로그아웃"
             subtitle={providerLabel ? `${providerLabel}로 로그인되어 있어요` : undefined}
             chevron
-            onPress={() => void signOut()}
+            onPress={() => setIsLogoutAsking(true)}
           />
         </View>
       </View>
+
+      <ConfirmDialog
+        visible={isLogoutAsking}
+        title="로그아웃 하시겠어요?"
+        message="운동 기록은 그대로 남아 있어요. 다시 로그인하시면 이어서 보실 수 있어요."
+        confirmLabel="로그아웃"
+        onConfirm={() => {
+          setIsLogoutAsking(false);
+          void signOut();
+        }}
+        onCancel={() => setIsLogoutAsking(false)}
+      />
     </ScrollView>
   );
 }
@@ -406,12 +421,12 @@ const styles = StyleSheet.create({
   section: {
     gap: Spacing.md,
   },
-  /** 토스의 "금융 서비스" 같은 회색 섹션 캡션 — 내용보다 조용해야 한다. */
+  /** 소분류 제목. 회색이면 흐려서 안 읽힌다는 피드백으로 검정으로 올렸다. */
   sectionTitle: {
     fontSize: FontSize.caption,
     fontWeight: '600',
     letterSpacing: LetterSpacing.body,
-    color: Colors.grey[500],
+    color: Colors.text,
   },
   rows: {
     gap: Spacing.xs,
