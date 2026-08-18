@@ -1,0 +1,24 @@
+{
+  "name": "헬스반장",
+  "short_name": "헬스반장",
+  "description": "아파트 단지 헬스장을 위한 운동 루틴 앱",
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FFFFFF",
+  "theme_color": "#0066FF",
+  "icons": [
+    {
+      "src": "pwa-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "pwa-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
