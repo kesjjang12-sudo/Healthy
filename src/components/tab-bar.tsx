@@ -14,7 +14,9 @@ import { Colors, FontSize, LetterSpacing, Spacing, TouchTarget } from '@/constan
  * SVG 로 직접 그린 것이라 기기마다 모양이 흔들리지 않는다.
  */
 const TAB_ICONS: Record<string, IconName> = {
-  workout: 'thunder',
+  // 운동 탭은 첫 화면이자 돌아오는 자리라 집으로 그린다. 번개는 "운동"보다
+  // "빠름"으로 읽혀서, 어느 탭이 처음인지 알려주지 못했다.
+  workout: 'home',
   calendar: 'calendar',
   ranking: 'trophy',
   analysis: 'column',

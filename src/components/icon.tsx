@@ -3,6 +3,7 @@ import Svg, { Circle, G, Path, Rect } from 'react-native-svg';
 import { Colors } from '@/constants/theme';
 
 export type IconName =
+  | 'home'
   | 'dumbbell'
   | 'thunder'
   | 'calendar'
@@ -26,7 +27,7 @@ type Props = {
   color?: string;
   /** 선 굵기. 탭바처럼 작게 쓸 땐 살짝 두껍게 주면 또렷하다. */
   strokeWidth?: number;
-  /** 활성 탭처럼 면을 채워 그린다(FIT ROTEIN 의 fill 변형). thunder 만 지원. */
+  /** 활성 탭처럼 면을 채워 그린다(FIT ROTEIN 의 fill 변형). home · thunder 만 지원. */
   filled?: boolean;
 };
 
@@ -40,6 +41,9 @@ type Props = {
  * getBBox 로 측정한 값이다.
  */
 const NORMALIZE: Partial<Record<IconName, { scale: number; dy?: number }>> = {
+  // 집은 3.5~20.5 로 그려 잉크 높이가 이미 17 이지만, 지붕이 뾰족해 시각
+  // 무게가 위로 쏠린다. 아주 살짝 내려 다른 탭 아이콘과 눈높이를 맞춘다.
+  home: { scale: 1, dy: 0.3 },
   thunder: { scale: 17 / 19 },
   trophy: { scale: 17 / 15.5, dy: -0.3 },
   person: { scale: 17 / 16 },
@@ -73,6 +77,24 @@ export function Icon({ name, size = 24, color = Colors.text, strokeWidth = 1.9, 
 
   const glyphs = (
     <>
+      {/* 집. 지붕과 몸통을 한 획으로 두르고 문을 따로 얹는다. 채우면 문만
+          배경색으로 남겨 실루엣 안에서 문이 보이게 한다. */}
+      {name === 'home' && (
+        <>
+          <Path
+            d="M3.5 10.4 12 3.9l8.5 6.5v8.1a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"
+            {...stroke}
+            fill={filled ? color : 'none'}
+          />
+          {filled ? (
+            // 채운 집에서는 문을 선으로 그리면 아래가 트여 다리처럼 벌어져
+            // 보인다. 닫힌 면으로 파내야 문으로 읽힌다.
+            <Path d="M9.6 20.5v-5.1a2.4 2.4 0 0 1 4.8 0v5.1z" fill={Colors.background} />
+          ) : (
+            <Path d="M9.6 20.5v-5.1a2.4 2.4 0 0 1 4.8 0v5.1" {...stroke} />
+          )}
+        </>
+      )}
       {name === 'dumbbell' && (
         <>
           <Path d="M4 9.5v5" {...stroke} />

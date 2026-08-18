@@ -188,7 +188,7 @@ export default function EquipmentExploreScreen() {
         </View>
 
         <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-          아프거나 어지러우면 바로 멈추고 관리사무소에 알려주세요.
+          아프거나 어지러우면 바로 멈추고 충분히 쉬세요. 무리해서 이어가지 않으셔도 돼요.
         </Text>
       </ScrollView>
 

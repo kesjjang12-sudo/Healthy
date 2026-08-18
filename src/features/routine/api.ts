@@ -26,7 +26,7 @@ type RpcErrorCode = (typeof RPC_ERROR_CODES)[number];
 
 const MESSAGES: Record<RpcErrorCode, string> = {
   USER_NOT_FOUND: '회원 정보를 찾지 못했어요. 다시 로그인해 주세요.',
-  ROUTINE_TEMPLATE_NOT_FOUND: '운동을 준비하지 못했어요. 관리사무소에 알려주세요.',
+  ROUTINE_TEMPLATE_NOT_FOUND: '운동을 준비하지 못했어요. 잠시 후 다시 시도해 주세요.',
   AUTH_REQUIRED: '로그인 후 다시 시도해 주세요.',
   FORBIDDEN: '이 정보를 볼 수 없어요.',
   ROUTINE_NOT_FOUND: '운동을 찾지 못했어요.',

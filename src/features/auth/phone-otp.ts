@@ -30,7 +30,7 @@ export type PhoneOtpErrorCode =
   | 'UNKNOWN';
 
 const MESSAGES: Record<PhoneOtpErrorCode, string> = {
-  NOT_CONFIGURED: '문자 인증이 아직 준비되지 않았어요. 관리사무소에 문의해 주세요.',
+  NOT_CONFIGURED: '문자 인증이 아직 준비되지 않았어요. 카카오나 구글로 로그인해 주세요.',
   INVALID_CODE: '인증번호가 맞지 않아요. 다시 확인해 주세요.',
   EXPIRED_CODE: '인증번호가 만료됐어요. 다시 받아주세요.',
   RATE_LIMITED: '너무 자주 시도했어요. 잠시 후 다시 해주세요.',

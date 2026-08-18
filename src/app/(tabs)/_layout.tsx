@@ -28,7 +28,9 @@ export default function TabsLayout() {
 
   return (
     <Tabs tabBar={(props) => <TextTabBar {...props} />} screenOptions={{ headerShown: false }}>
-      <Tabs.Screen name="workout" options={{ title: '운동' }} />
+      {/* 첫 화면이자 돌아오는 자리라 "홈"으로 부른다(아이콘도 집). 안에 든
+          것은 그대로 오늘의 운동이다. */}
+      <Tabs.Screen name="workout" options={{ title: '홈' }} />
       <Tabs.Screen name="calendar" options={{ title: '달력' }} />
       <Tabs.Screen name="ranking" options={{ title: '랭킹' }} />
       <Tabs.Screen name="analysis" options={{ title: '분석' }} />

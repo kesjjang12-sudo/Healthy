@@ -294,8 +294,9 @@ export default function WorkoutTab() {
             {result?.needs_trainer_review ? (
               <View style={styles.notice}>
                 <Text style={styles.noticeText} maxFontSizeMultiplier={1.3}>
-                  불편하신 곳이 여러 군데라 무게를 많이 낮췄어요. 관리사무소에 한 번 문의해
-                  보시는 걸 권해 드려요.
+                  {routines.length > 0
+                    ? '아프신 곳을 피해서 오늘 운동을 짰어요. 부상 위험이 큰 동작은 빼고 무게도 낮춰 잡았으니, 하시면서 편해지면 조금씩 올려 드릴게요.'
+                    : '아프신 곳이 많아 오늘은 안전하게 할 수 있는 운동을 찾지 못했어요. 가볍게 걷기나 스트레칭으로 몸을 풀어 주세요.'}
                 </Text>
               </View>
             ) : null}
