@@ -26,8 +26,14 @@ const TAB_ICONS: Record<string, IconName> = {
 export function TextTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
 
+  // 안전영역만큼 그대로 띄우면 탭 글자 아래가 휑하게 남는다 — 안드로이드
+  // 제스처 내비게이션은 이 값이 48 까지 올라가고, 웹은 viewport-fit=cover 라
+  // 브라우저에서도 그 값이 들어온다. 홈 인디케이터를 가리지 않을 만큼만
+  // 남기고 자른다(이러면 총 높이가 iOS 기본 탭바 83pt 근처로 맞는다).
+  const bottomInset = Math.min(insets.bottom, Spacing.lg) || Spacing.sm;
+
   return (
-    <View style={[styles.bar, { paddingBottom: insets.bottom || Spacing.sm }]}>
+    <View style={[styles.bar, { paddingBottom: bottomInset }]}>
       {state.routes.map((route, index) => {
         const { options } = descriptors[route.key];
         const label = typeof options.title === 'string' ? options.title : route.name;
