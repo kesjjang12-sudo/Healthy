@@ -16,6 +16,19 @@ const DOCUMENTS: Record<string, LegalDocument> = {
 };
 
 /**
+ * 웹으로 내보낼 때 이 동적 경로를 실제 주소로 펼친다.
+ *
+ * 이게 없으면 정적 내보내기가 `legal/[doc].html` 파일 하나만 만들고,
+ * `/legal/privacy` 로 들어오면 404 가 난다. 앱 안에서만 쓸 때는 몰랐는데,
+ * **개인정보 처리방침은 밖에서 주소로 열려야 한다** — 카카오·구글의 개인정보
+ * 동의항목 심사가 공개된 처리방침 URL 을 요구하고, 개인정보 보호법상으로도
+ * 이용자가 언제든 확인할 수 있어야 한다.
+ */
+export function generateStaticParams(): { doc: string }[] {
+  return Object.keys(DOCUMENTS).map((doc) => ({ doc }));
+}
+
+/**
  * 약관·개인정보처리방침 전문.
  *
  * 앱 안에 원문을 들고 있어서 네트워크 없이도 읽힌다 — 동의를 받는 화면에서
