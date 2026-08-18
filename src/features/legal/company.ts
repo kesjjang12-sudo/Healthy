@@ -15,30 +15,30 @@ export const COMPANY = {
   name: '실버캐슬',
   /** 서비스(앱) 이름 */
   serviceName: '헬스반장',
-  representative: '{{대표자명}}',
-  businessNumber: '{{사업자등록번호}}',
+  representative: '김은성',
+  businessNumber: '608-33-73057',
   address: '{{사업장 주소}}',
   /** 이용 문의 */
-  supportEmail: '{{문의 이메일}}',
-  supportPhone: '{{문의 전화번호}}',
+  supportEmail: 'kesjjang4545@naver.com',
+  supportPhone: '010-2924-1452',
   /** 개인정보 보호법 제31조에 따른 개인정보 보호책임자 */
   privacyOfficer: {
-    name: '{{보호책임자 성명}}',
-    position: '{{직위}}',
-    email: '{{보호책임자 이메일}}',
-    phone: '{{보호책임자 전화번호}}',
+    name: '김은성',
+    position: '대표',
+    email: 'kesjjang4545@naver.com',
+    phone: '010-2924-1452',
   },
   /** 열람·정정·삭제 요구를 받는 부서 */
   privacyDesk: {
-    department: '{{담당 부서}}',
-    email: '{{담당 부서 이메일}}',
-    phone: '{{담당 부서 전화번호}}',
+    department: '대표',
+    email: 'kesjjang4545@naver.com',
+    phone: '010-2924-1452',
   },
   /** 분쟁 시 관할 법원 소재지 */
   jurisdiction: '{{관할 법원 소재지}}',
 } as const;
 
-/** 아직 안 채워진 자리인지. `{{대표자명}}` 처럼 생겼으면 그렇다. */
+/** 아직 안 채워진 자리인지. `김은성` 처럼 생겼으면 그렇다. */
 export function isPlaceholder(value: string): boolean {
   return /^\{\{.*\}\}$/.test(value.trim());
 }
