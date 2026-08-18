@@ -8,6 +8,7 @@ import { CheckMark } from '@/components/check-mark';
 import { ListRow } from '@/components/list-row';
 import { PrimaryButton } from '@/components/primary-button';
 import { RoutineCard } from '@/components/routine-card';
+import { ShortcutTile } from '@/components/shortcut-tile';
 import { StrengthHookBanner } from '@/components/strength-hook-banner';
 import { WeightNudgeModal } from '@/components/weight-nudge-modal';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing, TouchTarget } from '@/constants/theme';
@@ -334,43 +335,48 @@ export default function WorkoutTab() {
               ))}
             </View>
 
-            {/* 토스 "전체" 화면의 서비스 목록처럼: 색 타일 + 제목 + 설명 + 화살표. */}
+            {/* 바로가기. 원래 설명 달린 목록 행 4줄이었는데, 그 덩치가 화면의
+                주인공인 "오늘의 운동"보다 커져서 타일 한 줄로 줄였다.
+                "오늘 운동 카드"는 운동을 하나라도 마친 뒤에만 나타난다 —
+                아무것도 안 했는데 자랑 카드부터 권하는 건 이상하고,
+                다 마친 순간 새로 나타나는 게 작은 보상이 된다. */}
             <View style={styles.shortcuts}>
               <Text style={styles.sectionCaption} maxFontSizeMultiplier={1.2}>
                 이런 것도 할 수 있어요
               </Text>
-              <ListRow
-                icon="chart"
-                tint="green"
-                title="오늘 운동 카드"
-                subtitle="오늘 한 운동을 한 장으로 모아 자랑할 수 있어요"
-                chevron
-                onPress={() => router.push('/workout/summary')}
-              />
-              <ListRow
-                icon="dumbbell"
-                tint="teal"
-                title="기구 사용법 모아보기"
-                subtitle="오늘 목록에 없는 기구도 부위별로 찾아볼 수 있어요"
-                chevron
-                onPress={() => router.push('/workout/guide')}
-              />
-              <ListRow
-                icon="qr"
-                tint="blue"
-                title="기구 QR 찍기"
-                subtitle="목록에 없는 기구도 사용법과 영상을 볼 수 있어요"
-                chevron
-                onPress={() => router.push('/workout/scan')}
-              />
-              <ListRow
-                icon="play"
-                tint="green"
-                title="스트레칭 보기"
-                subtitle="운동 전후 5분, 다치지 않게 풀어 주세요"
-                chevron
-                onPress={() => router.push('/workout/stretching')}
-              />
+              {doneCount > 0 ? (
+                <ListRow
+                  icon="chart"
+                  tint="green"
+                  title="오늘 운동 카드"
+                  subtitle="오늘 한 운동을 한 장으로 모아 자랑할 수 있어요"
+                  chevron
+                  onPress={() => router.push('/workout/summary')}
+                />
+              ) : null}
+              <View style={styles.shortcutTiles}>
+                <ShortcutTile
+                  icon="dumbbell"
+                  tint="teal"
+                  label="기구 사용법"
+                  accessibilityLabel="기구 사용법 모아보기. 오늘 목록에 없는 기구도 부위별로 찾아볼 수 있어요"
+                  onPress={() => router.push('/workout/guide')}
+                />
+                <ShortcutTile
+                  icon="qr"
+                  tint="blue"
+                  label="기구 QR 찍기"
+                  accessibilityLabel="기구 QR 찍기. 목록에 없는 기구도 사용법과 영상을 볼 수 있어요"
+                  onPress={() => router.push('/workout/scan')}
+                />
+                <ShortcutTile
+                  icon="play"
+                  tint="green"
+                  label="스트레칭"
+                  accessibilityLabel="스트레칭 보기. 운동 전후 5분, 다치지 않게 풀어 주세요"
+                  onPress={() => router.push('/workout/stretching')}
+                />
+              </View>
             </View>
 
             <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
@@ -572,6 +578,12 @@ const styles = StyleSheet.create({
   },
   shortcuts: {
     gap: Spacing.xs,
+  },
+  /** 바로가기 타일 3개를 한 줄에 나란히 */
+  shortcutTiles: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginTop: Spacing.xs,
   },
   /** 토스의 "금융 서비스" 같은 회색 섹션 캡션 */
   sectionCaption: {
