@@ -18,7 +18,7 @@ export function StrengthHookBanner({ message, size = 'large' }: Props) {
       <Text
         style={[styles.headline, isCompact && styles.headlineCompact]}
         maxFontSizeMultiplier={1.2}>
-        {message.headline}
+        {'“'}{message.headline}{'”'}
       </Text>
       {!isCompact ? (
         <Text style={styles.body} maxFontSizeMultiplier={1.3}>
@@ -30,17 +30,19 @@ export function StrengthHookBanner({ message, size = 'large' }: Props) {
 }
 
 const styles = StyleSheet.create({
+  // 피드백: 색 박스 말고 인용구처럼 — 왼쪽 파란 세로선 + 큰 파란 볼드.
   box: {
     gap: Spacing.sm,
-    padding: Spacing.xl,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.primaryFaint,
+    paddingVertical: Spacing.xs,
+    paddingLeft: Spacing.lg,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.primary,
   },
   boxCompact: {
-    padding: Spacing.lg,
+    paddingVertical: 0,
   },
   headline: {
-    fontSize: FontSize.subtitle,
+    fontSize: FontSize.section,
     fontWeight: '700',
     letterSpacing: LetterSpacing.subtitle,
     color: Colors.primary,

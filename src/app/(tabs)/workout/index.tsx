@@ -333,7 +333,7 @@ export default function WorkoutTab() {
               <View style={styles.shortcutTiles}>
                 <ShortcutTile
                   icon="dumbbell"
-                  tint="teal"
+                  tint="blue"
                   label="기구 사용법"
                   accessibilityLabel="기구 사용법 모아보기. 오늘 목록에 없는 기구도 부위별로 찾아볼 수 있어요"
                   onPress={() => router.push('/workout/guide')}
@@ -347,7 +347,7 @@ export default function WorkoutTab() {
                 />
                 <ShortcutTile
                   icon="play"
-                  tint="green"
+                  tint="blue"
                   label="스트레칭"
                   accessibilityLabel="스트레칭 보기. 운동 전후 5분, 다치지 않게 풀어 주세요"
                   onPress={() => router.push('/workout/stretching')}

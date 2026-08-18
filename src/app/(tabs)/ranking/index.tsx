@@ -211,6 +211,9 @@ const styles = StyleSheet.create({
     minHeight: 68,
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.md,
+    // 행 사이 가는 선 — 순위 목록이 한 덩어리로 뭉쳐 보인다는 피드백.
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.grey[100],
     marginHorizontal: -Spacing.md,
     borderRadius: Radius.md,
   },

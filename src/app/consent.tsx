@@ -279,7 +279,8 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   group: {
-    gap: Spacing.sm,
+    // 동의 박스 사이 간격. 8이었는데 박스끼리 붙어 보인다는 피드백으로 넓혔다.
+    gap: Spacing.lg,
   },
   groupTitle: {
     fontSize: FontSize.body,
@@ -348,11 +349,12 @@ const styles = StyleSheet.create({
     fontSize: FontSize.caption,
     fontWeight: '700',
     letterSpacing: LetterSpacing.body,
-    color: Colors.primary,
+    // 옅은 파란 박스 위라 primary 는 묻힌다 — 다크블루로(피드백).
+    color: Colors.primaryPressed,
   },
   rowDetail: {
     fontSize: FontSize.caption,
-    fontWeight: '500',
+    fontWeight: '600',
     lineHeight: FontSize.caption * 1.6,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
