@@ -117,13 +117,13 @@ export default function RoutineDetailScreen() {
               {errorMessage ?? '오늘 목록에 없는 운동이에요.'}
             </Text>
             {errorMessage ? (
-              <PrimaryButton label="다시 시도" variant="secondary" onPress={retry} />
+              <PrimaryButton label="다시 시도" onPress={retry} />
             ) : null}
           </View>
         </ScrollView>
 
         <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-          <PrimaryButton label="목록으로" variant="secondary" onPress={goBack} />
+          <PrimaryButton label="목록으로" variant={errorMessage ? 'secondary' : 'primary'} onPress={goBack} />
         </View>
       </View>
     );

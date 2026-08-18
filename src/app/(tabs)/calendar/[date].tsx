@@ -68,7 +68,7 @@ export default function CalendarDayScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-        <PrimaryButton label="달력으로" variant="secondary" onPress={() => router.back()} />
+        <PrimaryButton label="달력으로" onPress={() => router.back()} />
       </View>
     </View>
   );

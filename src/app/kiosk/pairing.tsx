@@ -125,11 +125,7 @@ export default function KioskPairingScreen() {
       </View>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-        <PrimaryButton
-          label="목록으로"
-          variant="secondary"
-          onPress={() => router.replace('/kiosk/checkin')}
-        />
+        <PrimaryButton label="목록으로" onPress={() => router.replace('/kiosk/checkin')} />
       </View>
     </View>
   );

@@ -87,7 +87,7 @@ export default function WorkoutSummaryScreen() {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
         {card ? <PrimaryButton label="자랑하기" onPress={share} /> : null}
-        <PrimaryButton label="닫기" variant="secondary" onPress={goBack} />
+        <PrimaryButton label="닫기" variant={card ? 'secondary' : 'primary'} onPress={goBack} />
       </View>
     </View>
   );

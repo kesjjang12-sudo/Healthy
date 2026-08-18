@@ -195,7 +195,7 @@ export default function WorkoutTab() {
               accessibilityLiveRegion="polite">
               {errorMessage}
             </Text>
-            <PrimaryButton label="다시 시도" variant="secondary" onPress={retry} />
+            <PrimaryButton label="다시 시도" onPress={retry} />
           </View>
         ) : (
           <>

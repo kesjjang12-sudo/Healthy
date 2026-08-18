@@ -341,6 +341,29 @@ function OnboardingFlow({ user }: { user: User }) {
   const isNoneSelected = multiValues?.length === 0;
   const isBodyStep = question.mode === 'body';
   const bodyReady = parseHeightInput(heightText) !== null && parseWeightInput(weightText) !== null;
+  // 키보드가 뜨는 문항(키·몸무게, 닉네임)은 버튼을 입력칸 바로 아래(스크롤 안)에
+  // 둔다. 화면 아래 고정 푸터는 키보드가 올라오면 같이 밀려 올라와 입력칸을
+  // 가리고, 키보드 바로 위에 붙어 누르기도 갑갑하다.
+  const usesKeyboard = isBodyStep || question.mode === 'text';
+
+  const prevButton =
+    stepIndex > 0 ? (
+      <PrimaryButton
+        label="이전"
+        variant="quiet"
+        size="compact"
+        onPress={handleBack}
+        style={styles.backButton}
+      />
+    ) : (
+      <PrimaryButton
+        label="다른 방법으로 로그인"
+        variant="quiet"
+        size="compact"
+        onPress={() => void handleExit()}
+        style={styles.backButton}
+      />
+    );
 
   return (
     <View style={styles.screen}>
@@ -441,42 +464,36 @@ function OnboardingFlow({ user }: { user: User }) {
             ))}
           </View>
         )}
+
+        {usesKeyboard ? (
+          <View style={styles.inlineFooter}>
+            <PrimaryButton
+              label="다음"
+              onPress={() => (isBodyStep ? handleBodyNext() : handleNext(question))}
+              disabled={isBodyStep ? !bodyReady : !isAnswered(question, answers)}
+            />
+            {prevButton}
+          </View>
+        ) : null}
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-        {question.mode === 'multi' || question.mode === 'text' || question.mode === 'single' ? (
-          <PrimaryButton
-            label="다음"
-            onPress={() => handleNext(question)}
-            disabled={!isAnswered(question, answers)}
-          />
-        ) : null}
-        {isBodyStep ? (
-          <PrimaryButton label="다음" onPress={handleBodyNext} disabled={!bodyReady} />
-        ) : null}
-        {/* 글자 크기는 아무것도 안 누르셔도 넘어갈 수 있다. 지금 화면이 이미
-            '중간'으로 그려져 있으니, 그대로 두는 것도 하나의 답이다. */}
-        {question.mode === 'font' ? (
-          <PrimaryButton label="다음" onPress={handleFontNext} />
-        ) : null}
-        {stepIndex > 0 ? (
-          <PrimaryButton
-            label="이전"
-            variant="quiet"
-            size="compact"
-            onPress={handleBack}
-            style={styles.backButton}
-          />
-        ) : (
-          <PrimaryButton
-            label="다른 방법으로 로그인"
-            variant="quiet"
-            size="compact"
-            onPress={() => void handleExit()}
-            style={styles.backButton}
-          />
-        )}
-      </View>
+      {usesKeyboard ? null : (
+        <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
+          {question.mode === 'multi' || question.mode === 'single' ? (
+            <PrimaryButton
+              label="다음"
+              onPress={() => handleNext(question)}
+              disabled={!isAnswered(question, answers)}
+            />
+          ) : null}
+          {/* 글자 크기는 아무것도 안 누르셔도 넘어갈 수 있다. 지금 화면이 이미
+              '중간'으로 그려져 있으니, 그대로 두는 것도 하나의 답이다. */}
+          {question.mode === 'font' ? (
+            <PrimaryButton label="다음" onPress={handleFontNext} />
+          ) : null}
+          {prevButton}
+        </View>
+      )}
     </View>
   );
 }
@@ -626,5 +643,9 @@ const styles = StyleSheet.create({
   },
   backButton: {
     alignSelf: 'center',
+  },
+  inlineFooter: {
+    gap: Spacing.sm,
+    paddingTop: Spacing.md,
   },
 });

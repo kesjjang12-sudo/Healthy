@@ -20,6 +20,14 @@ const STALE_DAYS = 7;
 /** 하루에 한 번만. 닫았는데 탭을 오갈 때마다 다시 뜨면 잔소리가 된다. */
 const SHOWN_DATE_KEY = 'fitroutine.weight-nudge-shown-date';
 
+/**
+ * "다음에 할게요"를 눌렀으면 이 기간 동안은 다시 묻지 않는다.
+ * 하루 한 번 제한만으로는 기록 안 하는 사람에게 매일 떠서 잔소리가 됐다 —
+ * 안 하겠다는 뜻을 밝힌 사람에게는 일주일은 조용히 있는 게 맞다.
+ */
+const SNOOZE_UNTIL_KEY = 'fitroutine.weight-nudge-snooze-until';
+const SNOOZE_DAYS = 7;
+
 function todayKey(): string {
   const now = new Date();
   return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
@@ -46,8 +54,12 @@ export function WeightNudgeModal() {
 
     void (async () => {
       try {
-        const shownDate = await AsyncStorage.getItem(SHOWN_DATE_KEY);
+        const [shownDate, snoozeUntil] = await Promise.all([
+          AsyncStorage.getItem(SHOWN_DATE_KEY),
+          AsyncStorage.getItem(SNOOZE_UNTIL_KEY),
+        ]);
         if (shownDate === todayKey()) return;
+        if (snoozeUntil && new Date(snoozeUntil).getTime() > Date.now()) return;
 
         const status = await getBodyStatus();
         if (cancelled) return;
@@ -75,6 +87,14 @@ export function WeightNudgeModal() {
 
   const close = useCallback(() => setVisible(false), []);
 
+  // 기록 없이 닫는 건 "지금은 안 하겠다"는 답이다 — 일주일 재운다.
+  const dismiss = useCallback(() => {
+    const until = new Date();
+    until.setDate(until.getDate() + SNOOZE_DAYS);
+    void AsyncStorage.setItem(SNOOZE_UNTIL_KEY, until.toISOString()).catch(() => {});
+    setVisible(false);
+  }, []);
+
   const save = useCallback(async () => {
     const weight = parseWeightInput(weightText);
     if (weight === null) return;
@@ -93,7 +113,7 @@ export function WeightNudgeModal() {
   }, [weightText]);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={isDone ? close : dismiss}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
           {isDone ? (
@@ -144,7 +164,7 @@ export function WeightNudgeModal() {
                 variant="quiet"
                 size="compact"
                 disabled={isSaving}
-                onPress={close}
+                onPress={dismiss}
               />
             </>
           )}

@@ -162,7 +162,7 @@ export default function EquipmentGuideScreen() {
             <Text style={styles.errorText} maxFontSizeMultiplier={1.3} accessibilityLiveRegion="polite">
               {errorMessage}
             </Text>
-            <PrimaryButton label="다시 시도" variant="secondary" onPress={retry} />
+            <PrimaryButton label="다시 시도" onPress={retry} />
           </View>
         ) : visible === null ? (
           <View style={styles.centered}>

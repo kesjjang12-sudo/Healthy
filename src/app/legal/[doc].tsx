@@ -55,7 +55,7 @@ export default function LegalDocumentScreen() {
           </Text>
         </ScrollView>
         <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-          <PrimaryButton label="돌아가기" variant="secondary" onPress={goBack} />
+          <PrimaryButton label="돌아가기" onPress={goBack} />
         </View>
       </View>
     );
@@ -103,7 +103,7 @@ export default function LegalDocumentScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-        <PrimaryButton label="다 읽었습니다" variant="secondary" onPress={goBack} />
+        <PrimaryButton label="다 읽었습니다" onPress={goBack} />
       </View>
     </View>
   );
