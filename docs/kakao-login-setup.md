@@ -18,19 +18,47 @@
 즉 지금 카카오·구글 버튼을 누르면 실패한다. 아래를 마치면 그때부터 동작한다
 (앱 재배포 불필요 — 서버 설정만으로 켜진다).
 
+## 왜 자동으로 못 하나
+
+둘 다 사람의 계정으로 로그인해야 하는 화면이라 코드로 대신할 수 없다.
+
+- **카카오 콘솔**: 카카오계정 로그인(+2단계 인증)이 필요하다. 나는 그 계정이 없다.
+- **Supabase 대시보드**: 인증 제공자 설정은 이 프로젝트에 연결된 MCP 도구에 없고,
+  이 작업 환경에 있던 관리 토큰(`sbp_...`)은 만료돼 관리 API 가 401 을 돌려준다
+  (`GET /v1/projects` 확인). 새 개인 액세스 토큰을 만들어 주면 Supabase 쪽은
+  자동화할 수 있지만, 그 토큰은 프로젝트 전체 관리 권한이라 화면에서 3칸
+  채우는 일과 바꿀 만한 위험은 아니다. 직접 넣는 편을 권한다.
+
 ## 1. 카카오 콘솔에서 앱 만들기
 
-<https://developers.kakao.com> → 내 애플리케이션 → 애플리케이션 추가하기
+1. <https://developers.kakao.com> 접속 → 우측 상단 **로그인** (카카오계정)
+2. 상단 **내 애플리케이션** → **애플리케이션 추가하기**
+3. 입력값
+   - 앱 아이콘: 핏루틴 아이콘 (`assets/images/` 의 아이콘 사용 가능)
+   - 앱 이름: **핏루틴**
+   - 사업자명: 사업자등록증 상호 또는 개인 이름 — **로그인 동의 화면에 그대로
+     노출된다.** 회원이 보는 이름이니 아무거나 넣지 말 것.
+   - 카테고리: 건강
+4. **저장**
 
-- 앱 이름: 핏루틴
-- 회사명: (사업자명 또는 개인)
-- 카테고리: 건강
+### 1-1. 플랫폼 등록 (안 하면 3번이 안 먹는다)
+
+**앱 설정 → 플랫폼 → Web 플랫폼 등록**, 사이트 도메인에 아래를 넣는다.
+
+```
+https://hhjmhdxcxjuhhhgjsilu.supabase.co
+```
+
+카카오는 **등록된 플랫폼 도메인에 속한 주소만** Redirect URI 로 받아 준다.
+이걸 건너뛰면 3번에서 저장이 안 되거나 로그인 때 `invalid redirect` 가 난다.
 
 ## 2. REST API 키와 Client Secret 받기
 
-- **앱 설정 → 앱 키**: `REST API 키` 를 복사해 둔다 → Supabase 의 `client_id`
-- **제품 설정 → 카카오 로그인 → 보안**: `Client Secret` 을 **생성하고 활성화** →
-  Supabase 의 `client_secret`
+- **앱 설정 → 앱 키**: `REST API 키` 를 복사 → Supabase 의 `client_id`
+  (네이티브 앱 키·JavaScript 키·Admin 키가 아니라 **REST API 키**다)
+- **제품 설정 → 카카오 로그인 → 보안**: `Client Secret` **생성 → 활성화 상태 ON**
+  → Supabase 의 `client_secret`
+  (생성만 하고 활성화를 안 켜면 Supabase 가 인증에 실패한다)
 
 ## 3. Redirect URI 등록 (가장 자주 틀리는 곳)
 
@@ -42,6 +70,22 @@ https://hhjmhdxcxjuhhhgjsilu.supabase.co/auth/v1/callback
 
 우리 앱의 딥링크(`fitroutine://auth-callback`)가 아니라 **Supabase 주소**다.
 카카오는 Supabase 로 보내고, Supabase 가 앱으로 되돌린다.
+
+## 3-1. Supabase 쪽 복귀 주소 허용 목록 (여기서도 자주 막힌다)
+
+카카오 인증이 끝나면 Supabase 가 **우리 앱으로** 되돌려보내는데, 그 주소가
+허용 목록에 없으면 거기서 멈춘다.
+
+Supabase 대시보드 → **Authentication → URL Configuration → Redirect URLs** 에
+아래 둘을 추가한다.
+
+```
+fitroutine://auth-callback
+https://kesjjang12-sudo.github.io/Healthy/auth-callback
+```
+
+앞의 것이 설치형 앱, 뒤의 것이 웹(PWA)이다. 이 주소를 받는 화면은
+`src/app/auth-callback.tsx` 에 만들어 뒀다.
 
 ## 4. 카카오 로그인 활성화 + 동의항목
 
