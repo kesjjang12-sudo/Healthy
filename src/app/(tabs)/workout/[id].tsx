@@ -942,7 +942,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    gap: Spacing.xl,
+    gap: Spacing.xxl,
     paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.xl,
     maxWidth: 900,

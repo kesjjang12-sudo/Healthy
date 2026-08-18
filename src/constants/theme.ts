@@ -38,7 +38,8 @@ export const Colors = {
 
   /** 텍스트 */
   text: grey[900],
-  textSecondary: grey[600],
+  /** 설명글. 피드백: 연회색이라 안 읽힌다 → 한 단계 진하게 */
+  textSecondary: grey[700],
   textTertiary: grey[400],
   textOnPrimary: '#FFFFFF',
   textDisabled: grey[300],
@@ -92,17 +93,20 @@ export const Radius = {
 
 /** FIT ROTEIN 시안 타이포 스케일. */
 export const FontSize = {
-  caption: 13,
+  /** 보조 텍스트. 14 밑으로 내리지 않는다 — 디자인 피드백(2026-08-18) */
+  caption: 14,
   /** 안내 문구 */
   body: 16,
-  /** 목록 항목 제목 · 섹션 헤딩 */
-  subtitle: 17,
+  /** 목록 항목 제목 · 부제목 */
+  subtitle: 16,
   /** 버튼 라벨 */
   label: 17,
+  /** 섹션 제목 */
+  section: 18,
   /** 목록에서 가장 먼저 읽혀야 하는 줄 — 쉬운 말로 쓴 운동 이름 */
   headline: 19,
-  /** 화면 제목 */
-  title: 28,
+  /** 화면 제목. 28은 폰에서 과했다 — 같은 피드백 */
+  title: 22,
   /** 키패드 숫자 */
   keypad: 26,
   /** 입력된 전화번호 */
