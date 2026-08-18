@@ -12,6 +12,7 @@ import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/th
 import { isEmptyProfile, signInAsTestUser } from '@/features/auth/anonymous';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { loadLastProvider, rememberProvider } from '@/features/auth/last-provider';
+import { fetchAvailableProviders, type AvailableProviders } from '@/features/auth/providers';
 import { OAuthError, signInWithGoogle, signInWithKakao } from '@/features/auth/oauth';
 import { pickHookMessage } from '@/features/content/hooking-copy';
 
@@ -63,6 +64,24 @@ export default function LoginScreen() {
     let cancelled = false;
     void loadLastProvider().then((provider) => {
       if (!cancelled) setLastProvider(provider);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 서버에서 안 켜진 로그인 수단은 아예 안 보여준다. 눌러도 낯선 오류 화면만
+  // 만나는 버튼을 4060 회원 앞에 두면 거기서 가입이 끝난다. 확인 전에는
+  // 전부 보여준다(있는 걸 잠깐 숨기는 것보다 없는 걸 잠깐 보이는 편이 낫다).
+  const [available, setAvailable] = useState<AvailableProviders>({
+    kakao: true,
+    google: true,
+    phone: true,
+  });
+  useEffect(() => {
+    let cancelled = false;
+    void fetchAvailableProviders().then((result) => {
+      if (!cancelled) setAvailable(result);
     });
     return () => {
       cancelled = true;
@@ -172,20 +191,24 @@ export default function LoginScreen() {
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
         {/* 각 서비스의 색과 심벌을 그대로 쓴다. 글자만 있는 버튼 셋이 세로로
             서 있으면 4060 회원 눈에는 셋 다 같은 것으로 보인다. */}
-        <SocialButton
-          provider="kakao"
-          recent={lastProvider === 'kakao'}
-          onPress={() => void handleOAuth('kakao')}
-          loading={pendingProvider === 'kakao'}
-          disabled={pendingProvider !== null}
-        />
-        <SocialButton
-          provider="google"
-          recent={lastProvider === 'google'}
-          onPress={() => void handleOAuth('google')}
-          loading={pendingProvider === 'google'}
-          disabled={pendingProvider !== null}
-        />
+        {available.kakao ? (
+          <SocialButton
+            provider="kakao"
+            recent={lastProvider === 'kakao'}
+            onPress={() => void handleOAuth('kakao')}
+            loading={pendingProvider === 'kakao'}
+            disabled={pendingProvider !== null}
+          />
+        ) : null}
+        {available.google ? (
+          <SocialButton
+            provider="google"
+            recent={lastProvider === 'google'}
+            onPress={() => void handleOAuth('google')}
+            loading={pendingProvider === 'google'}
+            disabled={pendingProvider !== null}
+          />
+        ) : null}
         <SocialButton
           provider="phone"
           recent={lastProvider === 'phone'}

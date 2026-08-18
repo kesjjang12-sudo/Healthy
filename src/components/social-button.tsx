@@ -22,12 +22,15 @@ const STYLE: Record<
   SocialProvider,
   { bg: string; border?: string; text: string; label: string }
 > = {
-  // 카카오 브랜드 가이드: 배경 #FEE500, 심벌·글자는 불투명도 85% 검정.
-  kakao: { bg: '#FEE500', text: 'rgba(0,0,0,0.85)', label: '카카오로 시작하기' },
-  // 구글 가이드: 흰 바탕 + #747775 계열 테두리 + #1F1F1F 글자.
-  google: { bg: '#FFFFFF', border: '#DADCE0', text: '#1F1F1F', label: '구글로 시작하기' },
+  // 카카오 공식 디자인 가이드(developers.kakao.com/docs/ko/kakaologin/design-guide):
+  // 배경 #FEE500, 심벌 #000000, 글자 #000000 85%. 문구는 완성형 "카카오 로그인"
+  // 또는 축약형 "로그인"만 쓸 수 있다 — "카카오로 시작하기"는 목록에 없다.
+  kakao: { bg: '#FEE500', text: 'rgba(0,0,0,0.85)', label: '카카오 로그인' },
+  // 구글 가이드: 흰 바탕 + 회색 테두리 + #1F1F1F 글자. 워드마크는 "Google" 을
+  // 그대로 써야 한다 — "구글"로 음차하면 규정 위반이다.
+  google: { bg: '#FFFFFF', border: '#DADCE0', text: '#1F1F1F', label: 'Google로 로그인' },
   // 문자인증은 남의 브랜드가 아니라 우리 것이다. 앱 회색 면으로 조용히 둔다.
-  phone: { bg: Colors.surface, text: Colors.text, label: '문자로 시작하기' },
+  phone: { bg: Colors.surface, text: Colors.text, label: '문자로 로그인' },
 };
 
 export function SocialButton({
@@ -93,12 +96,18 @@ export function SocialButton({
 
 function ProviderIcon({ provider }: { provider: SocialProvider }) {
   if (provider === 'kakao') {
-    // 카카오톡 말풍선. 아래로 뻗은 꼬리까지 있어야 그 모양으로 읽힌다.
+    // 카카오톡 말풍선. 가이드상 심벌 색은 불투명 검정(#000000)이다 — 글자만
+    // 85% 를 쓴다. 심벌의 형태·비율·색을 바꾸는 것은 규정 위반이라 여기 값을
+    // 임의로 손대면 안 된다.
+    //
+    // ⚠️ 이건 가이드 수치에 맞춰 그린 것이고 공식 배포 파일은 아니다.
+    // 심사 전에 developers.kakao.com/tool/resource/login 에서 공식 심벌을
+    // 내려받아 assets/ 에 넣고 이 Svg 를 <Image> 로 바꾸는 편이 안전하다.
     return (
       <Svg width={20} height={20} viewBox="0 0 24 24">
         <Path
           d="M12 3C6.9 3 2.8 6.3 2.8 10.3c0 2.6 1.7 4.9 4.3 6.2l-1.1 4c-.1.3.3.6.6.4l4.7-3.1c.2 0 .5.1.7.1 5.1 0 9.2-3.3 9.2-7.6S17.1 3 12 3z"
-          fill="rgba(0,0,0,0.85)"
+          fill="#000000"
         />
       </Svg>
     );
