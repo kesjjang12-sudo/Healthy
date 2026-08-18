@@ -12,7 +12,7 @@ import {
   getEquipmentByQr,
   getExerciseByCatalogId,
 } from '@/features/equipment/api';
-import { FIRST_TIME_RULE, howToSteps, WEIGHT_RULE } from '@/features/routine/guidance';
+import { firstTimeRule, howToSteps, weightRule } from '@/features/routine/guidance';
 import { primaryName, secondaryName } from '@/features/routine/labels';
 import type { EquipmentLookup } from '@/lib/database.types';
 
@@ -175,10 +175,10 @@ export default function EquipmentExploreScreen() {
               트레이너에게 처방을 요청해 주세요.
             </Text>
             <Text style={styles.hintText} maxFontSizeMultiplier={1.3}>
-              {WEIGHT_RULE}
+              {weightRule(equipment)}
             </Text>
             <Text style={styles.hintText} maxFontSizeMultiplier={1.3}>
-              {FIRST_TIME_RULE}
+              {firstTimeRule(equipment)}
             </Text>
           </View>
         </View>

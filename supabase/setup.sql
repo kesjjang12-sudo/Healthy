@@ -9148,6 +9148,1101 @@ grant execute on function public.record_kiosk_consent(uuid, text) to anon, authe
 
 
 -- ═══════════════════════════════════════════════════════════
+-- 20260815000001_drop_complete_routine_overload.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 운동을 마쳐도 "기록하지 못했습니다"가 뜨던 것을 고친다.
+--
+-- 20260814000033_cardio_actual_duration 이 유산소 시간을 받으려고
+-- complete_routine 에 p_actual_duration_minutes 를 더했는데, create or replace
+-- 는 인자 목록이 다르면 "교체"가 아니라 "새 함수 추가"다. 그래서 서버에
+-- 두 개가 남았다:
+--
+--   complete_routine(uuid, numeric, integer)             -- 옛것
+--   complete_routine(uuid, numeric, integer, integer)    -- 새것
+--
+-- 둘 다 뒤 인자에 기본값이 있어서, 근력 운동처럼 세 개만 보내면(무게·횟수,
+-- 시간 없음) 어느 쪽을 부를지 정할 수 없다. PostgREST 는 그걸 그대로
+-- PGRST203("Could not choose the best candidate function") 로 돌려주고,
+-- 앱은 그 오류를 받아 완료 화면에 "기록하지 못했습니다"를 띄웠다.
+--
+-- 실제로는 운동이 저장되지 않은 게 맞다 — 함수가 아예 실행되지 않았다.
+--
+-- 옛것을 지운다. 새것이 옛것의 동작을 모두 포함한다(시간 인자는 기본값
+-- NULL 이라 근력 호출에도 그대로 맞는다).
+drop function if exists public.complete_routine(uuid, numeric, integer);
+
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260815000002_auto_nickname.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 가입할 때 겹치지 않는 닉네임을 자동으로 붙여 준다.
+--
+-- 지금까지는 닉네임이 없으면 랭킹에서 '회원71ec' 처럼 uuid 조각을 보여줬다.
+-- 이웃끼리 보는 화면에 기계가 만든 문자열이 뜨니 자기 줄을 못 찾고, 남의
+-- 줄과도 구별이 안 됐다. 실제로 110명 중 106명이 그 상태였다.
+--
+-- 이름은 앱의 말투에 맞춰 골랐다 — 4060 회원이 이웃에게 보여도 무안하지 않고,
+-- 억지스럽지 않은 자연·산 이미지다("꾸준한소나무", "든든한바위").
+--
+-- 실명은 절대 쓰지 않는다. 닉네임은 랭킹에 그대로 노출되는 값이고, 실명은
+-- profile_data.real_name 에 따로 둔다(CLAUDE.md 참고).
+
+create table if not exists public.nickname_words (
+    kind text not null check (kind in ('modifier', 'noun')),
+    word text not null,
+    primary key (kind, word)
+);
+
+comment on table public.nickname_words is
+    '자동 닉네임 재료. modifier(수식어) x noun(명사) 로 조합한다.';
+
+insert into public.nickname_words (kind, word) values
+    ('modifier', '든든한'), ('modifier', '꾸준한'), ('modifier', '성실한'),
+    ('modifier', '활기찬'), ('modifier', '씩씩한'), ('modifier', '단단한'),
+    ('modifier', '부지런한'), ('modifier', '여유로운'), ('modifier', '다정한'),
+    ('modifier', '밝은'), ('modifier', '따뜻한'), ('modifier', '강인한'),
+    ('modifier', '유쾌한'), ('modifier', '슬기로운'), ('modifier', '정겨운'),
+    ('modifier', '늠름한'), ('modifier', '상쾌한'), ('modifier', '굳센'),
+    ('modifier', '힘찬'), ('modifier', '산뜻한'), ('modifier', '튼튼한'),
+    ('modifier', '새로운'), ('modifier', '한결같은'), ('modifier', '멋진'),
+    ('noun', '바위'), ('noun', '소나무'), ('noun', '참나무'),
+    ('noun', '대나무'), ('noun', '느티나무'), ('noun', '은행나무'),
+    ('noun', '단풍'), ('noun', '새벽'), ('noun', '아침'),
+    ('noun', '햇살'), ('noun', '노을'), ('noun', '바람'),
+    ('noun', '구름'), ('noun', '파도'), ('noun', '냇물'),
+    ('noun', '언덕'), ('noun', '들판'), ('noun', '능선'),
+    ('noun', '정상'), ('noun', '오름'), ('noun', '산길'),
+    ('noun', '돌담'), ('noun', '오솔길'), ('noun', '등대'),
+    ('noun', '나침반'), ('noun', '씨앗'), ('noun', '뿌리'),
+    ('noun', '열매'), ('noun', '이슬'), ('noun', '옹달샘')
+on conflict do nothing;
+
+-- 재료를 아무나 바꾸면 안 된다(닉네임 품질이 곧 서비스 인상이다).
+alter table public.nickname_words enable row level security;
+drop policy if exists nickname_words_read on public.nickname_words;
+create policy nickname_words_read on public.nickname_words for select using (true);
+
+/**
+ * 겹치지 않는 닉네임 하나를 만든다.
+ *
+ * 수식어 x 명사 = 24 x 30 = 720 가지다. 회원이 늘어 720 가지가 다 차면
+ * 뒤에 숫자를 붙여("든든한바위2") 계속 만들 수 있으므로 언젠가 못 만드는
+ * 일은 없다. 숫자는 처음부터 붙이지 않는다 — 대부분의 회원은 숫자 없는
+ * 깔끔한 이름을 받는다.
+ */
+create or replace function public.gen_unique_nickname()
+returns text
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+    v_name  text;
+    v_try   integer := 0;
+begin
+    -- 1단계: 숫자 없는 조합으로 40번 시도한다.
+    while v_try < 40 loop
+        select m.word || n.word into v_name
+        from public.nickname_words m, public.nickname_words n
+        where m.kind = 'modifier' and n.kind = 'noun'
+        order by random()
+        limit 1;
+
+        if not exists (
+            select 1 from public.users u
+            where u.profile_data ->> 'nickname' = v_name
+        ) then
+            return v_name;
+        end if;
+        v_try := v_try + 1;
+    end loop;
+
+    -- 2단계: 조합이 거의 다 찼다. 뒤에 숫자를 붙여 빈 자리를 찾는다.
+    -- 닉네임 길이 상한이 12자라 숫자까지 넣어도 넘지 않는 조합만 쓴다.
+    for v_try in 2..9999 loop
+        select m.word || n.word into v_name
+        from public.nickname_words m, public.nickname_words n
+        where m.kind = 'modifier' and n.kind = 'noun'
+          and char_length(m.word || n.word) + char_length(v_try::text) <= 12
+        order by random()
+        limit 1;
+
+        v_name := v_name || v_try::text;
+        if not exists (
+            select 1 from public.users u
+            where u.profile_data ->> 'nickname' = v_name
+        ) then
+            return v_name;
+        end if;
+    end loop;
+
+    -- 여기까지 왔다는 건 수만 명이 같은 이름을 쓰고 있다는 뜻이다.
+    -- 그래도 가입은 막지 않는다.
+    return '회원' || substr(md5(random()::text), 1, 4);
+end;
+$$;
+
+/**
+ * 새 회원에게 닉네임을 붙인다.
+ *
+ * 트리거로 두는 이유: 회원이 만들어지는 길이 여럿이다(카카오·구글 최초
+ * 로그인, 전화번호 로그인, 키오스크 첫 체크인, 테스트 계정). 각 함수마다
+ * 넣으면 하나를 빠뜨렸을 때 그 경로로 들어온 사람만 조용히 '회원71ec' 가
+ * 된다. 한 곳에서 막는다.
+ *
+ * nickname_changed_at 은 일부러 넣지 않는다. 자동으로 받은 이름은 본인이
+ * 고른 게 아니므로, 2주 제한 없이 바로 바꿀 수 있어야 한다.
+ */
+create or replace function public.set_default_nickname()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+begin
+    if nullif(trim(coalesce(new.profile_data ->> 'nickname', '')), '') is null then
+        new.profile_data := coalesce(new.profile_data, '{}'::jsonb)
+            || jsonb_build_object('nickname', public.gen_unique_nickname());
+    end if;
+    return new;
+end;
+$$;
+
+drop trigger if exists users_set_default_nickname on public.users;
+create trigger users_set_default_nickname
+    before insert on public.users
+    for each row execute function public.set_default_nickname();
+
+-- 이미 가입한 분들 중 닉네임이 비어 있는 사람에게도 붙여 준다.
+-- 이미 정해 둔 닉네임은 건드리지 않는다.
+do $$
+declare
+    r record;
+begin
+    for r in
+        select id from public.users
+        where nullif(trim(coalesce(profile_data ->> 'nickname', '')), '') is null
+        order by created_at
+    loop
+        update public.users
+        set profile_data = coalesce(profile_data, '{}'::jsonb)
+            || jsonb_build_object('nickname', public.gen_unique_nickname())
+        where id = r.id;
+    end loop;
+end;
+$$;
+
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260816000001_nickname_unique.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 닉네임을 한 사람만 쓰게 한다.
+--
+-- 가입할 때 지어 주는 이름은 이미 겹치지 않는데(20260815000002), 직접 바꾸는
+-- 쪽은 아무 검사가 없었다. 그래서 이웃이 쓰는 이름을 그대로 적어 넣을 수
+-- 있었고, 랭킹에 같은 이름이 둘 나란히 서면 누가 누군지 알 수가 없다.
+--
+-- 검사만 넣으면 동시에 같은 이름을 보낸 두 요청이 둘 다 통과하는 창이 남아서,
+-- 유일 색인으로 막고 검사는 안내 문구를 위해 둔다. 지금 중복이 하나도 없는
+-- 것을 확인하고 거는 색인이다.
+
+-- 대소문자만 다른 이름("healthy" / "Healthy")도 같은 이름으로 본다 —
+-- 랭킹에서 옆에 놓으면 구별이 안 된다. 앞뒤 공백도 지우고 비교한다.
+create unique index if not exists users_nickname_unique_idx
+    on public.users ((lower(trim(profile_data ->> 'nickname'))))
+    where nullif(trim(coalesce(profile_data ->> 'nickname', '')), '') is not null;
+
+-- 자동 생성 쪽도 같은 기준으로 비교하게 맞춘다. 색인과 기준이 다르면
+-- "안 겹친다"고 판단해 만든 이름이 insert 에서 색인에 걸려 가입이 실패한다.
+create or replace function public.gen_unique_nickname()
+returns text
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare
+    v_name  text;
+    v_try   integer := 0;
+begin
+    while v_try < 40 loop
+        select m.word || n.word into v_name
+        from public.nickname_words m, public.nickname_words n
+        where m.kind = 'modifier' and n.kind = 'noun'
+        order by random()
+        limit 1;
+
+        if not exists (
+            select 1 from public.users u
+            where lower(trim(u.profile_data ->> 'nickname')) = lower(trim(v_name))
+        ) then
+            return v_name;
+        end if;
+        v_try := v_try + 1;
+    end loop;
+
+    for v_try in 2..9999 loop
+        select m.word || n.word into v_name
+        from public.nickname_words m, public.nickname_words n
+        where m.kind = 'modifier' and n.kind = 'noun'
+          and char_length(m.word || n.word) + char_length(v_try::text) <= 12
+        order by random()
+        limit 1;
+
+        v_name := v_name || v_try::text;
+        if not exists (
+            select 1 from public.users u
+            where lower(trim(u.profile_data ->> 'nickname')) = lower(trim(v_name))
+        ) then
+            return v_name;
+        end if;
+    end loop;
+
+    -- 여기까지 왔으면 조합이 동난 것이다. 무작위 꼬리를 8자로 늘려 잡는다 —
+    -- 4자였을 때는 색인에 걸려 가입 자체가 실패할 여지가 있었다.
+    return '회원' || substr(md5(random()::text), 1, 8);
+end;
+$function$;
+
+-- 서버의 현재 정의(pg_get_functiondef)에 중복 검사만 얹은 것이다.
+-- 비속어 필터·2주 제한·테스트 계정 예외는 그대로 둔다.
+create or replace function public.update_nickname(p_nickname text)
+returns jsonb
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare
+    v_user       public.users;
+    v_norm       text;
+    v_is_test    boolean;
+    v_changed_at timestamptz;
+begin
+    if auth.uid() is null then
+        raise exception 'AUTH_REQUIRED' using errcode = '42501';
+    end if;
+
+    select * into v_user from public.users where auth_user_id = auth.uid();
+    if not found then
+        raise exception 'USER_NOT_FOUND' using errcode = 'P0002';
+    end if;
+
+    p_nickname := trim(coalesce(p_nickname, ''));
+    if char_length(p_nickname) < 2 or char_length(p_nickname) > 12 then
+        raise exception 'NICKNAME_INVALID' using errcode = '22023';
+    end if;
+
+    -- 같은 이름으로 다시 저장하는 건 변경이 아니다 — 2주 창을 소모하지 않는다.
+    if p_nickname = coalesce(v_user.profile_data ->> 'nickname', '') then
+        return jsonb_build_object('user', to_jsonb(v_user));
+    end if;
+
+    -- 공백·문장부호를 끼워 넣는 우회("시.발", "시 발")를 막으려고 한글·영문·
+    -- 숫자만 남기고 전부 지운 뒤 부분일치로 찾는다.
+    v_norm := lower(regexp_replace(p_nickname, '[^0-9a-zA-Z가-힣ㄱ-ㅎㅏ-ㅣ]', '', 'g'));
+    if exists (
+        select 1 from public.banned_words w
+        where v_norm like '%' || w.word || '%'
+    ) then
+        raise exception 'NICKNAME_PROFANITY' using errcode = '22023';
+    end if;
+
+    -- 이웃이 이미 쓰는 이름은 막는다. 내 행은 빼고 본다 — 대소문자만 바꾸는
+    -- 것("healthy" → "Healthy")은 남의 이름을 가져가는 게 아니라서다.
+    if exists (
+        select 1 from public.users u
+        where u.id <> v_user.id
+          and lower(trim(u.profile_data ->> 'nickname')) = lower(trim(p_nickname))
+    ) then
+        raise exception 'NICKNAME_TAKEN' using errcode = '22023';
+    end if;
+
+    -- 테스트 계정(익명 세션 + 전화번호 없음)은 2주 제한을 안 받는다.
+    -- 전화번호가 붙은 익명 세션은 실제 회원(전화번호 로그인)이므로 제한 대상이다.
+    v_is_test := coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false)
+                 and v_user.phone_number is null;
+
+    v_changed_at := nullif(v_user.profile_data ->> 'nickname_changed_at', '')::timestamptz;
+    if not v_is_test
+       and v_changed_at is not null
+       and v_changed_at > now() - interval '14 days' then
+        -- 다음 가능 시각을 코드 뒤에 붙여 보낸다. 클라이언트가 "8월 27일부터
+        -- 가능합니다"처럼 날짜로 안내할 수 있게.
+        raise exception 'NICKNAME_RATE_LIMITED:%',
+            to_char((v_changed_at + interval '14 days') at time zone 'utc',
+                    'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+            using errcode = '22023';
+    end if;
+
+    update public.users u
+    set profile_data = u.profile_data
+        || jsonb_build_object('nickname', p_nickname, 'nickname_changed_at', now())
+    where u.id = v_user.id
+    returning * into v_user;
+
+    return jsonb_build_object('user', to_jsonb(v_user));
+
+-- 위 검사와 update 사이에 다른 사람이 같은 이름을 채 간 경우. 색인이 막아
+-- 주므로 데이터는 안전하고, 여기서는 같은 안내로 바꿔 준다.
+exception
+    when unique_violation then
+        raise exception 'NICKNAME_TAKEN' using errcode = '22023';
+end;
+$function$;
+
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260816000002_last_pin.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 기구 상세에 "지난번엔 N칸" 을 띄우기 위한 값.
+--
+-- 운동을 마칠 때 "몇 칸에 꽂으셨어요?" 를 받아 두고는(actual_weight_kg 에 핀
+-- 칸이 들어 있다) 그걸 되돌려 보여 주는 곳이 없었다. 4060 회원의 무게 관리는
+-- 숫자 입력이 아니라 "앱이 내 핀을 기억해 준다"는 경험이라, 다음에 그 기구
+-- 앞에 섰을 때 지난 칸을 보여 주는 것이 핵심이다.
+--
+-- 서버의 현재 정의(pg_get_functiondef, 2026-08-16 확인)에 last_pin 한 줄만
+-- 얹었다. 다른 필드는 그대로다 — 이 함수는 20260814000029 가 통째로 다시
+-- 쓰면서 image_url 을 빠뜨린 전과가 있는 함수라, 반드시 서버 정의에서
+-- 출발해야 한다.
+
+create or replace function public.get_daily_routine(p_user_id uuid, p_date date default current_date)
+returns jsonb
+language sql
+security definer
+set search_path to 'public'
+as $function$
+    select coalesce(jsonb_agg(row order by sort_order, name), '[]'::jsonb)
+    from (
+        select d.sort_order, cat.name, jsonb_build_object(
+            'routine_id', d.id,
+            'catalog_id', cat.id,
+            'equip_id', e.id,
+            'name', cat.name,
+            'name_ko', cat.name_ko,
+            'station_kind', cat.station_kind,
+            'description', cat.description,
+            'why_it_matters', cat.why_it_matters,
+            'how_to_steps', cat.how_to_steps,
+            'form_caution', cat.form_caution,
+            'target_muscle', cat.target_muscle,
+            'video_url', cat.video_url,
+            'image_url', cat.image_url,
+            'qr_code_val', e.qr_code_val,
+            'location_label', e.location_label,
+            'target_weight', d.target_weight,
+            'target_sets', d.target_sets,
+            'target_reps', d.target_reps,
+            'target_duration_minutes', d.target_duration_minutes,
+            'actual_duration_minutes', d.actual_duration_minutes,
+            'is_completed', d.is_completed,
+            -- 이 기구에서 가장 최근에 꽂았던 핀 칸. 유산소·맨몸이거나 처음이면 null.
+            -- (actual_weight_kg 컬럼에는 kg 이 아니라 핀 칸이 들어 있다 —
+            --  기록 화면이 "몇 번째 칸이었나요?"로 받는 값이다)
+            'last_pin', (
+                select p.actual_weight_kg
+                from public.daily_routines p
+                where p.user_id = p_user_id
+                  and p.equip_id = d.equip_id
+                  and p.id <> d.id
+                  and p.is_completed
+                  and p.actual_weight_kg is not null
+                order by p.completed_at desc nulls last
+                limit 1
+            ),
+            'weight_suggestion', case
+                when d.is_completed then null
+                else public.weight_suggestion(p_user_id, e.id)
+            end
+        ) as row
+        from public.daily_routines d
+        join public.exercise_catalog cat on cat.id = d.catalog_id
+        left join public.equipments e on e.id = d.equip_id
+        where d.user_id = p_user_id and d.routine_date = p_date
+    ) s;
+$function$;
+
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260816000003_routine_cardio_and_budget.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 루틴 생성 개선 셋. 서버의 현재 정의(pg_get_functiondef, 2026-08-16 확인)에
+-- 얹었다 — 통증 제외/감량, 기구 배정, on conflict, 진단 카운트는 그대로다.
+--
+-- 1) 유산소를 매일 보장한다.
+--    템플릿 210개 중 90개에 유산소 항목이 아예 없어서, 그 템플릿에 걸린
+--    회원은 러닝머신·자전거가 영영 안 나왔다. 심폐는 매일 채워야 하는
+--    기본값이라 템플릿에 없으면 단지의 유산소 기구에서 하나를 골라 넣는다
+--    (날짜 해시로 돌아가며 — 매일 같은 기구만 나오지 않게).
+--
+-- 2) 코스를 고정 시간제로 바꾼다. 짧게 = 30분, 충분히 = 60분.
+--    예전엔 운동 목록에서 시간을 역산해 "약 33분/61분"이 그때그때 흔들렸다.
+--    거꾸로 시간 예산을 먼저 정하고 거기 맞춰 운동 수를 자른다. 유산소
+--    시간을 먼저 떼어 두고 남는 예산에 근력을 채운다.
+--
+-- 3) 어제 한 부위는 목록 뒤로 민다.
+--    예산 때문에 잘릴 때 어제 한 부위부터 잘리므로, 매일 나오는 분은
+--    자연히 부위가 돌아가며 나온다. 예산이 남으면 전부 들어간다(그날은
+--    순환이 없어도 어차피 다 한다).
+
+create or replace function public.generate_daily_routine(
+    p_user_id uuid,
+    p_date date default current_date,
+    p_apt_id uuid default null::uuid,
+    p_course text default null::text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare
+    v_user            public.users;
+    v_target_apt_id   uuid;
+    v_gender          text;
+    v_age_group       integer;
+    v_goals_key       text;
+    v_pain_areas      text[];
+    v_template_id     uuid;
+    v_course          text;
+    v_max_level       smallint;
+    v_cardio_bonus    integer;
+    v_budget          numeric;
+    v_cardio_reserve  numeric;
+    v_strength_budget numeric;
+    v_yesterday       text[];
+    v_has_gym_cardio  boolean;
+    v_created         integer := 0;
+    v_cardio_added    integer := 0;
+    v_excluded        integer := 0;
+    v_unmapped        integer := 0;
+    v_minutes         integer := 0;
+begin
+    select * into v_user from public.users u where u.id = p_user_id;
+    if not found then
+        raise exception 'USER_NOT_FOUND' using errcode = 'P0002';
+    end if;
+
+    v_target_apt_id := coalesce(p_apt_id, v_user.apt_id);
+
+    -- 코스는 인자 > 저장된 선택 > 짧은 코스 순으로 정한다.
+    v_course := lower(coalesce(nullif(p_course, ''), v_user.profile_data->>'course', 'short'));
+    if v_course not in ('short', 'long') then
+        v_course := 'short';
+    end if;
+    v_max_level := case when v_course = 'long' then 2 else 1 end;
+    -- 긴 코스는 유산소도 10분 더 한다. 근력만 늘리면 심폐는 그대로다.
+    v_cardio_bonus := case when v_course = 'long' then 10 else 0 end;
+    -- 고정 시간 예산. 코스 버튼에 적히는 그 숫자다.
+    v_budget := case when v_course = 'long' then 60 else 30 end;
+
+    v_gender := coalesce(v_user.profile_data->>'gender', 'female');
+    v_age_group := coalesce((v_user.profile_data->>'age_group')::integer, 70);
+
+    v_goals_key := coalesce(nullif(array_to_string(
+        array(
+            select jsonb_array_elements_text(v_user.profile_data->'goals') order by 1
+        ), '+'), ''), 'health');
+
+    v_pain_areas := case
+        when jsonb_typeof(v_user.profile_data->'pain_areas') = 'array'
+            then array(select jsonb_array_elements_text(v_user.profile_data->'pain_areas'))
+        else '{}'::text[]
+    end;
+
+    select t.id into v_template_id
+    from public.routine_templates t
+    where t.gender = v_gender and t.age_group = v_age_group and t.goals_key = v_goals_key;
+
+    if not found then
+        select t.id into v_template_id
+        from public.routine_templates t
+        where t.gender = v_gender and t.age_group = v_age_group and t.goals_key = 'health';
+    end if;
+
+    if v_template_id is null then
+        raise exception 'ROUTINE_TEMPLATE_NOT_FOUND' using errcode = 'P0002';
+    end if;
+
+    select count(*) into v_excluded
+    from public.routine_template_items i
+    where i.template_id = v_template_id
+      and i.course_level <= v_max_level
+      and exists (
+          select 1 from public.pain_area_rules r
+          where r.action = 'exclude'
+            and r.target_muscle = i.target_muscle
+            and r.pain_area = any (v_pain_areas)
+      );
+
+    select count(*) into v_unmapped
+    from public.routine_template_items i
+    where i.template_id = v_template_id
+      and i.course_level <= v_max_level
+      and not exists (
+          select 1 from public.pain_area_rules r
+          where r.action = 'exclude'
+            and r.target_muscle = i.target_muscle
+            and r.pain_area = any (v_pain_areas)
+      )
+      and not exists (
+          select 1
+          from public.exercise_catalog cat
+          left join public.equipments e
+            on e.catalog_id = cat.id and e.apt_id = v_target_apt_id
+          where cat.target_muscle = i.target_muscle
+            and (cat.station_kind = '맨몸' or e.id is not null)
+      );
+
+    -- 어제 한 부위(유산소 제외). 오늘 예산에서 잘라야 할 때 이 부위부터 자른다.
+    v_yesterday := array(
+        select distinct cat.target_muscle
+        from public.daily_routines d
+        join public.exercise_catalog cat on cat.id = d.catalog_id
+        where d.user_id = p_user_id
+          and d.routine_date = p_date - 1
+          and cat.target_muscle is not null
+          and cat.target_muscle <> '유산소'
+    );
+
+    -- 유산소 몫을 먼저 떼어 둔다: 템플릿에 유산소가 있으면 그 시간, 없으면
+    -- (단지에 유산소 기구가 있을 때) 15분 + 코스 보너스.
+    select exists (
+        select 1 from public.equipments e
+        join public.exercise_catalog cat on cat.id = e.catalog_id
+        where e.apt_id = v_target_apt_id and cat.station_kind = '유산소'
+    ) into v_has_gym_cardio;
+
+    select coalesce(max(i.duration_minutes + v_cardio_bonus), 0) into v_cardio_reserve
+    from public.routine_template_items i
+    where i.template_id = v_template_id
+      and i.course_level <= v_max_level
+      and i.duration_minutes is not null
+      and not exists (
+          select 1 from public.pain_area_rules r
+          where r.action = 'exclude'
+            and r.target_muscle = i.target_muscle
+            and r.pain_area = any (v_pain_areas)
+      );
+
+    if v_cardio_reserve = 0 and v_has_gym_cardio then
+        v_cardio_reserve := 15 + v_cardio_bonus;
+    end if;
+
+    v_strength_budget := v_budget - v_cardio_reserve;
+
+    with candidate as (
+        select
+            i.target_muscle,
+            i.slot,
+            i.sets,
+            i.reps,
+            i.weight_ratio,
+            i.sort_order,
+            case
+                when i.duration_minutes is null then null
+                else i.duration_minutes + v_cardio_bonus
+            end as duration_minutes,
+            case
+                when i.weight_ratio is null then null
+                else coalesce((
+                    select min(r.weight_multiplier)
+                    from public.pain_area_rules r
+                    where r.action = 'derate'
+                      and r.target_muscle = i.target_muscle
+                      and r.pain_area = any (v_pain_areas)
+                ), 1.0)
+            end as derate
+        from public.routine_template_items i
+        where i.template_id = v_template_id
+          and i.course_level <= v_max_level
+          and not exists (
+              select 1 from public.pain_area_rules r
+              where r.action = 'exclude'
+                and r.target_muscle = i.target_muscle
+                and r.pain_area = any (v_pain_areas)
+          )
+    ),
+    options as (
+        select
+            e.id as equip_id,
+            cat.id as catalog_id,
+            cat.target_muscle,
+            coalesce(e.base_weight_kg, cat.base_weight_kg) as base_weight_kg,
+            coalesce(e.weight_step_kg, cat.weight_step_kg) as weight_step_kg,
+            0 as priority,
+            hashtext(e.id::text || p_user_id::text || p_date::text) & 2147483647 as h
+        from public.equipments e
+        join public.exercise_catalog cat on cat.id = e.catalog_id
+        where e.apt_id = v_target_apt_id
+        union all
+        select
+            null::uuid,
+            cat.id,
+            cat.target_muscle,
+            cat.base_weight_kg,
+            cat.weight_step_kg,
+            1,
+            hashtext(cat.id::text || p_user_id::text || p_date::text) & 2147483647
+        from public.exercise_catalog cat
+        where cat.station_kind = '맨몸'
+          and not exists (
+              select 1 from public.equipments e2
+              where e2.apt_id = v_target_apt_id and e2.catalog_id = cat.id
+          )
+    ),
+    best as (
+        select target_muscle, min(priority) as priority
+        from options
+        group by target_muscle
+    ),
+    ranked as (
+        select
+            o.*,
+            row_number() over (partition by o.target_muscle order by o.h) as rn,
+            count(*) over (partition by o.target_muscle) as total
+        from options o
+        join best b on b.target_muscle = o.target_muscle and o.priority = b.priority
+    ),
+    matched as (
+        select c.*, r.equip_id, r.catalog_id, r.base_weight_kg, r.weight_step_kg,
+            -- 한 운동이 차지하는 시간. 한 세트 = 동작 40초 + 쉬는 시간 60초,
+            -- 마지막 세트 뒤에는 쉬지 않고, 기구를 찾고 무게를 맞추는 1.5분을 더한다.
+            case
+                when c.duration_minutes is not null then c.duration_minutes::numeric
+                else ceil((coalesce(c.sets, 1) * 100 - 60) / 60.0) + 1.5
+            end as est_minutes,
+            (c.target_muscle = any (v_yesterday)) as did_yesterday
+        from candidate c
+        join ranked r
+          on r.target_muscle = c.target_muscle
+         and r.rn = ((c.slot - 1) % r.total) + 1
+    ),
+    budgeted as (
+        select m.*,
+            -- 근력만 누적한다(유산소는 몫을 이미 떼어 두었다). 어제 안 한
+            -- 부위가 먼저 쌓이므로, 예산이 모자라면 어제 한 부위부터 잘린다.
+            sum(case when m.duration_minutes is null then m.est_minutes else 0 end)
+                over (order by m.did_yesterday, m.sort_order
+                      rows between unbounded preceding and current row) as strength_cum
+        from matched m
+    ),
+    saved as (
+        insert into public.daily_routines
+            (user_id, catalog_id, equip_id, routine_date, target_weight, target_sets,
+             target_reps, target_duration_minutes, sort_order)
+        select
+            p_user_id,
+            m.catalog_id,
+            m.equip_id,
+            p_date,
+            coalesce(
+                (select l.weight_kg from public.user_equipment_levels l
+                  where l.user_id = p_user_id and l.equip_id = m.equip_id),
+                case
+                    when m.base_weight_kg is null or m.weight_ratio is null then null
+                    else greatest(
+                        m.weight_step_kg,
+                        (floor(m.base_weight_kg * m.weight_ratio * m.derate / m.weight_step_kg)
+                            * m.weight_step_kg)::integer
+                    )
+                end
+            ),
+            m.sets,
+            m.reps,
+            m.duration_minutes,
+            m.sort_order
+        from budgeted m
+        where m.duration_minutes is not null      -- 유산소는 항상 들어간다
+           or m.strength_cum <= v_strength_budget -- 근력은 예산 안에서만
+        order by m.sort_order
+        on conflict (user_id, catalog_id, routine_date) do nothing
+        returning 1
+    )
+    select count(*) into v_created from saved;
+
+    -- 유산소 보장: 템플릿에 유산소가 없어 오늘 루틴에 유산소가 하나도 없으면,
+    -- 단지의 유산소 기구에서 하나를 골라 마지막에 넣는다. 날짜 해시로 골라
+    -- 매일 같은 기구만 나오지 않는다. 이미 오늘 유산소를 마친 경우(코스를
+    -- 바꿔 다시 생성)는 is_completed 행이 남아 있어 여기 걸리지 않는다.
+    if v_has_gym_cardio and not exists (
+        select 1
+        from public.daily_routines d
+        join public.exercise_catalog cat on cat.id = d.catalog_id
+        where d.user_id = p_user_id
+          and d.routine_date = p_date
+          and cat.station_kind = '유산소'
+    ) then
+        insert into public.daily_routines
+            (user_id, catalog_id, equip_id, routine_date, target_duration_minutes, sort_order)
+        select
+            p_user_id, e.catalog_id, e.id, p_date,
+            15 + v_cardio_bonus,
+            coalesce((select max(d2.sort_order) from public.daily_routines d2
+                      where d2.user_id = p_user_id and d2.routine_date = p_date), 0) + 1
+        from public.equipments e
+        join public.exercise_catalog cat on cat.id = e.catalog_id
+        where e.apt_id = v_target_apt_id and cat.station_kind = '유산소'
+        order by hashtext(e.id::text || p_user_id::text || p_date::text) & 2147483647
+        limit 1
+        on conflict (user_id, catalog_id, routine_date) do nothing;
+
+        get diagnostics v_cardio_added = row_count;
+        v_created := v_created + v_cardio_added;
+    end if;
+
+    -- 오늘 걸리는 시간(실제 목록 기준). 예산과 거의 같지만 조금 남을 수 있다.
+    select coalesce(sum(
+        case
+            when d.target_duration_minutes is not null then d.target_duration_minutes
+            else ceil((coalesce(d.target_sets, 1) * 100 - 60) / 60.0) + 1.5
+        end
+    ), 0)::integer into v_minutes
+    from public.daily_routines d
+    where d.user_id = p_user_id and d.routine_date = p_date;
+
+    return jsonb_build_object(
+        'routine_date', p_date,
+        'template', jsonb_build_object(
+            'gender', v_gender, 'age_group', v_age_group, 'goals_key', v_goals_key
+        ),
+        'course', v_course,
+        'estimated_minutes', v_minutes,
+        -- 고정 시간제: 코스 버튼에는 늘 같은 숫자가 적힌다. 실제 목록에서
+        -- 역산하던 예전 방식은 이 숫자가 그때그때 흔들렸다.
+        'course_options', jsonb_build_array(
+            jsonb_build_object('course', 'short', 'minutes', 30),
+            jsonb_build_object('course', 'long', 'minutes', 60)
+        ),
+        'created', v_created,
+        'excluded_by_pain', v_excluded,
+        'missing_equipment', v_unmapped,
+        'needs_trainer_review',
+            (v_created = 0 and v_excluded > 0) or coalesce(array_length(v_pain_areas, 1), 0) >= 3,
+        'routines', public.get_daily_routine(p_user_id, p_date)
+    );
+end;
+$function$;
+
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260816000004_no_decrease_at_minimum.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 이미 가장 가벼운 칸이면 "내려볼까요?"를 띄우지 않는다.
+--
+-- 원터치 피드백이 붙고 나서 처음으로 decrease 경로가 실제로 도는데, 최소
+-- 무게(한 칸)에서 힘들다고 답하면 "한 칸 가볍게 → 그대로 5kg" 같은 무의미한
+-- 제안이 나왔다. 내려갈 곳이 없으면 제안 자체를 안 하는 게 맞다 — 그 경우
+-- 필요한 건 무게 조정이 아니라 다른 운동이고, 그건 트레이너 검수 영역이다.
+--
+-- 서버의 현재 정의(pg_get_functiondef, 2026-08-16 확인) 위에 얹었다. 저장소의
+-- 20260813000004 파일과 달리 서버는 v_step 을 기구별 값(e.weight_step_kg)에서
+-- 먼저 읽는다 — 그 개선을 그대로 유지한다.
+
+create or replace function public.weight_suggestion(p_user_id uuid, p_equip_id uuid)
+returns jsonb
+language plpgsql
+stable security definer
+set search_path to 'public'
+as $function$
+declare
+    v_step        integer;
+    v_current     integer;
+    v_recent      record;
+    v_easy_count  integer;
+begin
+    select coalesce(e.weight_step_kg, cat.weight_step_kg) into v_step
+    from public.equipments e
+    join public.exercise_catalog cat on cat.id = e.catalog_id
+    where e.id = p_equip_id;
+
+    if v_step is null then
+        return null;
+    end if;
+
+    select l.weight_kg into v_current
+    from public.user_equipment_levels l
+    where l.user_id = p_user_id and l.equip_id = p_equip_id;
+
+    if v_current is null then
+        select d.target_weight into v_current
+        from public.daily_routines d
+        where d.user_id = p_user_id and d.equip_id = p_equip_id and d.target_weight is not null
+        order by d.routine_date desc
+        limit 1;
+    end if;
+
+    if v_current is null then
+        return null;
+    end if;
+
+    select d.actual_reps, d.target_reps, d.actual_weight_kg, d.target_weight
+    into v_recent
+    from public.daily_routines d
+    where d.user_id = p_user_id
+      and d.equip_id = p_equip_id
+      and d.is_completed
+      and d.actual_reps is not null
+      and d.target_reps is not null
+    order by d.completed_at desc nulls last
+    limit 1;
+
+    if not found then
+        return null;
+    end if;
+
+    if v_recent.actual_reps < ceil(v_recent.target_reps * 0.7) then
+        -- 이미 최소 무게면 내릴 곳이 없다. "가볍게 → 그대로"는 제안이 아니다.
+        if v_current <= v_step then
+            return null;
+        end if;
+        return jsonb_build_object(
+            'action', 'decrease',
+            'current_kg', v_current,
+            'suggested_kg', greatest(v_step, v_current - v_step),
+            'reason', format('지난번에 목표 %s회 중 %s회를 하셨어요. 무게가 조금 버거우신 것 같습니다.',
+                             v_recent.target_reps, v_recent.actual_reps)
+        );
+    end if;
+
+    select count(*) into v_easy_count
+    from (
+        select d.actual_reps, d.target_reps
+        from public.daily_routines d
+        where d.user_id = p_user_id
+          and d.equip_id = p_equip_id
+          and d.is_completed
+          and d.actual_reps is not null
+          and d.target_reps is not null
+        order by d.completed_at desc nulls last
+        limit 2
+    ) s
+    where s.actual_reps >= s.target_reps;
+
+    if v_easy_count >= 2 then
+        return jsonb_build_object(
+            'action', 'increase',
+            'current_kg', v_current,
+            'suggested_kg', v_current + v_step,
+            'reason', format('최근 두 번 모두 목표 %s회를 다 채우셨어요.', v_recent.target_reps)
+        );
+    end if;
+
+    return null;
+end;
+$function$;
+
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260816000005_journey_minutes.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 국토 종주 둘레길: 지금까지 유산소를 총 몇 분 했는지.
+--
+-- 유산소 화면이 "214km 중 163km 지점"처럼 누적 여정을 보여주려면 지난
+-- 세션들의 유산소 시간 합이 필요하다. daily_routines 는 RLS 정책 없이
+-- SECURITY DEFINER RPC 로만 열려 있으므로(클라이언트 직접 select 불가)
+-- 합계도 RPC 로 낸다. 새 함수라 기존 정의를 덮어쓸 일은 없다.
+
+create or replace function public.get_journey_minutes()
+returns integer
+language sql
+stable
+security definer
+set search_path to 'public'
+as $function$
+    select coalesce(sum(d.actual_duration_minutes), 0)::integer
+    from public.daily_routines d
+    join public.users u on u.id = d.user_id
+    where u.auth_user_id = auth.uid()
+      and d.is_completed
+      and d.actual_duration_minutes is not null;
+$function$;
+
+comment on function public.get_journey_minutes() is
+    '로그인한 회원이 지금까지 완료한 유산소의 총 시간(분). 국토 종주 둘레길의 누적 거리 계산에 쓴다.';
+
+revoke all on function public.get_journey_minutes() from public;
+grant execute on function public.get_journey_minutes() to authenticated;
+
+
+-- ═══════════════════════════════════════════════════════════
+-- 20260817000001_xp_for_attendance.sql
+-- ═══════════════════════════════════════════════════════════
+
+-- 출석을 경험치의 최대 원천으로 만든다.
+--
+-- 포인트(total_points)를 경험치로 재해석해 명예 호칭 7단계(새내기 →
+-- 천하장사)를 올라가게 한다. 무게가 아니라 꾸준함이 평가받는 앱이므로,
+-- 경험치도 검증 가능한 꾸준함 신호에 가중한다:
+--
+--   · 체크인(출석):     +30  — 키오스크가 검증하는 가장 정직한 신호
+--   · 운동 1개 완료:    +10  — 기존 그대로 (complete_routine)
+--   · 한 주 3회째 출석: +50  — 주 단위 보너스. 연속일 스트릭은 4060 에게
+--     무리다(쉬는 날이 필요한데 하루 빠지면 깨진다). 주 3회가 기준.
+--
+-- 하루 1회만 인정되는 기존 규칙(v_already_attended_today) 안쪽에서만 주므로
+-- 같은 날 두 번 찍어도 두 번 받지 못한다. 주 보너스는 그 주의 출석일 수가
+-- 정확히 3이 되는 순간 한 번만 준다.
+--
+-- 서버의 현재 정의(pg_get_functiondef, 2026-08-17 확인) 위에 XP 두 줄만
+-- 얹었다. 페어링·멤버십·주소속 전환 로직은 그대로다.
+--
+-- ⚠️ XP 수치(30/10/50)와 호칭 문턱값은 운영 검수 대상.
+
+create or replace function public.kiosk_check_in(p_apt_id uuid, p_phone_number text)
+returns jsonb
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare
+    v_phone                     text;
+    v_user                      public.users;
+    v_membership                public.user_gym_memberships;
+    v_is_new_membership         boolean := false;
+    v_has_existing_membership   boolean := false;
+    v_already_attended_today    boolean;
+    v_prompt_gym_switch         boolean;
+    v_today                     date := (now() at time zone 'Asia/Seoul')::date;
+    v_pairing_code              text;
+    v_attempt                   integer;
+    v_week_days                 integer;
+begin
+    v_phone := public.normalize_phone_number(p_phone_number);
+
+    if v_phone !~ '^01[016789][0-9]{7,8}$' then
+        raise exception 'INVALID_PHONE_NUMBER' using errcode = '22023';
+    end if;
+
+    if p_apt_id is null or not exists (
+        select 1 from public.apartments a where a.id = p_apt_id
+    ) then
+        raise exception 'APARTMENT_NOT_FOUND' using errcode = 'P0002';
+    end if;
+
+    select * into v_user from public.users u where u.phone_number = v_phone;
+
+    if not found then
+        insert into public.users (apt_id, phone_number) values (p_apt_id, v_phone)
+        returning * into v_user;
+    end if;
+
+    -- 이 단지 멤버십이 이미 있는지 (재방문인지 새 단지인지)
+    select * into v_membership
+    from public.user_gym_memberships m
+    where m.user_id = v_user.id and m.apt_id = p_apt_id;
+
+    if not found then
+        v_is_new_membership := true;
+        -- 불변식: 멤버십이 하나라도 있으면 그중 정확히 하나는 is_primary 다
+        -- (첫 멤버십은 항상 primary=true 로 생기기 때문). 그래서 "다른 멤버십이
+        -- 있는지"만 확인하면 "이미 주 소속이 있는지"를 알 수 있다.
+        v_has_existing_membership := exists (
+            select 1 from public.user_gym_memberships m where m.user_id = v_user.id
+        );
+
+        insert into public.user_gym_memberships (user_id, apt_id, is_primary, visit_count)
+        values (v_user.id, p_apt_id, not v_has_existing_membership, 1)
+        returning * into v_membership;
+
+        if not v_has_existing_membership then
+            update public.users set apt_id = p_apt_id where id = v_user.id;
+        end if;
+    end if;
+
+    -- 하루/한 헬스장당 출석은 1회만 인정. visit_count 도 이 기준을 따라야 한다 —
+    -- 안 그러면 같은 날 실수로 두 번 찍었을 때 방문 횟수가 이중으로 올라간다.
+    v_already_attended_today := exists (
+        select 1 from public.attendance_logs l
+        where l.user_id = v_user.id
+          and l.apt_id = p_apt_id
+          and (l.attended_at at time zone 'Asia/Seoul')::date = v_today
+    );
+
+    if not v_already_attended_today then
+        insert into public.attendance_logs (user_id, apt_id) values (v_user.id, p_apt_id);
+
+        -- 출석 경험치. 하루 1회 규칙 안쪽이라 이중 지급이 없다.
+        update public.users set total_points = total_points + 30 where id = v_user.id;
+
+        -- 이번 주(월요일 시작) 출석일 수. 방금 넣은 오늘 기록도 포함된다.
+        select count(distinct (l.attended_at at time zone 'Asia/Seoul')::date)
+        into v_week_days
+        from public.attendance_logs l
+        where l.user_id = v_user.id
+          and (l.attended_at at time zone 'Asia/Seoul')::date >= date_trunc('week', v_today)::date
+          and (l.attended_at at time zone 'Asia/Seoul')::date <= v_today;
+
+        -- 정확히 3회째 되는 날에만 — 그래야 한 주에 한 번만 지급된다.
+        if v_week_days = 3 then
+            update public.users set total_points = total_points + 50 where id = v_user.id;
+        end if;
+
+        -- 방금 새로 만든 멤버십은 이미 visit_count=1 로 시작했으니 여기서 또
+        -- 올리지 않는다. 기존 멤버십이었을 때만, 그것도 오늘 처음 온 경우에만 올린다.
+        if not v_is_new_membership then
+            update public.user_gym_memberships
+            set visit_count = visit_count + 1, last_checked_in_at = now()
+            where id = v_membership.id
+            returning * into v_membership;
+        end if;
+    end if;
+
+    -- 떠났던 헬스장(left_at)에 다시 온 경우도 여기 걸린다. 자동으로 되돌리지
+    -- 않고 물어보는 이유는, 옛 헬스장에 하루 들른 것만으로 그 단지 랭킹에
+    -- 출석일 전부를 들고 복귀해 버리면 안 되기 때문이다.
+    v_prompt_gym_switch :=
+        not v_membership.is_primary
+        and not v_already_attended_today
+        and exists (
+            select 1 from public.user_gym_memberships m
+            where m.user_id = v_user.id and m.is_primary
+        )
+        and (
+            v_membership.switch_declined_at is null
+            or v_membership.switch_declined_at < now() - interval '30 days'
+        );
+
+    if v_user.auth_user_id is null then
+        for v_attempt in 1..5 loop
+            v_pairing_code := lpad(floor(random() * 1000000)::text, 6, '0');
+            begin
+                insert into public.device_pairings (pairing_code, candidate_user_id, apt_id, expires_at)
+                values (v_pairing_code, v_user.id, p_apt_id, now() + interval '3 minutes');
+                exit;
+            exception when unique_violation then
+                if v_attempt = 5 then
+                    raise exception 'PAIRING_CODE_GENERATION_FAILED' using errcode = 'P0004';
+                end if;
+            end;
+        end loop;
+
+        return jsonb_build_object(
+            'user_id', v_user.id,
+            'needs_pairing', true,
+            'pairing_code', v_pairing_code,
+            'visit_count', v_membership.visit_count,
+            'prompt_gym_switch', v_prompt_gym_switch
+        );
+    end if;
+
+    return jsonb_build_object(
+        'user_id', v_user.id,
+        'needs_pairing', false,
+        'visit_count', v_membership.visit_count,
+        'prompt_gym_switch', v_prompt_gym_switch
+    );
+end;
+$function$;
+
+
+-- ═══════════════════════════════════════════════════════════
 -- seed.sql (데모 단지 데이터)
 -- ═══════════════════════════════════════════════════════════
 

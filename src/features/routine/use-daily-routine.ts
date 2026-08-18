@@ -67,5 +67,18 @@ export function useDailyRoutine(userId: string) {
     }, [load]),
   );
 
-  return { ...state, retry: useCallback(() => void load(), [load]) };
+  return {
+    ...state,
+    /**
+     * 화면을 비우고 처음부터 다시 읽는다. 목록이 아예 없는 상태(첫 진입 실패)의
+     * "다시 시도" 전용이다 — 이미 목록이 떠 있을 때 쓰면 통째로 사라졌다 돌아온다.
+     */
+    retry: useCallback(() => void load(), [load]),
+    /**
+     * 떠 있는 목록은 그대로 두고 새 값으로 갈아 끼운다. 코스를 바꾸거나
+     * 체크인이 찍혔을 때처럼, 화면에 이미 내용이 있는 상태의 갱신은 전부 이쪽이다.
+     * 끝나는 시점을 알아야 하는 쪽이 있어서 Promise 를 돌려준다.
+     */
+    refresh: useCallback(() => load(undefined, { quiet: true }), [load]),
+  };
 }

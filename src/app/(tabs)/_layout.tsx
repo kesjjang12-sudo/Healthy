@@ -4,6 +4,7 @@ import { Tabs } from 'expo-router/js-tabs';
 import { TextTabBar } from '@/components/tab-bar';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { needsConsent } from '@/features/legal/api';
+import { useSyncFontScale } from '@/features/settings/font-scale';
 
 /**
  * 개인 앱의 5개 하단 탭. 토스처럼 아이콘 + 글자를 세로로 쌓아 그린다.
@@ -14,6 +15,9 @@ import { needsConsent } from '@/features/legal/api';
  */
 export default function TabsLayout() {
   const { user, isRestoring } = useAuthSession();
+
+  // 폰을 바꾸거나 앱을 다시 깔아도 자기가 고른 글자 크기로 돌아오게 한다.
+  useSyncFontScale(user?.profile_data?.font_scale);
 
   if (isRestoring) return null;
   if (!user) return <Redirect href="/login" />;

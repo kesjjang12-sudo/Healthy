@@ -1,18 +1,47 @@
 import { Redirect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Icon, type IconName } from '@/components/icon';
 import { PrimaryButton } from '@/components/primary-button';
+import { SocialButton, type SocialProvider } from '@/components/social-button';
 import { StrengthHookBanner } from '@/components/strength-hook-banner';
-import { Colors, FontSize, LetterSpacing, Spacing } from '@/constants/theme';
+import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { isEmptyProfile, signInAsTestUser } from '@/features/auth/anonymous';
 import { useAuthSession } from '@/features/auth/auth-session';
+import { loadLastProvider, rememberProvider } from '@/features/auth/last-provider';
+import { fetchAvailableProviders, type AvailableProviders } from '@/features/auth/providers';
 import { OAuthError, signInWithGoogle, signInWithKakao } from '@/features/auth/oauth';
 import { pickHookMessage } from '@/features/content/hooking-copy';
 
 type Provider = 'kakao' | 'google';
+
+/**
+ * 첫 화면에서 말해야 하는 세 가지. 이 앱이 누구를 위한 것이고(시니어),
+ * 어디서 쓰는 것이며(우리 아파트 헬스장), 무엇이 다른지(AI 가 매일 짜 준다).
+ *
+ * 예전엔 제목 한 줄과 근력 카피만 있어서, 처음 본 사람이 "그래서 이게
+ * 뭐 하는 앱인지"를 알 수 없었다. 로그인 버튼을 누를 이유를 여기서 준다.
+ */
+const SELLING_POINTS: readonly { icon: IconName; title: string; body: string }[] = [
+  {
+    icon: 'sparkle',
+    title: 'AI 가 매일 짜 드려요',
+    body: '나이와 지난 기록을 보고 무게와 횟수까지',
+  },
+  {
+    icon: 'building',
+    title: '우리 단지 헬스장 그대로',
+    body: '없는 기구는 나오지 않습니다',
+  },
+  {
+    icon: 'heart',
+    title: '큰 글씨와 쉬운 말로',
+    body: '기구마다 사진과 순서를 보고 따라 하세요',
+  },
+];
 
 /**
  * 개인 폰 앱의 첫 화면. 로그인 수단 3가지 — 전화번호(QR)는 카카오/구글이 못
@@ -28,11 +57,44 @@ export default function LoginScreen() {
   const [pendingProvider, setPendingProvider] = useState<Provider | null>(null);
   const [isTestSigningIn, setIsTestSigningIn] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // 지난번에 쓴 수단에 "최근 로그인" 표를 붙인다. 못 읽어와도 표만 안 붙는다.
+  const [lastProvider, setLastProvider] = useState<SocialProvider | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void loadLastProvider().then((provider) => {
+      if (!cancelled) setLastProvider(provider);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 서버에서 안 켜진 로그인 수단은 아예 안 보여준다. 눌러도 낯선 오류 화면만
+  // 만나는 버튼을 4060 회원 앞에 두면 거기서 가입이 끝난다. 확인 전에는
+  // 전부 보여준다(있는 걸 잠깐 숨기는 것보다 없는 걸 잠깐 보이는 편이 낫다).
+  const [available, setAvailable] = useState<AvailableProviders>({
+    kakao: true,
+    google: true,
+    phone: true,
+  });
+  useEffect(() => {
+    let cancelled = false;
+    void fetchAvailableProviders().then((result) => {
+      if (!cancelled) setAvailable(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const message = useMemo(() => pickHookMessage(), []);
 
   const handleOAuth = useCallback(async (provider: Provider) => {
     setPendingProvider(provider);
     setErrorMessage(null);
+    // 브라우저로 나갔다 돌아오는 흐름이라 성공 시점을 여기서 못 볼 때가 있다.
+    // 누른 시점에 적어 둔다 — 다음에 이 화면을 열면 그 버튼에 표가 붙는다.
+    rememberProvider(provider);
 
     try {
       const outcome = provider === 'kakao' ? await signInWithKakao() : await signInWithGoogle();
@@ -82,15 +144,39 @@ export default function LoginScreen() {
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xxl }]}>
         <View style={styles.headings}>
-          <Text style={styles.title} maxFontSizeMultiplier={1.2}>
+          <Text style={styles.brand} maxFontSizeMultiplier={1.2}>
             헬스반장
           </Text>
+          <Text style={styles.title} maxFontSizeMultiplier={1.2}>
+            우리 아파트 헬스장{'\n'}AI 운동 코치
+          </Text>
+          {/* 소구점 세 가지 — 시니어 · 아파트 · AI 루틴 */}
           <Text style={styles.subtitle} maxFontSizeMultiplier={1.3}>
-            로그인하고 오늘의 운동을 시작하세요
+            4060 세대를 위해 만들었습니다
           </Text>
         </View>
 
-        <StrengthHookBanner message={message} size="large" />
+        <View style={styles.points}>
+          {SELLING_POINTS.map((point) => (
+            <View key={point.title} style={styles.point}>
+              <View style={styles.pointIcon}>
+                <Icon name={point.icon} size={26} color={Colors.primary} strokeWidth={2} />
+              </View>
+              <View style={styles.pointBody}>
+                <Text style={styles.pointTitle} maxFontSizeMultiplier={1.2}>
+                  {point.title}
+                </Text>
+                <Text style={styles.pointText} maxFontSizeMultiplier={1.3}>
+                  {point.body}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {/* 근력 카피는 소구점 아래에 한 번만. 소구점이 "무엇을 주는 앱인지"라면
+            이건 "왜 지금 해야 하는지"라, 둘 다 있어야 설득이 닫힌다. */}
+        <StrengthHookBanner message={message} size="compact" />
 
         {errorMessage ? (
           <Text
@@ -103,24 +189,33 @@ export default function LoginScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-        <PrimaryButton
-          label="카카오로 시작하기"
-          onPress={() => void handleOAuth('kakao')}
-          loading={pendingProvider === 'kakao'}
-          disabled={pendingProvider !== null}
-        />
-        <PrimaryButton
-          label="구글로 시작하기"
-          variant="secondary"
-          onPress={() => void handleOAuth('google')}
-          loading={pendingProvider === 'google'}
-          disabled={pendingProvider !== null}
-        />
-        <PrimaryButton
-          label="전화번호로 시작하기"
-          variant="quiet"
-          size="compact"
-          onPress={() => router.push('/phone-login')}
+        {/* 각 서비스의 색과 심벌을 그대로 쓴다. 글자만 있는 버튼 셋이 세로로
+            서 있으면 4060 회원 눈에는 셋 다 같은 것으로 보인다. */}
+        {available.kakao ? (
+          <SocialButton
+            provider="kakao"
+            recent={lastProvider === 'kakao'}
+            onPress={() => void handleOAuth('kakao')}
+            loading={pendingProvider === 'kakao'}
+            disabled={pendingProvider !== null}
+          />
+        ) : null}
+        {available.google ? (
+          <SocialButton
+            provider="google"
+            recent={lastProvider === 'google'}
+            onPress={() => void handleOAuth('google')}
+            loading={pendingProvider === 'google'}
+            disabled={pendingProvider !== null}
+          />
+        ) : null}
+        <SocialButton
+          provider="phone"
+          recent={lastProvider === 'phone'}
+          onPress={() => {
+            rememberProvider('phone');
+            router.push('/phone-login');
+          }}
           disabled={pendingProvider !== null || isTestSigningIn}
         />
         {/* 카카오/구글 심사 전, 페어링할 키오스크가 없을 때 쓰는 임시 테스트
@@ -145,8 +240,10 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    justifyContent: 'center',
-    gap: Spacing.xxl,
+    // 소구점 세 줄이 들어오면서 내용이 길어졌다. 가운데 정렬로 두면 작은
+    // 화면에서 위가 잘려 제목부터 안 보인다.
+    justifyContent: 'flex-start',
+    gap: Spacing.xl,
     paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.xl,
     maxWidth: 700,
@@ -156,15 +253,57 @@ const styles = StyleSheet.create({
   headings: {
     gap: Spacing.sm,
   },
-  title: {
-    fontSize: FontSize.title,
+  brand: {
+    fontSize: FontSize.body,
     fontWeight: '700',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.primary,
+  },
+  title: {
+    fontSize: FontSize.headline,
+    fontWeight: '700',
+    lineHeight: FontSize.headline * 1.3,
     letterSpacing: LetterSpacing.title,
     color: Colors.text,
   },
   subtitle: {
     fontSize: FontSize.body,
     fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+  },
+  points: {
+    gap: Spacing.md,
+  },
+  point: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.lg,
+  },
+  /** 아이콘은 옅은 파랑 타일 위에. 목록 행(ListRow)의 타일과 같은 문법이다. */
+  pointIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.primaryFaint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pointBody: {
+    flex: 1,
+    gap: Spacing.xs,
+    paddingTop: Spacing.xs,
+  },
+  pointTitle: {
+    fontSize: FontSize.body,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.subtitle,
+    color: Colors.text,
+  },
+  pointText: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    lineHeight: FontSize.caption * 1.5,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },

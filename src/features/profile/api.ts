@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase';
 const RPC_ERROR_CODES = [
   'NICKNAME_INVALID',
   'NICKNAME_PROFANITY',
+  'NICKNAME_TAKEN',
   'NICKNAME_RATE_LIMITED',
   'AUTH_REQUIRED',
   'USER_NOT_FOUND',
@@ -19,6 +20,7 @@ const RPC_ERROR_CODES = [
 const MESSAGES: Record<(typeof RPC_ERROR_CODES)[number], string> = {
   NICKNAME_INVALID: '닉네임은 2~12자로 입력해 주세요.',
   NICKNAME_PROFANITY: '닉네임에 쓸 수 없는 단어가 들어 있어요. 다른 이름을 골라 주세요.',
+  NICKNAME_TAKEN: '이미 쓰고 계신 분이 있는 이름이에요. 다른 이름을 골라 주세요.',
   NICKNAME_RATE_LIMITED: '닉네임은 2주에 한 번 바꿀 수 있어요.',
   AUTH_REQUIRED: '로그인 후 다시 시도해 주세요.',
   USER_NOT_FOUND: '회원 정보를 찾지 못했습니다. 다시 로그인해 주세요.',

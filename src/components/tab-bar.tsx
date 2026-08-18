@@ -14,10 +14,10 @@ import { Colors, FontSize, LetterSpacing, Spacing, TouchTarget } from '@/constan
  * SVG 로 직접 그린 것이라 기기마다 모양이 흔들리지 않는다.
  */
 const TAB_ICONS: Record<string, IconName> = {
-  workout: 'dumbbell',
+  workout: 'thunder',
   calendar: 'calendar',
   ranking: 'trophy',
-  analysis: 'chart',
+  analysis: 'column',
   profile: 'person',
 };
 
@@ -30,7 +30,10 @@ export function TextTabBar({ state, descriptors, navigation }: BottomTabBarProps
         const { options } = descriptors[route.key];
         const label = typeof options.title === 'string' ? options.title : route.name;
         const isFocused = state.index === index;
-        const iconName = TAB_ICONS[route.name];
+        // _layout 이 없는 탭(ranking/analysis/profile)은 라우트 이름이
+        // "ranking/index" 로 들어와 매핑이 빗나간다 — 그래서 그 세 탭만
+        // 아이콘이 안 그려졌다. 디렉터리 이름으로 정규화해서 찾는다.
+        const iconName = TAB_ICONS[route.name] ?? TAB_ICONS[route.name.split('/')[0]];
 
         const onPress = () => {
           const event = navigation.emit({
@@ -57,6 +60,7 @@ export function TextTabBar({ state, descriptors, navigation }: BottomTabBarProps
                 size={26}
                 color={isFocused ? Colors.primary : Colors.textTertiary}
                 strokeWidth={isFocused ? 2.3 : 1.9}
+                filled={isFocused}
               />
             ) : null}
             <Text style={[styles.label, isFocused && styles.labelActive]} maxFontSizeMultiplier={1.2}>

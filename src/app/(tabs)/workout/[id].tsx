@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -9,21 +9,31 @@ import { ExercisePhoto } from '@/components/exercise-photo';
 import { Keypad } from '@/components/keypad';
 import { PrimaryButton } from '@/components/primary-button';
 import { WeightSuggestionCard } from '@/components/weight-suggestion-card';
+import { GrowthBadge } from '@/components/growth-badge';
+import { JourneyCheckpoint, JourneyRing } from '@/components/journey-ring';
+import { WittyLoading } from '@/components/witty-loading';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { pickCompletionPraise } from '@/features/content/hooking-copy';
 import { pickRestMessage } from '@/features/content/rest-encouragement';
 import {
-  FIRST_TIME_RULE,
+  firstTimeRule,
   formatVolume,
   howToSteps,
   isCardioItem,
   needsWeightLog,
-  WEIGHT_RULE,
   weightHint,
+  weightRule,
+  weightUnit,
 } from '@/features/routine/guidance';
 import { RoutineError, completeRoutine } from '@/features/routine/api';
+import { GROWTH_LEVELS, levelUpBetween } from '@/features/growth/levels';
+import { COURSE, fetchJourneyMinutes, journeyPoint } from '@/features/routine/journey';
 import { placeText, primaryName, secondaryName } from '@/features/routine/labels';
+import {
+  cancelCardioGoalAlarm,
+  scheduleCardioGoalAlarm,
+} from '@/features/notifications/cardio-alarm';
 import { useDailyRoutine } from '@/features/routine/use-daily-routine';
 import {
   elapsedToMinutes,
@@ -69,22 +79,29 @@ export default function RoutineDetailScreen() {
 
   // 마치고 나가는 길은 그냥 뒤로가기가 아니다. 목록이 방금 무엇을 마쳤는지
   // 알아야 "○○ 완료! +N점"을 띄울 수 있다.
+  //
+  // replace 를 쓰면 안 된다. 이 화면은 운동 탭 스택 안에 있어서, replace 는
+  // 목록으로 "가기만" 하고 상세 화면을 스택에서 걷어내지 않는다. 운동을
+  // 하나 마칠 때마다 화면이 하나씩 쌓이고, 쌓인 화면들은 사라진 게 아니라
+  // 높이 0 으로 살아서 각자 타이머(쉬는 시간 카운트다운)와 조회 훅을 계속
+  // 돌린다. 세 번만 반복해도 실제로 유령 화면 24개가 남는 것을 확인했고,
+  // 폰에서는 그게 쌓여 화면이 멈춘 것처럼 느려진다.
+  //
+  // dismissTo 는 목록까지 스택을 실제로 걷어내면서 파라미터도 넘겨준다.
   const goBackCompleted = useCallback(
     (name: string, points: number | null) => {
-      router.replace({
-        pathname: '/workout',
+      const href = {
+        pathname: '/workout' as const,
         params: { completed: name, ...(points ? { points: String(points) } : {}) },
-      });
+      };
+      if (router.canDismiss()) router.dismissTo(href);
+      else router.replace(href);
     },
     [router],
   );
 
   if (isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
-    );
+    return <WittyLoading />;
   }
 
   if (errorMessage || !item) {
@@ -152,12 +169,65 @@ function WorkoutSession({
   const elapsedSeconds = useElapsedSeconds(isCardio && session.phase === 'working');
   const measuredMinutes = elapsedToMinutes(elapsedSeconds);
 
+  // 국토 종주: 지난 세션까지의 누적 유산소 분. 못 받아도 0에서 시작할 뿐
+  // 타이머·기록은 그대로 돌아간다.
+  const [journeyBase, setJourneyBase] = useState(0);
+  useEffect(() => {
+    if (!isCardio) return;
+    let cancelled = false;
+    void fetchJourneyMinutes().then((minutes) => {
+      if (!cancelled) setJourneyBase(minutes);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCardio]);
+
+  // 목표 시간 알림 예약 id. 화면을 나가면(언마운트) 반드시 취소한다 —
+  // 하다 만 운동의 알림이 나중에 혼자 울리면 안 된다.
+  const alarmId = useRef<string | null>(null);
+  useEffect(() => {
+    return () => {
+      void cancelCardioGoalAlarm(alarmId.current).catch(() => {});
+    };
+  }, []);
+
+  const startCardio = useCallback(() => {
+    // 운동 시작이 먼저다. 알림은 부수 기능이라, 그쪽에서 무슨 일이 나도
+    // 시작을 막지 못하게 순서와 예외 처리를 분리해 둔다.
+    session.start();
+    const target = item.target_duration_minutes;
+    if (!isCardio || target === null) return;
+
+    try {
+      // 목표를 채우는 순간 도착해 있을 지점을 미리 계산해 알림 문구에 싣는다.
+      const arrival = journeyPoint(journeyBase + target).current.name;
+      void scheduleCardioGoalAlarm(target, item.name_ko ?? item.name, arrival)
+        .then((id) => {
+          alarmId.current = id;
+        })
+        // catch 를 안 달면 거부된 약속이 처리되지 않은 예외로 올라간다.
+        .catch(() => {});
+    } catch {
+      // 알림을 못 걸어도 운동은 그대로 진행한다.
+    }
+  }, [session, isCardio, item, journeyBase]);
+
+  const finishCardio = useCallback(() => {
+    void cancelCardioGoalAlarm(alarmId.current).catch(() => {});
+    alarmId.current = null;
+    // 알림 취소가 실패해도 마치기는 진행돼야 한다.
+    session.finishSet();
+  }, [session]);
+
   const [pin, setPin] = useState('');
   /** 사람이 직접 고친 분(分). null 이면 아직 안 고쳐서 잰 시간을 그대로 쓴다는 뜻. */
   const [typedMinutes, setTypedMinutes] = useState<string | null>(null);
   const [isFinished, setIsFinished] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [pointsAwarded, setPointsAwarded] = useState<number | null>(null);
+  /** 이번 완료로 오른 명예 호칭. 안 올랐으면 null. */
+  const [leveledUpTo, setLeveledUpTo] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const minutesText = typedMinutes ?? String(measuredMinutes);
@@ -196,7 +266,7 @@ function WorkoutSession({
     void Linking.openURL(item.video_url).catch(() => {});
   }, [item.video_url]);
 
-  const finishAndSave = useCallback(async () => {
+  const finishAndSave = useCallback(async (felt: 'ok' | 'hard' = 'ok') => {
     setIsSaving(true);
     setSaveError(null);
 
@@ -204,20 +274,33 @@ function WorkoutSession({
       // 유산소는 실제로 움직인 시간을, 근력은 꽂은 핀 칸을 남긴다.
       // "핀"은 기구마다 실제 kg 이 다른 상대값이라 정확한 kg 은 아니지만,
       // 지금 저장할 수 있는 건 이것뿐이다 — 없는 것보다는 다음 방문 때 참고할
-      // 시작점이 있는 편이 낫다. 근력의 실제 횟수는 따로 받지 않으므로 처방
-      // 횟수를 그대로 쓴다(완료 버튼을 눌렀다는 건 다 했다는 뜻).
+      // 시작점이 있는 편이 낫다.
+      //
+      // 횟수는 숫자로 안 묻는다. 대신 마치는 버튼이 [할 만했어요 / 힘들었어요]
+      // 둘이라, 누른 버튼이 그대로 답이 된다(추가 탭 0). "힘들었어요"는 목표를
+      // 다 못 채웠다는 뜻으로 목표의 절반을 적는다 — 서버의 "내려볼까요?" 기준
+      // (70% 미만)에 확실히 걸리는 값이면 되고, 정확한 횟수는 여기서 중요하지
+      // 않다. 예전엔 무조건 목표를 다 채운 것으로 보내서, 힘들어한 기록이
+      // 서버에 한 번도 남지 않아 내려보자는 제안이 영영 안 떴다.
+      const targetReps = item.target_reps ?? null;
+      const actualReps =
+        targetReps === null ? null : felt === 'hard' ? Math.floor(targetReps / 2) : targetReps;
       const { pointsAwarded: awarded } = await completeRoutine(
         item.routine_id,
         isCardio
           ? { actualDurationMinutes: minutesValue }
-          : { actualWeightKg: pin === '' ? null : Number(pin), actualReps: item.target_reps },
+          : { actualWeightKg: pin === '' ? null : Number(pin), actualReps },
       );
       setPointsAwarded(awarded);
 
       // 받은 점수를 그 자리에서 합산해 둔다. 서버를 다시 부르면 그만큼
       // 늦어지고, 그 사이 목록으로 나가면 포인트가 안 오른 것처럼 보인다.
       if (awarded && user) {
-        setUser({ ...user, total_points: (user.total_points ?? 0) + awarded });
+        const before = user.total_points ?? 0;
+        setUser({ ...user, total_points: before + awarded });
+        // 이 점수로 호칭이 올랐으면 완료 화면에서 승급을 축하한다 —
+        // 방금 끝낸 직후가 가장 뿌듯한 순간이다.
+        setLeveledUpTo(levelUpBetween(before, before + awarded)?.name ?? null);
       }
     } catch (error) {
       setSaveError(error instanceof RoutineError ? error.message : '기록을 저장하지 못했습니다.');
@@ -233,6 +316,7 @@ function WorkoutSession({
       pin={pin}
       minutes={minutesValue}
       pointsAwarded={pointsAwarded}
+      leveledUpTo={leveledUpTo}
       saveError={saveError}
     />
   ) : session.phase === 'ready' ? (
@@ -243,6 +327,7 @@ function WorkoutSession({
       currentSet={session.currentSet}
       totalSets={totalSets}
       elapsedSeconds={elapsedSeconds}
+      journeyBase={journeyBase}
     />
   ) : session.phase === 'resting' ? (
     <RestingView
@@ -300,7 +385,10 @@ function WorkoutSession({
           </>
         ) : session.phase === 'ready' ? (
           <>
-            <PrimaryButton label={isCardio ? '시작' : '운동 시작'} onPress={() => session.start()} />
+            <PrimaryButton
+              label={isCardio ? '시작' : '운동 시작'}
+              onPress={() => (isCardio ? startCardio() : session.start())}
+            />
             {item.video_url ? (
               <PrimaryButton label="영상으로 보기" variant="secondary" onPress={openVideo} />
             ) : null}
@@ -309,17 +397,35 @@ function WorkoutSession({
         ) : session.phase === 'working' ? (
           <PrimaryButton
             label={isCardio ? '다 했어요' : `${session.currentSet}세트 완료`}
-            onPress={() => session.finishSet()}
+            onPress={() => (isCardio ? finishCardio() : session.finishSet())}
           />
         ) : session.phase === 'resting' ? (
           <PrimaryButton label="바로 다음 세트" variant="secondary" onPress={() => session.skipRest()} />
-        ) : (
+        ) : isCardio || !logsWeight ? (
           <PrimaryButton
             label="기록하고 마치기"
-            disabled={isCardio ? !isMinutesValid : logsWeight && pin.length === 0}
+            disabled={isCardio && !isMinutesValid}
             loading={isSaving}
             onPress={() => void finishAndSave()}
           />
+        ) : (
+          <>
+            {/* 마치는 버튼이 곧 오늘 소감이다. 어느 쪽을 눌러도 기록되고,
+                "힘들었어요"가 쌓이면 다음에 무게를 내려보자고 먼저 말을 건다. */}
+            <PrimaryButton
+              label="할 만했어요"
+              disabled={pin.length === 0}
+              loading={isSaving}
+              onPress={() => void finishAndSave('ok')}
+            />
+            <PrimaryButton
+              label="힘들었어요"
+              variant="secondary"
+              disabled={pin.length === 0}
+              loading={isSaving}
+              onPress={() => void finishAndSave('hard')}
+            />
+          </>
         )}
       </View>
     </View>
@@ -383,6 +489,7 @@ function ReadyView({ item, onWeightChanged }: { item: RoutineItem; onWeightChang
         <WeightSuggestionCard
           equipId={item.equip_id}
           suggestion={item.weight_suggestion}
+          unit={weightUnit(item)}
           onApplied={onWeightChanged}
         />
       ) : null}
@@ -461,41 +568,75 @@ function WorkingView({
   currentSet,
   totalSets,
   elapsedSeconds,
+  journeyBase,
 }: {
   item: RoutineItem;
   currentSet: number;
   totalSets: number;
   elapsedSeconds: number;
+  /** 지난 세션까지의 누적 유산소 분. 국토 종주 위치 계산에 쓴다. */
+  journeyBase: number;
 }) {
   if (isCardioItem(item)) {
     const target = item.target_duration_minutes;
-    // 목표를 채웠는지 알려면 화면에 시계가 보여야 한다. 트레드밀 계기판을
-    // 대신 읽어 주는 셈이다 — 기구마다 표시가 제각각이라 못 찾는 분이 많다.
     const reachedTarget = target !== null && elapsedSeconds >= target * 60;
+    // 국토 종주: 지난 세션 누적 + 지금 흐르는 시간으로 코스 위 위치를 구한다.
+    const point = journeyPoint(journeyBase + elapsedSeconds / 60);
 
     return (
       <>
         <Text style={styles.name} maxFontSizeMultiplier={1.2}>
           {primaryName(item)}
         </Text>
+        <Text style={styles.journeyCourse} maxFontSizeMultiplier={1.2}>
+          {COURSE.name}
+          {point.round > 1 ? ` · ${point.round}바퀴째` : ''}
+        </Text>
 
-        <View style={styles.hero}>
-          <Text style={styles.heroLabel} maxFontSizeMultiplier={1.2}>
-            지금까지
-          </Text>
-          <Text
-            style={styles.heroValue}
-            maxFontSizeMultiplier={1.2}
-            // 1초마다 바뀌는 값이라 소리로 계속 읽어 주면 오히려 방해가 된다.
-            accessibilityLiveRegion="none">
-            {formatClock(elapsedSeconds)}
-          </Text>
-          {target !== null ? (
-            <Text style={styles.heroSub} maxFontSizeMultiplier={1.2}>
-              {reachedTarget ? `목표 ${target}분을 채우셨습니다` : `목표 ${target}분`}
+        {/* 목표를 채웠는지 알려면 화면에 시계가 보여야 한다. 트레드밀 계기판을
+            대신 읽어 주는 셈인데, 숫자만 보며 버티는 20분은 길어서 링과 여정으로
+            같은 시간을 이야기로 보여준다. */}
+        {target !== null ? (
+          <>
+            <JourneyRing
+              elapsedSeconds={elapsedSeconds}
+              targetMinutes={target}
+              journeyKm={point.km}
+              totalKm={point.totalKm}>
+              <Text style={styles.journeyLabel} maxFontSizeMultiplier={1.2}>
+                진행 시간
+              </Text>
+              <Text
+                style={styles.journeyClock}
+                maxFontSizeMultiplier={1.2}
+                // 1초마다 바뀌는 값이라 소리로 계속 읽어 주면 오히려 방해가 된다.
+                accessibilityLiveRegion="none">
+                {formatClock(elapsedSeconds)}
+              </Text>
+              <Text style={styles.journeyGoal} maxFontSizeMultiplier={1.2}>
+                {reachedTarget ? `목표 ${target}분 완주!` : `/ ${formatClock(target * 60)}`}
+              </Text>
+              <Text style={styles.journeyKm} maxFontSizeMultiplier={1.2}>
+                {point.km}km / {point.totalKm}km 지점
+              </Text>
+            </JourneyRing>
+
+            <JourneyCheckpoint
+              place={point.current.name}
+              nextName={point.next.name}
+              nextKm={point.nextKm}
+            />
+          </>
+        ) : (
+          <View style={styles.hero}>
+            <Text style={styles.heroLabel} maxFontSizeMultiplier={1.2}>
+              지금까지
             </Text>
-          ) : null}
-        </View>
+            <Text style={styles.heroValue} maxFontSizeMultiplier={1.2} accessibilityLiveRegion="none">
+              {formatClock(elapsedSeconds)}
+            </Text>
+          </View>
+        )}
 
         <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
           다 하셨으면 아래 버튼을 눌러주세요. 더 하셔도 괜찮고, 힘들면 먼저 멈추셔도 됩니다.
@@ -654,6 +795,9 @@ function LoggingView({
     );
   }
 
+  // 덤벨·스미스머신은 꽂을 핀이 없다. 손에 든 무게(kg)를 그대로 묻는다.
+  const isKg = weightUnit(item) === 'kg';
+
   return (
     <>
       <View style={styles.headings}>
@@ -661,14 +805,16 @@ function LoggingView({
           {item.target_sets ?? 1}세트 모두 끝났습니다
         </Text>
         <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          오늘 꽂으신 핀이 몇 번째 칸이었나요? 다음에 시작점으로 알려드립니다.
+          {isKg
+            ? '오늘 드신 무게가 몇 kg 이었나요? 다음에 시작점으로 알려드립니다. 적으셨으면 아래에서 오늘 어떠셨는지 눌러 주세요 — 그걸로 마치기가 됩니다.'
+            : '오늘 꽂으신 핀이 몇 번째 칸이었나요? 다음에 시작점으로 알려드립니다. 적으셨으면 아래에서 오늘 어떠셨는지 눌러 주세요 — 그걸로 마치기가 됩니다.'}
         </Text>
       </View>
 
       <View style={styles.hero}>
         <Text style={styles.heroValue} maxFontSizeMultiplier={1.2}>
           {pin === '' ? '−' : pin}
-          <Text style={styles.heroUnit}>칸</Text>
+          <Text style={styles.heroUnit}>{isKg ? 'kg' : '칸'}</Text>
         </Text>
       </View>
     </>
@@ -681,12 +827,15 @@ function FinishedView({
   pin,
   minutes,
   pointsAwarded,
+  leveledUpTo,
   saveError,
 }: {
   item: RoutineItem;
   pin: string;
   minutes: number;
   pointsAwarded: number | null;
+  /** 이번 점수로 오른 명예 호칭. 안 올랐으면 null. */
+  leveledUpTo: string | null;
   saveError: string | null;
 }) {
   // 화면이 다시 그려질 때마다 문구가 바뀌면 읽던 문장이 사라진다.
@@ -709,8 +858,8 @@ function FinishedView({
         {isCardioItem(item)
           ? // 처방 시간이 아니라 실제로 움직인 시간을 되짚어 준다.
             `${primaryName(item)} ${minutes}분을 마치셨습니다.`
-          : needsWeightLog(item)
-            ? `${primaryName(item)} ${item.target_sets ?? 1}세트를 ${pin}칸으로 마치셨습니다.`
+          : needsWeightLog(item) && pin !== ''
+            ? `${primaryName(item)} ${item.target_sets ?? 1}세트를 ${pin}${weightUnit(item) === 'kg' ? 'kg' : '칸'}으로 마치셨습니다.`
             : `${primaryName(item)} ${item.target_sets ?? 1}세트를 마치셨습니다.`}
       </Text>
       {/* 저장됐다는 사실만 알리고 끝내면 그냥 절차가 된다. 방금 한 일을
@@ -724,7 +873,7 @@ function FinishedView({
       {pointsAwarded ? (
         <View style={styles.pointsPill}>
           <Text style={styles.pointsEarned} maxFontSizeMultiplier={1.3}>
-            +{pointsAwarded}점
+            경험치 +{pointsAwarded}점
           </Text>
         </View>
       ) : saveError ? (
@@ -732,8 +881,26 @@ function FinishedView({
           {saveError}
         </Text>
       ) : null}
+
+      {/* 승급. 방금 끝낸 직후가 가장 뿌듯한 순간이라 여기서 알린다. */}
+      {leveledUpTo && !saveError ? (
+        <View style={styles.levelUpCard} accessibilityLiveRegion="polite">
+          <GrowthBadge levelIndex={levelIndexOf(leveledUpTo)} size={52} />
+          <Text style={styles.levelUpTitle} maxFontSizeMultiplier={1.2}>
+            {leveledUpTo}(으)로 올라섰습니다!
+          </Text>
+          <Text style={styles.levelUpSub} maxFontSizeMultiplier={1.3}>
+            꾸준히 나오신 결과입니다. 랭킹의 이름 옆 배지도 바뀌었어요.
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
+}
+
+/** 호칭 이름 → 배지 단계. FinishedView 는 이름만 들고 있어서 여기서 찾는다. */
+function levelIndexOf(name: string): number {
+  return GROWTH_LEVELS.find((level) => level.name === name)?.index ?? 0;
 }
 
 /** 몇 세트 남았는지 점으로. 숫자보다 눈에 먼저 들어온다. */
@@ -758,10 +925,10 @@ function WeightGuide({ item }: { item: RoutineItem }) {
           {weightHint(item)}
         </Text>
         <Text style={styles.hintText} maxFontSizeMultiplier={1.3}>
-          {WEIGHT_RULE}
+          {weightRule(item)}
         </Text>
         <Text style={styles.hintText} maxFontSizeMultiplier={1.3}>
-          {FIRST_TIME_RULE}
+          {firstTimeRule(item)}
         </Text>
       </View>
     </View>
@@ -781,12 +948,6 @@ const styles = StyleSheet.create({
     maxWidth: 900,
     width: '100%',
     alignSelf: 'center',
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.background,
   },
   centeredBlock: {
     flex: 1,
@@ -890,6 +1051,40 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.subtitle,
     color: Colors.textSecondary,
   },
+  /** 국토 종주: 운동 이름 밑 코스명 한 줄 */
+  journeyCourse: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+    marginTop: -Spacing.md,
+  },
+  journeyLabel: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: 1.6,
+    color: Colors.textTertiary,
+  },
+  journeyClock: {
+    fontSize: 52,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+    color: Colors.text,
+    lineHeight: 56,
+  },
+  journeyGoal: {
+    fontSize: FontSize.subtitle,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+    color: Colors.textSecondary,
+  },
+  journeyKm: {
+    marginTop: Spacing.sm,
+    fontSize: FontSize.caption + 1,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    color: Colors.primary,
+  },
   helper: {
     fontSize: FontSize.body,
     fontWeight: '500',
@@ -905,6 +1100,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: Radius.full,
     backgroundColor: Colors.success,
+  },
+  levelUpCard: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.lg,
+    padding: Spacing.xl,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.primaryFaint,
+    alignSelf: 'stretch',
+  },
+  levelUpTitle: {
+    fontSize: FontSize.headline,
+    fontWeight: '800',
+    letterSpacing: LetterSpacing.subtitle,
+    color: Colors.primaryPressed,
+    textAlign: 'center',
+  },
+  levelUpSub: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+    textAlign: 'center',
   },
   pointsPill: {
     paddingHorizontal: Spacing.xl,
@@ -947,7 +1165,8 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   heroValue: {
-    fontSize: FontSize.display,
+    // 시안의 무게 숫자(56px) — 이 화면의 주인공이라 토큰 스케일 밖에서 크게 간다.
+    fontSize: 56,
     fontWeight: '700',
     letterSpacing: LetterSpacing.title,
     color: Colors.primary,
@@ -963,16 +1182,16 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },
+  /** FIT ROTEIN 시안의 세트 진행 — 점 대신 가로로 꽉 차는 칸. */
   dots: {
     flexDirection: 'row',
-    justifyContent: 'center',
     gap: Spacing.sm,
   },
   dot: {
-    width: 18,
-    height: 18,
+    flex: 1,
+    height: 10,
     borderRadius: Radius.full,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.grey[100],
   },
   dotDone: {
     backgroundColor: Colors.primary,

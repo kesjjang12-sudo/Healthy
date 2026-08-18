@@ -1,34 +1,35 @@
 /**
- * 헬스반장 디자인 토큰.
+ * 헬스반장 디자인 토큰 — FIT ROTEIN(Wanted 계열) 시스템.
  *
- * 시각 언어는 토스를 기준으로 잡았다 — 선을 긋지 않고 여백과 면으로 구분하고,
- * 색은 파랑 하나만 쓰고, 주 버튼은 화면 아래에 고정한다.
+ * 색·라운드·치수 모두 계정의 FIT ROTEIN 디자인 시스템 시안을 그대로 따른다:
+ * 주색 Blue 50 #0066FF, 회색은 Cool Neutral(살짝 파란기 도는 회색, 순회색 금지),
+ * 본문 16 · 캡션 13 · 제목 28, 목록 행 56pt, 주 버튼 52pt.
+ * 선을 긋지 않고 여백과 면으로 구분하고, 색은 파랑 하나만 쓰고, 주 버튼은
+ * 화면 아래에 고정하는 문법도 시안 그대로다.
  *
- * 다만 치수는 토스보다 크다. 토스는 앉아서 폰을 보는 사람 기준이고, 우리는
- * 헬스장 벽에 걸린 태블릿을 서서 조작하는 4060 시니어가 기준이다.
- * - 터치 타깃 최소 88pt (WCAG 권장 44pt의 2배)
- * - 본문 최소 20pt, 얇은 굵기 금지
- * - 본문 대비 7:1 이상 (WCAG AAA), 다크모드 없이 밝은 화면 고정
+ * 이전에 쓰던 시니어 확대 치수(본문 20·행 72·타깃 88)는 시안과 밀도가 달라
+ * 화면 인상이 완전히 달라졌고, 시안대로 가기로 결정해 걷어냈다(2026-08-15).
+ * 접근성 하한은 유지한다 — 터치 타깃 44pt 밑으로는 내리지 않는다.
  */
 
-/** 회색은 파랑 쪽으로 살짝 기울여, 브랜드 색과 같은 계열로 읽히게 한다. */
+/** Cool Neutral 램프(FIT ROTEIN). CN10→900 … CN99→50 로 매핑했다. */
 const grey = {
-  900: '#191F28',
-  700: '#333D4B',
-  600: '#4E5968',
-  500: '#6B7684',
-  400: '#8B95A1',
-  300: '#B0B8C1',
-  200: '#D1D6DB',
-  100: '#E5E8EB',
-  50: '#F2F4F6',
+  900: '#171719',
+  700: '#37383C',
+  600: '#5A5C63',
+  500: '#70737C',
+  400: '#989BA2',
+  300: '#AEB0B6',
+  200: '#C2C4C8',
+  100: '#DBDCDF',
+  50: '#F7F7F8',
 } as const;
 
 export const Colors = {
-  /** 브랜드 — 화면에서 파랑은 여기서만 나온다 */
-  primary: '#3182F6',
-  primaryPressed: '#1B64DA',
-  primaryFaint: '#E8F3FF',
+  /** 브랜드 — 화면에서 파랑은 여기서만 나온다. FIT ROTEIN Blue 50/40/95. */
+  primary: '#0066FF',
+  primaryPressed: '#0054D1',
+  primaryFaint: '#EAF2FE',
 
   /** 배경: 흰 바탕 위에 회색 "면"으로 영역을 나눈다 */
   background: '#FFFFFF',
@@ -45,11 +46,11 @@ export const Colors = {
   /** 상태 */
   danger: '#F04452',
   dangerFaint: '#FFF0F1',
-  success: '#00A661',
-  successFaint: '#E7F8F0',
+  success: '#009F69',
+  successFaint: '#E5F7F0',
 
-  /** 선은 최후의 수단이다. 면으로 안 되는 곳에만 머리카락 굵기로 쓴다. */
-  divider: grey[100],
+  /** 선은 최후의 수단이다. CN50 을 16% 얹은 값 — 면으로 안 되는 곳에만. */
+  divider: '#E9EAEC',
 
   grey,
 } as const;
@@ -60,8 +61,8 @@ export const Colors = {
  * 화면에서 겹치지만 않으면 된다.
  */
 export const IconTint = {
-  blue: '#3182F6',
-  green: '#00A661',
+  blue: '#0066FF',
+  green: '#009F69',
   orange: '#FF9200',
   red: '#F04452',
   teal: '#00B7B9',
@@ -80,49 +81,51 @@ export const Spacing = {
   xxxl: 48,
 } as const;
 
+/** FIT ROTEIN 라운드 스케일 — 이전(10/14/20/28)보다 각을 살렸다. */
 export const Radius = {
-  sm: 10,
-  md: 14,
-  lg: 20,
-  xl: 28,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
   full: 999,
 } as const;
 
+/** FIT ROTEIN 시안 타이포 스케일. */
 export const FontSize = {
-  caption: 17,
+  caption: 13,
   /** 안내 문구 */
-  body: 20,
-  /** 목록 항목 제목 */
-  subtitle: 24,
+  body: 16,
+  /** 목록 항목 제목 · 섹션 헤딩 */
+  subtitle: 17,
   /** 버튼 라벨 */
-  label: 24,
+  label: 17,
   /** 목록에서 가장 먼저 읽혀야 하는 줄 — 쉬운 말로 쓴 운동 이름 */
-  headline: 28,
+  headline: 19,
   /** 화면 제목 */
-  title: 34,
+  title: 28,
   /** 키패드 숫자 */
-  keypad: 40,
+  keypad: 26,
   /** 입력된 전화번호 */
-  display: 46,
+  display: 40,
 } as const;
 
 /**
  * 한글은 자소가 빽빽해서 자간을 조금 좁혀야 덩어리로 읽힌다.
- * 큰 글씨일수록 더 좁힌다.
+ * 시안의 -0.023em/-0.019em 을 새 글자 크기에 맞춘 값이다.
  */
 export const LetterSpacing = {
-  title: -1.0,
-  subtitle: -0.6,
-  body: -0.3,
+  title: -0.6,
+  subtitle: -0.35,
+  body: -0.1,
 } as const;
 
-/** 손가락으로 눌러야 하는 요소의 최소 크기 */
+/** 손가락으로 눌러야 하는 요소의 최소 크기. 시안 치수 — 44pt 밑으로는 안 내린다. */
 export const TouchTarget = {
-  min: 88,
+  min: 56,
   /** 하단 고정 주 버튼 */
-  cta: 68,
-  /** 폰 하단 탭. 88pt 는 태블릿 기준이라 폰 탭바엔 과하다 — iOS HIG 44pt보다는 넉넉하게. */
-  tab: 64,
-  /** 토스식 목록 행(폰). 토스는 56pt 안팎이지만 시니어 손가락 기준으로 키웠다. */
-  row: 72,
+  cta: 52,
+  /** 폰 하단 탭 */
+  tab: 56,
+  /** 목록 행 */
+  row: 56,
 } as const;

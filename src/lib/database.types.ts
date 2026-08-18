@@ -9,6 +9,9 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Gender = 'male' | 'female';
+
+/** 앱 글자 크기. 가입 설문에서 고르고 프로필에서 바꾼다. */
+export type FontScale = 'small' | 'medium' | 'large';
 /** 10년 단위. 10 은 "10대", 70 은 "70대 이상"을 뜻한다. */
 export type AgeGroup = 10 | 20 | 30 | 40 | 50 | 60 | 70;
 export type Goal = 'diet' | 'muscle' | 'health' | 'rehab';
@@ -50,6 +53,14 @@ export type ProfileData = {
   privacy_consent_at?: string;
   /** 온보딩 설문 완료 여부 */
   onboarded_at?: string;
+  /**
+   * 글자 크기. 가입 설문에서 직접 고르고, 프로필에서 언제든 바꾼다.
+   *
+   * 기기 설정을 따르지 않고 앱이 따로 갖는 이유: 폰 전체 글자를 키우면
+   * 카카오톡·문자까지 다 커져서 부담스러워하는 분이 많다. 이 앱에서만
+   * 크게 보고 싶다는 요구가 실제로 있었다.
+   */
+  font_scale?: FontScale;
   /**
    * 마지막으로 받은 동의의 요약.
    *
@@ -276,6 +287,11 @@ export type RoutineItem = {
    */
   actual_duration_minutes: number | null;
   is_completed: boolean;
+  /**
+   * 이 기구에서 가장 최근에 꽂았던 핀 칸. 처음이거나 유산소·맨몸이면 null.
+   * (daily_routines.actual_weight_kg 에는 kg 이 아니라 핀 칸이 들어 있다)
+   */
+  last_pin: number | null;
   /**
    * 지난 수행 기록에 근거한 무게 조정 제안. 제안일 뿐 적용은 본인이 누를 때만
    * 된다. 근거가 없거나(처음 하는 기구) 무게 개념이 없는 운동이면 null.
@@ -655,6 +671,11 @@ export type Database = {
       get_body_status: {
         Args: Record<string, never>;
         Returns: BodyStatus;
+      };
+      /** 지금까지 완료한 유산소 총 시간(분). 국토 종주 둘레길의 누적 거리 계산용. */
+      get_journey_minutes: {
+        Args: Record<string, never>;
+        Returns: number;
       };
       log_body_weight: {
         Args: { p_weight_kg: number; p_height_cm?: number };

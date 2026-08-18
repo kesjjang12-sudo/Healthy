@@ -43,9 +43,31 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="헬스반장" />
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="theme-color" content="#3182F6" />
+        <meta name="theme-color" content="#0066FF" />
 
         <ScrollViewStyleReset />
+
+        {/* 한글 줄바꿈을 어절 단위로 고정한다.
+            기본값(word-break: normal)은 한글을 글자 단위로 끊을 수 있어서
+            "전화번호를" 이 "전화번호" / "를" 로 찢어진다. 읽는 속도가 눈에
+            띄게 떨어지고, 화면이 좁을수록 심해진다 — 갤럭시 폴드 커버 화면
+            (320~360px)이나 아이폰 SE 에서 특히 그렇다.
+
+            keep-all 은 띄어쓰기에서만 줄을 넘긴다. 다만 그것만 두면 끊을 데가
+            없는 긴 문자열(주소·계정번호)이 화면 밖으로 삐져나가므로,
+            overflow-wrap 으로 그런 경우에만 강제로 끊는다.
+
+            React Native Web 은 Text 를 div 로 그리므로 CSS 가 그대로 먹는다. */}
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              html, body, div, span, p, h1, h2, h3, h4, li, td, th, button, input, textarea {
+                word-break: keep-all;
+                overflow-wrap: anywhere;
+              }
+            `,
+          }}
+        />
       </head>
       <body>{children}</body>
     </html>

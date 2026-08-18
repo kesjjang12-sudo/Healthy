@@ -1,12 +1,14 @@
-import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, G, Path, Rect } from 'react-native-svg';
 
 import { Colors } from '@/constants/theme';
 
 export type IconName =
   | 'dumbbell'
+  | 'thunder'
   | 'calendar'
   | 'trophy'
   | 'chart'
+  | 'column'
   | 'person'
   | 'chevron-right'
   | 'qr'
@@ -14,6 +16,8 @@ export type IconName =
   | 'logout'
   | 'building'
   | 'heart'
+  | 'sparkle'
+  | 'document'
   | 'coin';
 
 type Props = {
@@ -22,6 +26,24 @@ type Props = {
   color?: string;
   /** 선 굵기. 탭바처럼 작게 쓸 땐 살짝 두껍게 주면 또렷하다. */
   strokeWidth?: number;
+  /** 활성 탭처럼 면을 채워 그린다(FIT ROTEIN 의 fill 변형). thunder 만 지원. */
+  filled?: boolean;
+};
+
+/**
+ * 시각 크기 보정.
+ *
+ * 24 격자에 그린다고 크기가 같아지지 않는다. 실제로 재 보니 잉크 경계가
+ * 번개 19, 달력·차트 17, 사람 16, 트로피 15.5 로 제각각이라, 같은 size 를
+ * 줘도 탭바에서 번개만 크고 트로피만 작아 보였다. 각 아이콘을 중심(12,12)
+ * 기준으로 조정해 높이를 17 로 맞춘다. 숫자는 눈대중이 아니라 브라우저에서
+ * getBBox 로 측정한 값이다.
+ */
+const NORMALIZE: Partial<Record<IconName, { scale: number; dy?: number }>> = {
+  thunder: { scale: 17 / 19 },
+  trophy: { scale: 17 / 15.5, dy: -0.3 },
+  person: { scale: 17 / 16 },
+  // calendar · column 은 이미 17 이라 건드리지 않는다.
 };
 
 /**
@@ -31,17 +53,26 @@ type Props = {
  * 따라 모양이 달라지고 화면 톤을 흐트러뜨리기 때문이다. 대신 24pt 격자 위에
  * 같은 선 굵기·같은 둥근 끝으로 그려서 어디서나 한 세트로 읽히게 한다.
  */
-export function Icon({ name, size = 24, color = Colors.text, strokeWidth = 1.9 }: Props) {
+export function Icon({ name, size = 24, color = Colors.text, strokeWidth = 1.9, filled = false }: Props) {
+  const fix = NORMALIZE[name];
+
   const stroke = {
     stroke: color,
-    strokeWidth,
+    // scale 은 획 굵기까지 같이 키운다. 그만큼 나눠 둬야 보정한 아이콘과
+    // 안 한 아이콘의 선이 같은 굵기로 보인다.
+    strokeWidth: fix ? strokeWidth / fix.scale : strokeWidth,
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
     fill: 'none' as const,
   };
+  // 중심을 원점으로 옮겨 키운 뒤 되돌린다. 선 굵기까지 같이 커지므로
+  // 그만큼 나눠 두어야 다른 아이콘과 획이 같아진다.
+  const transform = fix
+    ? `translate(12, ${12 + (fix.dy ?? 0)}) scale(${fix.scale}) translate(-12, -12)`
+    : undefined;
 
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24">
+  const glyphs = (
+    <>
       {name === 'dumbbell' && (
         <>
           <Path d="M4 9.5v5" {...stroke} />
@@ -49,6 +80,21 @@ export function Icon({ name, size = 24, color = Colors.text, strokeWidth = 1.9 }
           <Path d="M17 7.5v9" {...stroke} />
           <Path d="M20 9.5v5" {...stroke} />
           <Path d="M7 12h10" {...stroke} />
+        </>
+      )}
+      {name === 'thunder' && (
+        <Path
+          d="M13.2 2.8 5.6 13.2c-.3.4 0 .9.5.9h4.6l-1.6 6.8c-.1.6.6.9 1 .4l7.6-10.4c.3-.4 0-.9-.5-.9h-4.6l1.6-6.8c.1-.6-.6-.9-1-.4z"
+          {...stroke}
+          fill={filled ? color : 'none'}
+        />
+      )}
+      {name === 'column' && (
+        <>
+          <Rect x={3.5} y={3.5} width={17} height={17} rx={3} {...stroke} />
+          <Path d="M8.2 16.5v-4" {...stroke} strokeWidth={strokeWidth + 0.4} />
+          <Path d="M12 16.5V7.5" {...stroke} strokeWidth={strokeWidth + 0.4} />
+          <Path d="M15.8 16.5v-6.5" {...stroke} strokeWidth={strokeWidth + 0.4} />
         </>
       )}
       {name === 'calendar' && (
@@ -117,6 +163,28 @@ export function Icon({ name, size = 24, color = Colors.text, strokeWidth = 1.9 }
           {...stroke}
         />
       )}
+      {name === 'sparkle' && (
+        <>
+          <Path
+            d="M11 4.5c.3-.9 1.7-.9 2 0l1.4 4.3 4.3 1.4c.9.3.9 1.7 0 2l-4.3 1.4-1.4 4.3c-.3.9-1.7.9-2 0l-1.4-4.3-4.3-1.4c-.9-.3-.9-1.7 0-2l4.3-1.4z"
+            {...stroke}
+          />
+          <Path d="M18.5 3.5v3M17 5h3" {...stroke} strokeWidth={Math.max(1.4, strokeWidth - 0.3)} />
+        </>
+      )}
+      {/* 약관·개인정보처리방침 — 모서리를 접은 종이. 글줄은 본선보다 얇게
+          그어야 24px 안에서 뭉치지 않는다. */}
+      {name === 'document' && (
+        <>
+          <Path d="M14 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5z" {...stroke} />
+          <Path d="M14 3.5v5h5" {...stroke} />
+          <Path
+            d="M8.5 13h7M8.5 16.5h4.5"
+            {...stroke}
+            strokeWidth={Math.max(1.4, strokeWidth - 0.3)}
+          />
+        </>
+      )}
       {name === 'coin' && (
         <>
           <Circle cx={12} cy={12} r={8.5} {...stroke} />
@@ -124,6 +192,12 @@ export function Icon({ name, size = 24, color = Colors.text, strokeWidth = 1.9 }
           <Path d="M8 12h8" {...stroke} strokeWidth={Math.max(1.4, strokeWidth - 0.3)} />
         </>
       )}
+    </>
+  );
+
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      {transform ? <G transform={transform}>{glyphs}</G> : glyphs}
     </Svg>
   );
 }

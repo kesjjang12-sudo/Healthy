@@ -4,7 +4,7 @@ import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BodySection } from '@/components/body-section';
-import { PrimaryButton } from '@/components/primary-button';
+import { SegmentedControl } from '@/components/segmented-control';
 import { TrendChart } from '@/components/trend-chart';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import {
@@ -135,20 +135,14 @@ export default function AnalysisTab() {
 
       <BodySection />
 
-      <View style={styles.periodRow}>
-        <PrimaryButton
-          label={PERIODS.week.label}
-          variant={period === 'week' ? 'primary' : 'secondary'}
-          size="compact"
-          onPress={() => setPeriod('week')}
-        />
-        <PrimaryButton
-          label={PERIODS.month.label}
-          variant={period === 'month' ? 'primary' : 'secondary'}
-          size="compact"
-          onPress={() => setPeriod('month')}
-        />
-      </View>
+      <SegmentedControl
+        options={[
+          { value: 'week', label: PERIODS.week.label },
+          { value: 'month', label: PERIODS.month.label },
+        ]}
+        value={period}
+        onChange={setPeriod}
+      />
 
       {errorMessage ? (
         <Text style={styles.errorText} maxFontSizeMultiplier={1.3} accessibilityLiveRegion="polite">
@@ -313,10 +307,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: LetterSpacing.title,
     color: Colors.text,
-  },
-  periodRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
   },
   centered: {
     alignItems: 'center',

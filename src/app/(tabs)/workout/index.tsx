@@ -1,17 +1,20 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CheckMark } from '@/components/check-mark';
+import { CourseToggle } from '@/components/course-toggle';
+import { GrowthCard } from '@/components/growth-card';
 import { ListRow } from '@/components/list-row';
 import { PrimaryButton } from '@/components/primary-button';
 import { RoutineCard } from '@/components/routine-card';
 import { ShortcutTile } from '@/components/shortcut-tile';
 import { StrengthHookBanner } from '@/components/strength-hook-banner';
 import { WeightNudgeModal } from '@/components/weight-nudge-modal';
-import { Colors, FontSize, LetterSpacing, Radius, Spacing, TouchTarget } from '@/constants/theme';
+import { WittyLoading } from '@/components/witty-loading';
+import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useCheckInListener } from '@/features/attendance/use-checkin-listener';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { pickGreeting } from '@/features/content/greeting';
@@ -39,7 +42,7 @@ export default function WorkoutTab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, refresh: refreshProfile } = useAuthSession();
-  const { result, isLoading, errorMessage, retry } = useDailyRoutine(user!.id);
+  const { result, isLoading, errorMessage, retry, refresh } = useDailyRoutine(user!.id);
   const { stats: visitStats, refresh: refreshVisitStats } = useVisitStats(user!.id);
   const hookMessage = useMemo(() => pickHookMessage(), []);
 
@@ -65,20 +68,28 @@ export default function WorkoutTab() {
   const doneCount = routines.filter((item) => item.is_completed).length;
   const allDone = routines.length > 0 && doneCount === routines.length;
 
+  /**
+   * 코스 바꾸기.
+   *
+   * refresh(조용히 갈아 끼우기)를 쓴다. 예전엔 retry 를 불러서 화면이 통째로
+   * 로딩으로 바뀌었다가 돌아왔다 — 짧게↔충분히 를 오갈 때마다 새로고침처럼
+   * 번쩍인 게 이것이다. 다 읽을 때까지 기다렸다가 pending 을 푸는 것도 같은
+   * 이유다. 먼저 풀면 아직 옛 목록인데 토글만 새 값으로 앉아 있게 된다.
+   */
   const changeCourse = useCallback(
     async (course: RoutineCourse) => {
       setPendingCourse(course);
       setCourseError(null);
       try {
         await setRoutineCourse(course);
-        retry();
+        await refresh();
       } catch {
         setCourseError('코스를 바꾸지 못했습니다. 다시 시도해 주세요.');
       } finally {
         setPendingCourse(null);
       }
     },
-    [retry],
+    [refresh],
   );
 
   // 인사말은 출석일 수가 도착하면 한 번 더 고른다("첫 방문이시네요"를 제대로
@@ -103,15 +114,18 @@ export default function WorkoutTab() {
   const handleCheckIn = useCallback(() => {
     setJustCheckedIn(true);
     refreshVisitStats();
-    retry();
-  }, [refreshVisitStats, retry]);
+    void refresh();
+  }, [refreshVisitStats, refresh]);
 
   useCheckInListener(user!.id, handleCheckIn);
 
-  // 운동을 마치고 돌아오면 이 화면은 그동안 계속 떠 있던 상태다. 다시 불러오지
-  // 않으면 방금 끝낸 운동이 목록에서 여전히 "안 한 것"으로 보이고 포인트도
-  // 그대로라, 저장이 안 된 줄 알고 같은 운동을 또 하게 된다.
-  // 첫 진입은 위 훅들이 이미 불러오므로 건너뛴다.
+  // 운동을 마치고 돌아오면 이 화면은 그동안 계속 떠 있던 상태다. 포인트를 다시
+  // 읽지 않으면 방금 받은 점수가 안 보여서, 저장이 안 된 줄 알고 같은 운동을
+  // 또 하게 된다. 첫 진입은 위 훅들이 이미 불러오므로 건너뛴다.
+  //
+  // 루틴 목록은 여기서 안 부른다 — useDailyRoutine 이 자기 useFocusEffect 에서
+  // 조용히 다시 읽는다. 예전엔 여기서 retry 까지 불러 같은 요청이 두 번 나갔고,
+  // 그중 하나가 화면을 로딩으로 갈아치워서 돌아올 때마다 번쩍였다.
   const hasFocusedOnce = useRef(false);
   useFocusEffect(
     useCallback(() => {
@@ -119,9 +133,8 @@ export default function WorkoutTab() {
         hasFocusedOnce.current = true;
         return;
       }
-      retry();
       void refreshProfile();
-    }, [retry, refreshProfile]),
+    }, [refreshProfile]),
   );
 
   // 안내는 잠깐만 띄운다. 계속 남아 있으면 다음에 열었을 때 방금 찍은 것처럼 보인다.
@@ -131,7 +144,10 @@ export default function WorkoutTab() {
     return () => clearTimeout(timer);
   }, [justCheckedIn]);
 
-  const name = user!.profile_data?.nickname?.trim() ?? '';
+  // 인사말이 쓰는 값(real_name)이 비었는지로 판단한다. 예전엔 nickname 을
+  // 봤는데, 이제 가입할 때 닉네임이 자동으로 붙으므로 그걸로 보면 이 권유가
+  // 영영 안 뜬다 — 정작 이름 없이 "회원님"으로 불리는 분에게 필요한 안내다.
+  const name = user!.profile_data?.real_name?.trim() ?? '';
 
   return (
     <View style={styles.screen}>
@@ -189,24 +205,14 @@ export default function WorkoutTab() {
           </View>
         ) : null}
 
-        {/* 토스 자산 목록의 한 줄처럼: 타일 + 이름, 값은 오른쪽 끝. */}
-        <ListRow
-          icon="coin"
-          tint="orange"
-          title="내 포인트"
-          value={`${(user!.total_points ?? 0).toLocaleString('ko-KR')}점`}
-          valueTone="primary"
-        />
+        {/* 포인트를 경험치로 읽어 명예 호칭을 올린다. 숫자만 있던 "내 포인트"
+            줄이 "다음 호칭까지 얼마"라는 목표가 있는 카드가 됐다. */}
+        <GrowthCard xp={user!.total_points ?? 0} />
 
         <StrengthHookBanner message={hookMessage} size="compact" />
 
         {isLoading ? (
-          <View style={styles.centered}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={styles.centeredText} maxFontSizeMultiplier={1.3}>
-              오늘의 운동을 준비하고 있어요
-            </Text>
-          </View>
+          <WittyLoading />
         ) : errorMessage ? (
           <View style={styles.errorBox}>
             <Text
@@ -222,14 +228,14 @@ export default function WorkoutTab() {
             {/* 오늘 얼마나 왔는지. 목록만 있으면 몇 개 남았는지 세어야 한다. */}
             {routines.length > 0 ? (
               <View style={styles.progress}>
-                <View style={styles.progressHead}>
-                  <Text style={styles.progressLabel} maxFontSizeMultiplier={1.2}>
-                    {allDone ? '오늘 운동 끝!' : '오늘의 진행'}
-                  </Text>
-                  <Text style={styles.progressCount} maxFontSizeMultiplier={1.2}>
-                    {doneCount} / {routines.length}
-                  </Text>
-                </View>
+                {/* 시안 구조: 라벨 → 큰 카운트 → 진행 바 → 힌트, 전부 왼쪽 정렬. */}
+                <Text style={styles.progressLabel} maxFontSizeMultiplier={1.2}>
+                  {allDone ? '오늘 운동 끝!' : '오늘의 운동'}
+                </Text>
+                <Text style={styles.progressCount} maxFontSizeMultiplier={1.2}>
+                  {doneCount}
+                  <Text style={styles.progressCountSub}> / {routines.length} 완료</Text>
+                </Text>
                 <View style={styles.progressTrack}>
                   <View
                     style={[
@@ -256,43 +262,41 @@ export default function WorkoutTab() {
                 <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
                   오늘은 얼마나 하실 건가요?
                 </Text>
-                <View style={styles.courseRow}>
-                  {result.course_options.map((option) => {
-                    const selected = result.course === option.course;
-                    return (
-                      <Pressable
-                        key={option.course}
-                        onPress={() => void changeCourse(option.course)}
-                        disabled={pendingCourse !== null}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected }}
-                        accessibilityLabel={`${COURSE_LABELS[option.course]}, 약 ${option.minutes}분 코스`}
-                        style={({ pressed }) => [
-                          styles.courseCard,
-                          selected && styles.courseCardSelected,
-                          pressed && styles.courseCardPressed,
-                        ]}>
-                        <Text
-                          style={[styles.courseName, selected && styles.courseNameSelected]}
-                          maxFontSizeMultiplier={1.2}>
-                          {COURSE_LABELS[option.course]}
-                        </Text>
-                        <Text
-                          style={[styles.courseMinutes, selected && styles.courseMinutesSelected]}
-                          maxFontSizeMultiplier={1.2}>
-                          약 {option.minutes}분
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                {/* 카드 두 장 대신 FIT ROTEIN 시안의 슬라이딩 토글.
+                    course_options 는 short/long 두 가지뿐이다(COURSE_LABELS 참고). */}
+                <CourseToggle
+                  options={[
+                    {
+                      value: result.course_options[0].course,
+                      label: COURSE_LABELS[result.course_options[0].course],
+                      sub: `약 ${result.course_options[0].minutes}분`,
+                    },
+                    {
+                      value: result.course_options[1].course,
+                      label: COURSE_LABELS[result.course_options[1].course],
+                      sub: `약 ${result.course_options[1].minutes}분`,
+                    },
+                  ]}
+                  // 서버 응답을 기다리지 않고 누른 쪽으로 먼저 미끄러진다.
+                  // result.course 만 보면 목록을 다시 받을 때까지 썸이 그대로라
+                  // 눌러도 아무 일 없는 것처럼 보인다. 실패하면 pendingCourse 가
+                  // 풀리면서 서버 값으로 돌아온다.
+                  value={pendingCourse ?? result.course}
+                  onChange={(course) => void changeCourse(course)}
+                  busy={pendingCourse !== null}
+                />
                 {courseError ? (
                   <Text style={styles.noticeError} maxFontSizeMultiplier={1.3}>
                     {courseError}
                   </Text>
                 ) : (
-                  <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-                    바꿔도 이미 마친 운동은 그대로 남아요.
+                  <Text
+                    style={styles.footNote}
+                    maxFontSizeMultiplier={1.3}
+                    accessibilityLiveRegion="polite">
+                    {pendingCourse
+                      ? '오늘 목록을 다시 짜고 있어요…'
+                      : '바꿔도 이미 마친 운동은 그대로 남아요.'}
                   </Text>
                 )}
               </View>
@@ -482,91 +486,55 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.body,
     color: Colors.success,
   },
+  /** FIT ROTEIN 시안의 히어로 카드 — 파란 면 위에 흰 글씨·흰 진행 바. */
   progress: {
-    gap: Spacing.sm,
+    gap: Spacing.md,
     padding: Spacing.xl,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.surface,
-  },
-  progressHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    backgroundColor: Colors.primary,
   },
   progressLabel: {
-    fontSize: FontSize.body,
-    fontWeight: '700',
+    fontSize: FontSize.caption,
+    fontWeight: '600',
     letterSpacing: LetterSpacing.body,
-    color: Colors.text,
+    color: 'rgba(255,255,255,0.8)',
   },
   progressCount: {
-    fontSize: FontSize.subtitle,
+    // 시안 히어로 카드의 카운트(36px).
+    fontSize: 36,
     fontWeight: '700',
+    lineHeight: 40,
     letterSpacing: LetterSpacing.subtitle,
-    color: Colors.primary,
+    color: Colors.textOnPrimary,
     fontVariant: ['tabular-nums'],
   },
+  progressCountSub: {
+    fontSize: FontSize.subtitle,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.7)',
+  },
   progressTrack: {
-    height: 14,
+    height: 12,
     borderRadius: Radius.full,
-    backgroundColor: Colors.background,
+    backgroundColor: 'rgba(255,255,255,0.28)',
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
     borderRadius: Radius.full,
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.background,
   },
   progressFillDone: {
-    backgroundColor: Colors.success,
+    backgroundColor: Colors.background,
   },
   progressHint: {
     fontSize: FontSize.caption,
-    fontWeight: '500',
+    fontWeight: '600',
     letterSpacing: LetterSpacing.body,
-    color: Colors.textSecondary,
+    color: 'rgba(255,255,255,0.9)',
   },
   courseSection: {
     gap: Spacing.md,
-  },
-  courseRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  courseCard: {
-    flex: 1,
-    gap: Spacing.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.md,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.surface,
-    minHeight: TouchTarget.min,
-  },
-  courseCardSelected: {
-    backgroundColor: Colors.primary,
-  },
-  courseCardPressed: {
-    opacity: 0.85,
-  },
-  courseName: {
-    fontSize: FontSize.subtitle,
-    fontWeight: '700',
-    letterSpacing: LetterSpacing.subtitle,
-    color: Colors.text,
-  },
-  courseNameSelected: {
-    color: Colors.textOnPrimary,
-  },
-  courseMinutes: {
-    fontSize: FontSize.caption,
-    fontWeight: '600',
-    letterSpacing: LetterSpacing.body,
-    color: Colors.textSecondary,
-  },
-  courseMinutesSelected: {
-    color: Colors.textOnPrimary,
   },
   noticeError: {
     fontSize: FontSize.caption,
@@ -609,18 +577,6 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.body,
     lineHeight: FontSize.caption * 1.55,
     color: Colors.textTertiary,
-  },
-  centered: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.lg,
-    paddingVertical: Spacing.xxxl,
-  },
-  centeredText: {
-    fontSize: FontSize.body,
-    fontWeight: '600',
-    letterSpacing: LetterSpacing.body,
-    color: Colors.textSecondary,
   },
   errorBox: {
     gap: Spacing.lg,
