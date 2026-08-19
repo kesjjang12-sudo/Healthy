@@ -284,19 +284,18 @@ export default function WorkoutTab() {
                 것처럼 보였다. */}
             {result && result.routines.length === 0 ? (
               <View style={styles.notice}>
-                <Text style={styles.noticeText} maxFontSizeMultiplier={1.3}>
-                  아직 다니는 헬스장이 등록되지 않아 오늘의 운동을 짤 수 없어요. 입구 태블릿에
-                  전화번호를 한 번 눌러 주시면 그때부터 루틴이 만들어져요.
+                <Text style={styles.noticeText} sentenceBreak maxFontSizeMultiplier={1.3}>
+                  입구 태블릿에 전화번호를 한 번 눌러 주세요. 그때부터 운동을 짜 드려요.
                 </Text>
               </View>
             ) : null}
 
             {result?.needs_trainer_review ? (
               <View style={styles.notice}>
-                <Text style={styles.noticeText} maxFontSizeMultiplier={1.3}>
+                <Text style={styles.noticeText} sentenceBreak maxFontSizeMultiplier={1.3}>
                   {routines.length > 0
-                    ? '아프신 곳을 피해서 오늘 운동을 짰어요. 부상 위험이 큰 동작은 빼고 무게도 낮춰 잡았으니, 하시면서 편해지면 조금씩 올려 드릴게요.'
-                    : '아프신 곳이 많아 오늘은 안전하게 할 수 있는 운동을 찾지 못했어요. 가볍게 걷기나 스트레칭으로 몸을 풀어 주세요.'}
+                    ? '아프신 곳을 피해서 짰어요.'
+                    : '오늘은 걷기나 스트레칭으로 가볍게 풀어 주세요.'}
                 </Text>
               </View>
             ) : null}
@@ -381,8 +380,13 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
   },
+  /**
+   * 인사 두 줄. 크기·굵기를 같게 맞춘 뒤로는 사이를 띄우면 안 된다 — 똑같이
+   * 생긴 두 줄이 떨어져 있으면 제목 두 개처럼 보였다(오너 피드백).
+   * 줄 간격(1.45)이 이미 숨 쉴 자리를 만들어 주므로 여기는 0 이 맞다.
+   */
   headings: {
-    gap: Spacing.sm,
+    gap: 0,
   },
   /**
    * 인사말. 아래 응원 한 줄과 같은 크기(18)로 맞춘다 — 오너 요청.
@@ -551,7 +555,9 @@ const styles = StyleSheet.create({
     fontSize: FontSize.body,
     fontWeight: '600',
     letterSpacing: LetterSpacing.body,
-    lineHeight: FontSize.caption * 1.55,
+    // 줄 간격을 caption(14) 기준으로 잡아 둔 탓에 16px 글자가 줄끼리 붙어
+    // 있었다. 크기를 body 로 올릴 때 같이 안 고친 자리다.
+    lineHeight: FontSize.body * 1.7,
     color: Colors.text,
   },
   footNote: {
