@@ -391,9 +391,14 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.title,
     color: Colors.text,
   },
+  /**
+   * 인사말 아래 응원 한 줄. 이 화면에서 혼자만 얇아 다른 글씨와 따로 놀았다
+   * (오너 피드백) — 굵기를 제목과 맞춘다. 위계는 굵기 대신 크기(22 vs 16)와
+   * 색(검정 vs 회색)이 잡는다.
+   */
   greetingSub: {
     fontSize: FontSize.body,
-    fontWeight: '500',
+    fontWeight: '700',
     lineHeight: FontSize.body * 1.5,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,

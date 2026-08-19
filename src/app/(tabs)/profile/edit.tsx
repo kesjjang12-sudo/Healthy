@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/app-text';
 import { ChoiceButton } from '@/components/choice-button';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { PrimaryButton } from '@/components/primary-button';
 import { TextField } from '@/components/text-field';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
@@ -37,6 +38,8 @@ export default function ProfileEditScreen() {
     text: string;
   } | null>(null);
   const [isRevoking, setIsRevoking] = useState(false);
+  // 거두면 서버가 값을 실제로 지운다 — 누르자마자 지우지 않고 한 번 묻는다.
+  const [isRevokeAsking, setIsRevokeAsking] = useState(false);
   const [consentError, setConsentError] = useState<string | null>(null);
 
   const goBack = useCallback(() => {
@@ -94,6 +97,7 @@ export default function ProfileEditScreen() {
    * 그 방침이 거짓말이 된다.
    */
   const revokePainAreas = useCallback(async () => {
+    setIsRevokeAsking(false);
     setIsRevoking(true);
     setConsentError(null);
     try {
@@ -219,7 +223,7 @@ export default function ProfileEditScreen() {
                 variant="danger"
                 size="compact"
                 loading={isRevoking}
-                onPress={() => void revokePainAreas()}
+                onPress={() => setIsRevokeAsking(true)}
               />
             </View>
           ) : (
@@ -239,6 +243,20 @@ export default function ProfileEditScreen() {
 
         <View style={{ height: insets.bottom + Spacing.xl }} />
       </ScrollView>
+
+      {/* 거두기는 서버가 저장된 값을 실제로 지우는 동작이라, 파일 지울 때처럼
+          화면 한가운데서 한 번 더 묻는다. 무엇을 잃는지는 위 빨간 칸에도
+          적혀 있지만, 손이 먼저 나간 사람은 그걸 안 읽었다 — 그래서 팝업에도
+          같은 내용을 다시 적는다. */}
+      <ConfirmDialog
+        visible={isRevokeAsking}
+        title="정말 거두시겠어요?"
+        message="아픈 곳을 피해 운동을 고르고 무게를 낮추던 조정이 없어져요. 저장된 아픈 곳 정보도 바로 지워지고, 다시 받으시려면 문의하셔야 해요."
+        confirmLabel="거두기"
+        destructive
+        onConfirm={() => void revokePainAreas()}
+        onCancel={() => setIsRevokeAsking(false)}
+      />
     </View>
   );
 }

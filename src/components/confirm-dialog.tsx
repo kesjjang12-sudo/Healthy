@@ -12,6 +12,12 @@ type Props = {
   /** 진행하는 쪽 버튼 글자. 무엇을 하는지 적는다 — "확인"은 뭘 하는지 안 알려준다. */
   confirmLabel: string;
   cancelLabel?: string;
+  /**
+   * 되돌리기 어려운 동작(지우기·동의 거두기)이면 true. 진행 버튼이 빨강이 된다.
+   * 로그아웃처럼 다시 들어오면 그만인 일에는 쓰지 않는다 — 아무 데나 빨강을
+   * 쓰면 정작 위험한 자리에서 눈이 안 멈춘다.
+   */
+  destructive?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -31,6 +37,7 @@ export function ConfirmDialog({
   message,
   confirmLabel,
   cancelLabel = '아니요',
+  destructive = false,
   onConfirm,
   onCancel,
 }: Props) {
@@ -58,7 +65,12 @@ export function ConfirmDialog({
               onPress={onCancel}
               style={styles.button}
             />
-            <PrimaryButton label={confirmLabel} onPress={onConfirm} style={styles.button} />
+            <PrimaryButton
+              label={confirmLabel}
+              variant={destructive ? 'danger' : 'primary'}
+              onPress={onConfirm}
+              style={styles.button}
+            />
           </View>
         </Pressable>
       </Pressable>
