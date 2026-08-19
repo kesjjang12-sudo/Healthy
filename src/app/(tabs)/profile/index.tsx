@@ -197,6 +197,8 @@ export default function ProfileTab() {
 
       {/* 시안에는 없지만 여기 남긴다. 글자 크기는 잘 안 보이는 분이 찾는
           설정이라, 한 겹 안쪽에 넣으면 정작 필요한 분이 못 찾는다. */}
+      <View style={styles.divider} />
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
           글자 크기
@@ -206,6 +208,8 @@ export default function ProfileTab() {
           누르시면 앱 전체 글씨가 바로 바뀌어요.
         </Text>
       </View>
+
+      <View style={styles.divider} />
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
@@ -252,6 +256,8 @@ export default function ProfileTab() {
           </View>
         )}
       </View>
+
+      <View style={styles.divider} />
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
@@ -418,13 +424,23 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.subtitle,
     color: Colors.primary,
   },
+  /**
+   * 섹션 사이 가로줄. 카드가 계속 이어지면 어디까지가 한 묶음인지 안 보인다는
+   * 피드백(손그림)에 따라 넣었다. 선은 최후의 수단이라는 원칙(theme.ts)은
+   * 지키되, 여기는 면으로 나눌 수 없는 자리다 — 카드가 이미 면을 쓰고 있다.
+   */
+  divider: {
+    height: 1,
+    backgroundColor: Colors.divider,
+    marginVertical: Spacing.xs,
+  },
   section: {
     gap: Spacing.md,
   },
   /** 소분류 제목. 회색이면 흐려서 안 읽힌다는 피드백으로 검정으로 올렸다. */
   sectionTitle: {
     fontSize: FontSize.caption,
-    fontWeight: '600',
+    fontWeight: '700',
     letterSpacing: LetterSpacing.body,
     color: Colors.text,
   },

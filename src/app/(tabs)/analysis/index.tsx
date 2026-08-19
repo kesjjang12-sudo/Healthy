@@ -480,7 +480,7 @@ const styles = StyleSheet.create({
   /** 소분류 제목. 회색이면 흐려서 안 읽힌다는 피드백으로 검정으로 올렸다. */
   sectionTitle: {
     fontSize: FontSize.caption,
-    fontWeight: '600',
+    fontWeight: '700',
     letterSpacing: LetterSpacing.body,
     color: Colors.text,
   },

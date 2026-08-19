@@ -417,7 +417,7 @@ const styles = StyleSheet.create({
   /** 소분류 제목. 회색이면 흐려서 안 읽힌다는 피드백으로 검정으로 올렸다. */
   sectionTitle: {
     fontSize: FontSize.caption,
-    fontWeight: '600',
+    fontWeight: '700',
     letterSpacing: LetterSpacing.body,
     color: Colors.text,
     marginBottom: -Spacing.sm,
@@ -525,17 +525,23 @@ const styles = StyleSheet.create({
     color: Colors.grey[500],
     marginBottom: Spacing.md,
   },
+  /**
+   * 안내 칸. 빨간 바탕이었는데 여기 들어가는 말은 잘못됐다는 뜻이 아니다 —
+   * "아픈 곳을 피해 짰어요", "헬스장이 아직 등록되지 않았어요" 처럼 상황을
+   * 알려 주는 말이라, 빨강이면 읽기 전에 겁부터 먹는다. 빨강은 진짜 오류
+   * (noticeError)에만 남기고 안내는 앱의 파랑으로 통일한다.
+   */
   notice: {
     padding: Spacing.lg,
     borderRadius: Radius.md,
-    backgroundColor: Colors.dangerFaint,
+    backgroundColor: Colors.primaryFaint,
   },
   noticeText: {
-    fontSize: FontSize.caption,
+    fontSize: FontSize.body,
     fontWeight: '600',
     letterSpacing: LetterSpacing.body,
     lineHeight: FontSize.caption * 1.55,
-    color: Colors.danger,
+    color: Colors.text,
   },
   footNote: {
     fontSize: FontSize.caption,

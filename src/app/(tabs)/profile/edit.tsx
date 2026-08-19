@@ -200,9 +200,23 @@ export default function ProfileEditScreen() {
               <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
                 {CONSENT_ITEMS.find((item) => item.key === 'pain_areas')?.declineNote}
               </Text>
+
+              {/* 되돌리기 어려운 선택이라 무엇을 잃는지 먼저 적는다. 거두면
+                  서버가 값을 실제로 지우므로, 아픈 곳을 피해 무게를 낮추던
+                  조정이 그날부터 사라진다 — 누르고 나서 알면 늦다. */}
+              <View style={styles.warnBox}>
+                <Text style={styles.warnTitle} maxFontSizeMultiplier={1.2}>
+                  거두시면 이렇게 바뀌어요
+                </Text>
+                <Text style={styles.warnText} maxFontSizeMultiplier={1.3}>
+                  아픈 곳을 피해 운동을 고르고 무게를 낮추던 조정이 없어져요. 저장된 아픈 곳
+                  정보도 바로 지워집니다.
+                </Text>
+              </View>
+
               <PrimaryButton
                 label="아픈 곳 정보 동의 거두기"
-                variant="quiet"
+                variant="danger"
                 size="compact"
                 loading={isRevoking}
                 onPress={() => void revokePainAreas()}
@@ -267,7 +281,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: FontSize.caption,
-    fontWeight: '600',
+    fontWeight: '700',
     letterSpacing: LetterSpacing.body,
     color: Colors.text,
   },
@@ -283,6 +297,26 @@ const styles = StyleSheet.create({
   choiceThird: {
     flexGrow: 1,
     flexBasis: '30%',
+  },
+  /** 무엇을 잃는지 적는 칸. 빨강은 이 화면에서 여기와 오류 문구에만 쓴다. */
+  warnBox: {
+    gap: Spacing.xs,
+    padding: Spacing.lg,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.dangerFaint,
+  },
+  warnTitle: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.danger,
+  },
+  warnText: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    lineHeight: FontSize.caption * 1.55,
+    letterSpacing: LetterSpacing.body,
+    color: Colors.text,
   },
   consentBox: {
     gap: Spacing.sm,
