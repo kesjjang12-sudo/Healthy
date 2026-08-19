@@ -389,19 +389,23 @@ function WorkoutSession({
              버튼 글자도 "홈으로"로 맞춘다 — 화면에 없는 이름을 부르면 어디로
              가는지 알 수 없다. */
           <View style={styles.footerRow}>
+            {/* 다음에 할 일은 카드 구경이 아니라 남은 운동이다 — 하나 마치면
+                목록으로 돌아가는 게 기본 길이라 홈이 주 버튼(파랑)이고 오른쪽,
+                카드는 보조(회색)로 왼쪽에 둔다. 반대로 두었더니 마칠 때마다
+                카드로 넘어가 목록으로 다시 나와야 했다(오너 피드백). */}
+            <PrimaryButton
+              label="운동 카드 보기"
+              variant="secondary"
+              onPress={onShowCard}
+              style={styles.footerRowButton}
+            />
             <PrimaryButton
               label="홈으로"
-              variant="secondary"
               onPress={() =>
                 saveError
                   ? onExit()
                   : onExitCompleted(item.name_ko ?? item.name, pointsAwarded)
               }
-              style={styles.footerRowButton}
-            />
-            <PrimaryButton
-              label="운동 카드 보기"
-              onPress={onShowCard}
               style={styles.footerRowButton}
             />
           </View>
