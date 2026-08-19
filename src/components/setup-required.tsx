@@ -55,7 +55,7 @@ const styles = StyleSheet.create({
     fontSize: FontSize.body,
     fontWeight: '600',
     color: Colors.textSecondary,
-    lineHeight: FontSize.body * 1.5,
+    lineHeight: FontSize.body * 1.7,
   },
   code: {
     fontWeight: '800',

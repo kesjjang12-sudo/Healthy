@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
   body: {
     fontSize: FontSize.body,
     fontWeight: '500',
-    lineHeight: FontSize.body * 1.5,
+    lineHeight: FontSize.body * 1.7,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },

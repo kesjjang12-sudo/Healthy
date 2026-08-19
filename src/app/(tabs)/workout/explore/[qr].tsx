@@ -156,7 +156,7 @@ export default function EquipmentExploreScreen() {
                     {index + 1}
                   </Text>
                 </View>
-                <Text style={styles.stepText} maxFontSizeMultiplier={1.3}>
+                <Text style={styles.stepText} sentenceBreak maxFontSizeMultiplier={1.3}>
                   {step}
                 </Text>
               </View>
@@ -169,25 +169,25 @@ export default function EquipmentExploreScreen() {
             무게 고르는 법
           </Text>
           <View style={styles.hintBox}>
-            <Text style={styles.hintStrong} maxFontSizeMultiplier={1.3}>
+            <Text style={styles.hintStrong} sentenceBreak maxFontSizeMultiplier={1.3}>
               {equipment.base_weight_kg === null
                 ? '기구에 무게가 없는 운동이에요. 몸으로만 천천히 하세요.'
                 : `${equipment.base_weight_kg}kg 근처가 일반적인 시작 무게예요.`}
             </Text>
-            <Text style={styles.hintText} maxFontSizeMultiplier={1.3}>
+            <Text style={styles.hintText} sentenceBreak maxFontSizeMultiplier={1.3}>
               오늘 처방된 운동이 아니라 개인 맞춤 무게는 알려드릴 수 없어요. 직접 해보고 싶으시면
               트레이너에게 처방을 요청해 주세요.
             </Text>
-            <Text style={styles.hintText} maxFontSizeMultiplier={1.3}>
+            <Text style={styles.hintText} sentenceBreak maxFontSizeMultiplier={1.3}>
               {weightRule(equipment)}
             </Text>
-            <Text style={styles.hintText} maxFontSizeMultiplier={1.3}>
+            <Text style={styles.hintText} sentenceBreak maxFontSizeMultiplier={1.3}>
               {firstTimeRule(equipment)}
             </Text>
           </View>
         </View>
 
-        <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
+        <Text style={styles.footNote} sentenceBreak maxFontSizeMultiplier={1.3}>
           아프거나 어지러우면 바로 멈추고 충분히 쉬세요. 무리해서 이어가지 않으셔도 돼요.
         </Text>
       </ScrollView>
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: Spacing.lg,
-    maxWidth: 900,
+    maxWidth: 560,
     width: '100%',
     alignSelf: 'center',
   },
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
     gap: Spacing.xxl,
     paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.xl,
-    maxWidth: 900,
+    maxWidth: 560,
     width: '100%',
     alignSelf: 'center',
   },
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     fontSize: FontSize.caption,
     fontWeight: '600',
     letterSpacing: LetterSpacing.body,
-    lineHeight: FontSize.caption * 1.55,
+    lineHeight: FontSize.caption * 1.7,
     color: Colors.primary,
   },
   headings: {
@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
   description: {
     fontSize: FontSize.body,
     fontWeight: '500',
-    lineHeight: FontSize.body * 1.5,
+    lineHeight: FontSize.body * 1.7,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },
@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: FontSize.body,
     fontWeight: '500',
-    lineHeight: FontSize.body * 1.5,
+    lineHeight: FontSize.body * 1.7,
     letterSpacing: LetterSpacing.body,
     color: Colors.text,
   },
@@ -326,14 +326,14 @@ const styles = StyleSheet.create({
   hintText: {
     fontSize: FontSize.body,
     fontWeight: '500',
-    lineHeight: FontSize.body * 1.5,
+    lineHeight: FontSize.body * 1.7,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },
   footNote: {
     fontSize: FontSize.caption,
     fontWeight: '500',
-    lineHeight: FontSize.caption * 1.55,
+    lineHeight: FontSize.caption * 1.7,
     letterSpacing: LetterSpacing.body,
     color: Colors.textTertiary,
     textAlign: 'center',
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.md,
     backgroundColor: Colors.background,
-    maxWidth: 900,
+    maxWidth: 560,
     width: '100%',
     alignSelf: 'center',
   },

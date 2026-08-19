@@ -573,7 +573,7 @@ function ReadyView({ item, onWeightChanged }: { item: RoutineItem; onWeightChang
                   {index + 1}
                 </Text>
               </View>
-              <Text style={styles.stepText} maxFontSizeMultiplier={1.3}>
+              <Text style={styles.stepText} sentenceBreak maxFontSizeMultiplier={1.3}>
                 {step}
               </Text>
             </View>
@@ -587,7 +587,7 @@ function ReadyView({ item, onWeightChanged }: { item: RoutineItem; onWeightChang
           <Text style={styles.cautionTitle} maxFontSizeMultiplier={1.2}>
             이것만은 지켜주세요
           </Text>
-          <Text style={styles.cautionText} maxFontSizeMultiplier={1.3}>
+          <Text style={styles.cautionText} sentenceBreak maxFontSizeMultiplier={1.3}>
             {item.form_caution}
           </Text>
         </View>
@@ -597,7 +597,7 @@ function ReadyView({ item, onWeightChanged }: { item: RoutineItem; onWeightChang
           유산소는 "하는 방법"에 속도 조절 안내가 이미 들어 있다. */}
       {needsWeightLog(item) ? <WeightGuide item={item} /> : null}
 
-      <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
+      <Text style={styles.footNote} sentenceBreak maxFontSizeMultiplier={1.3}>
         아프거나 어지러우면 바로 멈추고 충분히 쉬세요. 다음에는 더 가볍게 잡아 드릴게요.
       </Text>
     </>
@@ -680,7 +680,7 @@ function WorkingView({
           </View>
         )}
 
-        <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
+        <Text style={styles.footNote} sentenceBreak maxFontSizeMultiplier={1.3}>
           다 하셨으면 아래 버튼을 눌러주세요. 더 하셔도 괜찮고, 힘들면 먼저 멈추셔도 돼요.
         </Text>
       </>
@@ -778,7 +778,7 @@ function RestingView({
 
       <SetDots total={totalSets} done={nextSet - 1} />
 
-      <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
+      <Text style={styles.footNote} sentenceBreak maxFontSizeMultiplier={1.3}>
         숨이 돌아올 때까지 쉬세요. 다 쉬면 저절로 다음 세트로 넘어가요.
       </Text>
     </>
@@ -979,13 +979,13 @@ function WeightGuide({ item }: { item: RoutineItem }) {
         무게 고르는 법
       </Text>
       <View style={styles.hintBox}>
-        <Text style={styles.hintStrong} maxFontSizeMultiplier={1.3}>
+        <Text style={styles.hintStrong} sentenceBreak maxFontSizeMultiplier={1.3}>
           {weightHint(item)}
         </Text>
-        <Text style={styles.hintText} maxFontSizeMultiplier={1.3}>
+        <Text style={styles.hintText} sentenceBreak maxFontSizeMultiplier={1.3}>
           {weightRule(item)}
         </Text>
-        <Text style={styles.hintText} maxFontSizeMultiplier={1.3}>
+        <Text style={styles.hintText} sentenceBreak maxFontSizeMultiplier={1.3}>
           {firstTimeRule(item)}
         </Text>
       </View>
@@ -1003,7 +1003,7 @@ const styles = StyleSheet.create({
     gap: Spacing.xxl,
     paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.xl,
-    maxWidth: 900,
+    maxWidth: 560,
     width: '100%',
     alignSelf: 'center',
   },
@@ -1060,7 +1060,7 @@ const styles = StyleSheet.create({
   description: {
     fontSize: FontSize.body,
     fontWeight: '500',
-    lineHeight: FontSize.body * 1.5,
+    lineHeight: FontSize.body * 1.7,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },
@@ -1073,7 +1073,7 @@ const styles = StyleSheet.create({
   encourageText: {
     fontSize: FontSize.body,
     fontWeight: '600',
-    lineHeight: FontSize.body * 1.5,
+    lineHeight: FontSize.body * 1.7,
     letterSpacing: LetterSpacing.body,
     color: Colors.primary,
     textAlign: 'center',
@@ -1146,7 +1146,7 @@ const styles = StyleSheet.create({
   helper: {
     fontSize: FontSize.body,
     fontWeight: '500',
-    lineHeight: FontSize.body * 1.5,
+    lineHeight: FontSize.body * 1.7,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
     textAlign: 'center',
@@ -1191,7 +1191,7 @@ const styles = StyleSheet.create({
   praise: {
     fontSize: FontSize.body,
     fontWeight: '600',
-    lineHeight: FontSize.body * 1.5,
+    lineHeight: FontSize.body * 1.7,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
     textAlign: 'center',
@@ -1307,7 +1307,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: FontSize.body,
     fontWeight: '500',
-    lineHeight: FontSize.body * 1.5,
+    lineHeight: FontSize.body * 1.7,
     letterSpacing: LetterSpacing.body,
     color: Colors.text,
   },
@@ -1326,7 +1326,7 @@ const styles = StyleSheet.create({
   cautionText: {
     fontSize: FontSize.body,
     fontWeight: '600',
-    lineHeight: FontSize.body * 1.5,
+    lineHeight: FontSize.body * 1.7,
     letterSpacing: LetterSpacing.body,
     color: Colors.text,
   },
@@ -1345,21 +1345,21 @@ const styles = StyleSheet.create({
   hintText: {
     fontSize: FontSize.body,
     fontWeight: '500',
-    lineHeight: FontSize.body * 1.5,
+    lineHeight: FontSize.body * 1.7,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },
   footNote: {
     fontSize: FontSize.caption,
     fontWeight: '500',
-    lineHeight: FontSize.caption * 1.55,
+    lineHeight: FontSize.caption * 1.7,
     letterSpacing: LetterSpacing.body,
     color: Colors.textTertiary,
     textAlign: 'center',
   },
   keypadWrap: {
     paddingHorizontal: Spacing.xl,
-    maxWidth: 900,
+    maxWidth: 560,
     width: '100%',
     alignSelf: 'center',
   },
@@ -1381,13 +1381,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.md,
     backgroundColor: Colors.background,
-    maxWidth: 900,
+    maxWidth: 560,
     width: '100%',
     alignSelf: 'center',
   },
   header: {
     paddingHorizontal: Spacing.lg,
-    maxWidth: 900,
+    maxWidth: 560,
     width: '100%',
     alignSelf: 'center',
   },

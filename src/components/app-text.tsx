@@ -51,18 +51,47 @@ function keepWordTogether(word: string): string {
 }
 
 function keepAll(text: string): string {
-  return text.split(' ').map(keepWordTogether).join(' ');
+  // 공백(줄바꿈 포함)은 그대로 두고 어절만 손댄다. split(' ') 로 하면
+  // 문장 단위 줄바꿈으로 넣은 \n 이 어절 안쪽으로 들어가 버린다.
+  return text
+    .split(/(\s+)/)
+    .map((part) => (/^\s/.test(part) ? part : keepWordTogether(part)))
+    .join('');
 }
 
-export function Text({ children, style, ...props }: TextProps) {
+/**
+ * 문장이 끝나는 자리(. ? !) 뒤에서 줄을 넘긴다.
+ *
+ * 어절 단위로만 안 끊기게 해 놨어도, 한 줄에 앞 문장의 꼬리와 다음 문장의
+ * 머리가 같이 놓이면 읽는 사람이 문장의 시작을 눈으로 찾아야 한다
+ * ("…등받이에 붙이세요. 목과" 처럼). 폭이 좁은 폰에서 특히 피곤하다.
+ * 그래서 여러 문장짜리 안내문은 문장마다 새 줄에서 시작하게 한다.
+ *
+ * 마침표 뒤에 공백이 있을 때만 자른다 — "1.5kg", "3.5" 같은 소수점은
+ * 뒤에 공백이 없으므로 그대로 남는다.
+ */
+const SENTENCE_END = /([.?!]+["')\]]?)[ \t]+/g;
+
+export function bySentence(text: string): string {
+  return text.replace(/\s+/g, ' ').replace(SENTENCE_END, '$1\n').trim();
+}
+
+type Props = TextProps & {
+  /** 여러 문장짜리 안내문에 켠다. 문장마다 새 줄에서 시작한다. */
+  sentenceBreak?: boolean;
+};
+
+export function Text({ children, style, sentenceBreak, ...props }: Props) {
   const { scale, multiplier } = useFontScale();
 
   const content = useMemo(() => {
-    if (Platform.OS !== 'android') return children;
-    return Children.map(children, (child) =>
-      typeof child === 'string' ? keepAll(child) : child,
-    );
-  }, [children]);
+    if (!sentenceBreak && Platform.OS !== 'android') return children;
+    return Children.map(children, (child) => {
+      if (typeof child !== 'string') return child;
+      const broken = sentenceBreak ? bySentence(child) : child;
+      return Platform.OS === 'android' ? keepAll(broken) : broken;
+    });
+  }, [children, sentenceBreak]);
 
   const scaled = useMemo(() => {
     if (scale === 'small') return style;

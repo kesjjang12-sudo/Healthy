@@ -77,7 +77,7 @@ function StretchSection({ title, items }: { title: string; items: readonly Stret
                       {index + 1}
                     </Text>
                   </View>
-                  <Text style={styles.stepText} maxFontSizeMultiplier={1.3}>
+                  <Text style={styles.stepText} sentenceBreak maxFontSizeMultiplier={1.3}>
                     {step}
                   </Text>
                 </View>
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     gap: Spacing.xxl,
     paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.xl,
-    maxWidth: 900,
+    maxWidth: 560,
     width: '100%',
     alignSelf: 'center',
   },
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
   helper: {
     fontSize: FontSize.body,
     fontWeight: '500',
-    lineHeight: FontSize.body * 1.5,
+    lineHeight: FontSize.body * 1.7,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },
@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: FontSize.body,
     fontWeight: '500',
-    lineHeight: FontSize.body * 1.5,
+    lineHeight: FontSize.body * 1.7,
     letterSpacing: LetterSpacing.body,
     color: Colors.text,
   },
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
     fontSize: FontSize.caption,
     fontWeight: '600',
     letterSpacing: LetterSpacing.body,
-    lineHeight: FontSize.caption * 1.55,
+    lineHeight: FontSize.caption * 1.7,
     color: Colors.danger,
   },
   footer: {
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.md,
     backgroundColor: Colors.background,
-    maxWidth: 900,
+    maxWidth: 560,
     width: '100%',
     alignSelf: 'center',
   },

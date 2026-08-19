@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
   helper: {
     fontSize: FontSize.body,
     fontWeight: '500',
-    lineHeight: FontSize.body * 1.5,
+    lineHeight: FontSize.body * 1.7,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },
@@ -390,7 +390,7 @@ const styles = StyleSheet.create({
   footNote: {
     fontSize: FontSize.caption,
     fontWeight: '500',
-    lineHeight: FontSize.caption * 1.55,
+    lineHeight: FontSize.caption * 1.7,
     letterSpacing: LetterSpacing.body,
     color: Colors.textTertiary,
   },
