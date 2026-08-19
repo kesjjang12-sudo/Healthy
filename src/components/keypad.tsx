@@ -71,6 +71,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     rowGap: Spacing.xs,
+    /**
+     * 폭 상한. 칸이 폭의 1/3 을 차지하고 aspectRatio 로 높이가 정해지므로,
+     * 화면이 넓어지면 칸이 그만큼 높아진다 — 갤럭시 폴드를 펴면 한 칸이
+     * 150px 가까이 되어 키패드가 화면을 통째로 먹고 위쪽 입력칸이 잘렸다
+     * (오너 제보). 손가락이 닿는 거리는 화면이 넓어져도 그대로라 키패드가
+     * 커질 이유가 없다. 420 이면 한 칸이 130x70 쯤으로, 시니어 터치 기준
+     * (TouchTarget.min=56)을 넉넉히 넘는다.
+     */
+    maxWidth: 420,
+    width: '100%',
+    alignSelf: 'center',
   },
   key: {
     // 3열 격자. gap 대신 각 칸이 폭의 1/3 을 차지하게 두어 눌리는 면을 넓게 잡는다.
