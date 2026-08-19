@@ -16,15 +16,6 @@ import {
   type GuideEquipment,
 } from '@/features/equipment/api';
 
-/** 어디 것을 볼지. 목록이 75종이라 "전부"만 있으면 찾는 게 일이 된다. */
-type ScopeFilter = 'mine' | 'all' | 'bodyweight';
-
-const SCOPE_LABELS: Record<ScopeFilter, string> = {
-  mine: '우리 헬스장',
-  all: '전체 운동',
-  bodyweight: '기구 없이',
-};
-
 const ALL_MUSCLES = '전체';
 
 /**
@@ -44,9 +35,6 @@ export default function EquipmentGuideScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
-  // 기본값은 "우리 헬스장". 여기 사람은 대개 우리 헬스장에서 뭘 할지 보러
-  // 오지, 세상의 모든 운동을 구경하러 오지 않는다.
-  const [scope, setScope] = useState<ScopeFilter>('mine');
   const [muscle, setMuscle] = useState<string>(ALL_MUSCLES);
 
   useEffect(() => {
@@ -74,24 +62,27 @@ export default function EquipmentGuideScreen() {
     setAttempt((n) => n + 1);
   }, []);
 
-  /** 범위 필터만 적용한 결과. 부위 선택지의 개수를 세는 기준이 된다. */
+  /**
+   * 우리 헬스장에 있는 것만 남긴다.
+   *
+   * 예전엔 "전체 운동"으로 바꿔 다른 데 있는 기구까지 볼 수 있었는데, 그러면
+   * 여기 없는 기구를 보고 찾으러 다니게 된다. 목록에 있으면 있는 것이어야 한다.
+   * 맨몸 운동은 기구가 필요 없어 어디서나 되므로 in_my_gym 이 항상 true 다
+   * (equipment/api.ts) — 그래서 이 한 줄로 "우리 헬스장에서 할 수 있는 것"이
+   * 그대로 남는다.
+   */
   const scoped = useMemo(() => {
     if (!sections) return null;
     return sections
       .map((section) => ({
         ...section,
-        items: section.items.filter((item) => {
-          if (scope === 'bodyweight') return item.station_kind === '맨몸';
-          if (scope === 'mine') return item.in_my_gym;
-          return true;
-        }),
+        items: section.items.filter((item) => item.in_my_gym),
       }))
       .filter((section) => section.items.length > 0);
-  }, [sections, scope]);
+  }, [sections]);
 
-  // 범위를 바꾸면 고른 부위가 그 범위에 없을 수 있다(예: "기구 없이"에는 팔이
-  // 없다). 그때는 전체로 본다 — effect 로 상태를 되돌리면 한 프레임 동안 빈
-  // 화면이 스치고, 왜 비었는지 알 수가 없다. 렌더에서 바로 판단한다.
+  // 고른 부위가 목록에 없을 수 있다. 그때는 전체로 본다 — effect 로 상태를
+  // 되돌리면 한 프레임 동안 빈 화면이 스치고, 왜 비었는지 알 수가 없다.
   const activeMuscle =
     scoped && scoped.some((section) => section.muscle === muscle) ? muscle : ALL_MUSCLES;
 
@@ -100,17 +91,6 @@ export default function EquipmentGuideScreen() {
     if (activeMuscle === ALL_MUSCLES) return scoped;
     return scoped.filter((section) => section.muscle === activeMuscle);
   }, [scoped, activeMuscle]);
-
-  const scopeOptions = useMemo<FilterOption<ScopeFilter>[]>(() => {
-    const count = (predicate: (item: { station_kind: string | null; in_my_gym: boolean }) => boolean) =>
-      sections?.reduce((sum, s) => sum + s.items.filter(predicate).length, 0);
-
-    return [
-      { value: 'mine', label: SCOPE_LABELS.mine, count: count((i) => i.in_my_gym) },
-      { value: 'bodyweight', label: SCOPE_LABELS.bodyweight, count: count((i) => i.station_kind === '맨몸') },
-      { value: 'all', label: SCOPE_LABELS.all, count: count(() => true) },
-    ];
-  }, [sections]);
 
   const muscleOptions = useMemo<FilterOption<string>[]>(() => {
     const total = scoped?.reduce((sum, s) => sum + s.items.length, 0);
@@ -137,18 +117,12 @@ export default function EquipmentGuideScreen() {
             기구 사용법
           </Text>
           <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-            운동을 누르면 하는 방법과 영상이 나와요. 파란 칸은 기구 없이 하는 운동이라
-            집에서도 할 수 있어요.
+            우리 헬스장에 있는 것만 모았어요. 운동을 누르면 하는 방법과 영상이 나와요.
+            파란 칸은 기구 없이 하는 운동이라 집에서도 할 수 있어요.
           </Text>
         </View>
 
         <View style={styles.filters}>
-          <FilterDropdown
-            label="범위"
-            value={scope}
-            options={scopeOptions}
-            onChange={setScope}
-          />
           <FilterDropdown
             label="부위"
             value={activeMuscle}
@@ -171,9 +145,9 @@ export default function EquipmentGuideScreen() {
         ) : visible.length === 0 ? (
           <View style={styles.emptyBox}>
             <Text style={styles.emptyText} maxFontSizeMultiplier={1.3}>
-              {scope === 'mine'
-                ? '우리 헬스장에 등록된 기구가 아직 없어요. 범위를 "전체 운동"으로 바꿔 보세요.'
-                : '고르신 조건에 맞는 운동이 없어요.'}
+              {muscle === ALL_MUSCLES
+                ? '우리 헬스장에 등록된 기구가 아직 없어요. 입구 태블릿에 전화번호를 한 번 눌러 주시면 그때부터 목록이 채워져요.'
+                : '이 부위에 맞는 기구가 우리 헬스장에 없어요. 부위를 "전체"로 바꿔 보세요.'}
             </Text>
           </View>
         ) : (
