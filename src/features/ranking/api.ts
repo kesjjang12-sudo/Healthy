@@ -1,4 +1,9 @@
-import type { ApartmentWeek, LeaderboardOrder, LeaderboardRow } from '@/lib/database.types';
+import type {
+  ApartmentWeek,
+  GlobalLeaderboardRow,
+  LeaderboardOrder,
+  LeaderboardRow,
+} from '@/lib/database.types';
 import {
   GENERIC_ERROR_MESSAGE,
   NETWORK_ERROR_MESSAGE,
@@ -32,6 +37,20 @@ export async function getApartmentLeaderboard(
 ): Promise<LeaderboardRow[]> {
   const { data, error } = await supabase.rpc('get_apartment_leaderboard', {
     p_apt_id: aptId,
+    p_limit: limit,
+    p_order: order,
+  });
+
+  if (error) throw toRankingError(error);
+  return data ?? [];
+}
+
+/** 모든 단지 통합 랭킹. 단지 이름이 같이 온다. */
+export async function getGlobalLeaderboard(
+  order: LeaderboardOrder = 'attendance',
+  limit = 50,
+): Promise<GlobalLeaderboardRow[]> {
+  const { data, error } = await supabase.rpc('get_global_leaderboard', {
     p_limit: limit,
     p_order: order,
   });

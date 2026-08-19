@@ -10,6 +10,7 @@ import { GrowthBadge } from '@/components/growth-badge';
 import { Icon } from '@/components/icon';
 import { ListRow } from '@/components/list-row';
 import { PrimaryButton } from '@/components/primary-button';
+import { SegmentedControl } from '@/components/segmented-control';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { growthStatus } from '@/features/growth/levels';
@@ -18,6 +19,13 @@ import {
   listMyGymMemberships,
   makeGymPrimary,
 } from '@/features/gym-membership/api';
+import {
+  DEFAULT_REMINDER,
+  getReminderSettings,
+  saveReminderSettings,
+  type ReminderHour,
+  type ReminderSettings,
+} from '@/features/notifications/workout-reminder';
 import { updateProfileData } from '@/features/onboarding/api';
 import { useFontScale } from '@/features/settings/font-scale';
 import { copyToClipboard } from '@/lib/clipboard';
@@ -48,6 +56,7 @@ export default function ProfileTab() {
   const [isLogoutAsking, setIsLogoutAsking] = useState(false);
   const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [providerLabel, setProviderLabel] = useState<string | null>(null);
+  const [reminder, setReminder] = useState<ReminderSettings>(DEFAULT_REMINDER);
   const [memberships, setMemberships] = useState<GymMembershipSummary[] | null>(null);
   const [membershipError, setMembershipError] = useState<string | null>(null);
   const [switchingAptId, setSwitchingAptId] = useState<string | null>(null);
@@ -62,6 +71,20 @@ export default function ProfileTab() {
           : (PROVIDER_LABELS[authUser.app_metadata?.provider ?? ''] ?? '알 수 없음'),
       );
     });
+  }, []);
+
+  useEffect(() => {
+    void getReminderSettings().then(setReminder);
+  }, []);
+
+  // 화면에 먼저 반영하고 예약은 뒤에서 다시 건다(글자 크기와 같은 태도).
+  const selectReminder = useCallback((value: 'off' | '8' | '12' | '18') => {
+    const next: ReminderSettings =
+      value === 'off'
+        ? { ...DEFAULT_REMINDER, enabled: false }
+        : { enabled: true, hour: Number(value) as ReminderHour };
+    setReminder(next);
+    void saveReminderSettings(next);
   }, []);
 
   useEffect(() => {
@@ -204,6 +227,30 @@ export default function ProfileTab() {
         </Text>
         {/* 설명 문구는 뺐다 — 누르면 화면 전체가 그 자리에서 바뀌니 말이 필요 없다. */}
         <FontScalePicker value={fontScale} onChange={(next) => void selectFontScale(next)} />
+      </View>
+
+      <View style={styles.divider} />
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
+          운동 알림
+        </Text>
+        {/* 켬/끔 스위치 + 시간 고르기를 칸 하나로 합쳤다 — "끔"도 그냥 선택지다. */}
+        <SegmentedControl
+          options={[
+            { value: 'off', label: '끔' },
+            { value: '8', label: '아침 8시' },
+            { value: '12', label: '낮 12시' },
+            { value: '18', label: '저녁 6시' },
+          ]}
+          value={reminder.enabled ? (String(reminder.hour) as '8' | '12' | '18') : 'off'}
+          onChange={selectReminder}
+        />
+        {reminder.enabled ? (
+          <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
+            매일 그 시간에 알려드려요. 운동을 마친 날은 울리지 않아요.
+          </Text>
+        ) : null}
       </View>
 
       <View style={styles.divider} />

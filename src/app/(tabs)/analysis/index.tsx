@@ -9,13 +9,19 @@ import { TrendChart } from '@/components/trend-chart';
 import { Colors, FontSize, IconTint, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import {
   AnalysisError,
+  getEffortTotals,
   getProgressSummary,
   getWorkoutSummary,
   getWorkoutTrend,
 } from '@/features/analysis/api';
 import { attendanceLine, streakLine, volumeLine } from '@/features/analysis/progress';
 import { useAuthSession } from '@/features/auth/auth-session';
-import type { ProgressSummary, WorkoutSummary, WorkoutTrend } from '@/lib/database.types';
+import type {
+  EffortTotals,
+  ProgressSummary,
+  WorkoutSummary,
+  WorkoutTrend,
+} from '@/lib/database.types';
 
 type Period = 'week' | 'month';
 
@@ -267,12 +273,75 @@ export default function AnalysisTab() {
         </>
       )}
 
+      {/* 지금까지 쌓아 온 것. 성공 분기 밖 — 위 통계가 실패해도 보인다. */}
+      <EffortSection />
+
       {/* 몸무게는 분석의 결과가 아니라 내가 넣는 값이라 아래로 내렸다.
           맨 위를 차지하면 정작 "잘하고 있나"의 답이 밀린다.
           성공 분기 밖에 두는 이유: 통계 조회가 실패해도 몸무게는 보고 적을 수
           있어야 한다. 안에 두었더니 오류가 난 날 화면이 통째로 비었다. */}
       <BodySection />
     </ScrollView>
+  );
+}
+
+/** 유산소 분 → km. 국토종주와 같은 환산(1분 = 0.15km)이라 숫자가 서로 맞는다. */
+const KM_PER_MINUTE = 0.15;
+
+/**
+ * "지금까지" 섹션 — 이번 주·이번 달·전체 누적.
+ *
+ * 걸은 거리(유산소 분 환산)와 든 무게 합. 오늘 하루는 작아 보여도 쌓인
+ * 전체를 보면 "이만큼 했다"가 된다 — 지우면 아까운 숫자가 계속 나오게 하는
+ * 것이 목적이다.
+ */
+function EffortSection() {
+  const [totals, setTotals] = useState<EffortTotals | null>(null);
+  const [span, setSpan] = useState<'week' | 'month' | 'all'>('week');
+
+  useEffect(() => {
+    let cancelled = false;
+    getEffortTotals()
+      .then((result) => {
+        if (!cancelled) setTotals(result);
+      })
+      // 부가 섹션이라 실패하면 조용히 숨긴다.
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!totals) return null;
+
+  const t = totals[span];
+  const km = Math.round(t.cardio_minutes * KM_PER_MINUTE * 10) / 10;
+  // 무게가 1000kg 을 넘으면 톤으로 읽는다 — "12,400kg"보다 "12.4톤"이 자랑이 된다.
+  const heavy = t.volume_kg >= 1000;
+  const weightValue = heavy ? Math.round(t.volume_kg / 100) / 10 : Math.round(t.volume_kg);
+
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHead}>
+        <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
+          지금까지
+        </Text>
+      </View>
+      <SegmentedControl
+        options={[
+          { value: 'week', label: '이번 주' },
+          { value: 'month', label: '이번 달' },
+          { value: 'all', label: '전체' },
+        ]}
+        value={span}
+        onChange={(next) => setSpan(next)}
+      />
+      <View style={styles.kpis}>
+        <KpiTile value={km} unit="km" label="걸은 거리" tone="cardio" />
+        <KpiTile value={weightValue} unit={heavy ? '톤' : 'kg'} label="든 무게" tone="primary" />
+        <KpiTile value={t.workouts} unit="번" label="운동 완료" tone="success" />
+      </View>
+    </View>
   );
 }
 

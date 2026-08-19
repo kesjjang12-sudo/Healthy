@@ -1,9 +1,11 @@
 import { Redirect } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
+import { useEffect } from 'react';
 
 import { TextTabBar } from '@/components/tab-bar';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { needsConsent } from '@/features/legal/api';
+import { refreshReminders } from '@/features/notifications/workout-reminder';
 import { useSyncFontScale } from '@/features/settings/font-scale';
 
 /**
@@ -18,6 +20,11 @@ export default function TabsLayout() {
 
   // 폰을 바꾸거나 앱을 다시 깔아도 자기가 고른 글자 크기로 돌아오게 한다.
   useSyncFontScale(user?.profile_data?.font_scale);
+
+  // 운동 리마인더는 7일치씩 예약된다 — 앱을 열 때마다 앞으로 7일로 채워 둔다.
+  useEffect(() => {
+    void refreshReminders();
+  }, []);
 
   if (isRestoring) return null;
   if (!user) return <Redirect href="/login" />;

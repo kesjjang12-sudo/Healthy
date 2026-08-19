@@ -35,6 +35,7 @@ import {
   cancelCardioGoalAlarm,
   scheduleCardioGoalAlarm,
 } from '@/features/notifications/cardio-alarm';
+import { markWorkoutDoneToday } from '@/features/notifications/workout-reminder';
 import { useDailyRoutine } from '@/features/routine/use-daily-routine';
 import {
   elapsedToMinutes,
@@ -293,6 +294,10 @@ function WorkoutSession({
           : { actualWeightKg: pin === '' ? null : Number(pin), actualReps },
       );
       setPointsAwarded(awarded);
+
+      // 오늘 운동을 마쳤으니 오늘 몫의 리마인더는 걷어낸다 — 다녀온 사람에게
+      // "가야 해요"가 울리면 잔소리다.
+      void markWorkoutDoneToday();
 
       // 받은 점수를 그 자리에서 합산해 둔다. 서버를 다시 부르면 그만큼
       // 늦어지고, 그 사이 목록으로 나가면 포인트가 안 오른 것처럼 보인다.

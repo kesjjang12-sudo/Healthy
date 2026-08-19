@@ -529,6 +529,23 @@ export type LeaderboardRow = {
 /** 랭킹 정렬 기준 */
 export type LeaderboardOrder = 'attendance' | 'points';
 
+/** 전체(모든 단지) 랭킹 한 줄 — 단지 이름이 추가로 온다. */
+export type GlobalLeaderboardRow = LeaderboardRow & { apt_name: string };
+
+/** get_effort_totals 의 기간 하나 — 유산소 분·든 무게·운동 횟수 */
+export type EffortPeriod = {
+  cardio_minutes: number;
+  volume_kg: number;
+  workouts: number;
+};
+
+/** 이번 주 / 이번 달 / 전체 누적 노력 */
+export type EffortTotals = {
+  week: EffortPeriod;
+  month: EffortPeriod;
+  all: EffortPeriod;
+};
+
 /** get_apartment_week 응답 — 랭킹 탭 상단 "우리 단지 이번 주" 카드 */
 export type ApartmentWeek = {
   week_start: string;
@@ -775,6 +792,14 @@ export type Database = {
       get_apartment_week: {
         Args: { p_apt_id: string };
         Returns: ApartmentWeek;
+      };
+      get_global_leaderboard: {
+        Args: { p_limit?: number; p_order?: LeaderboardOrder };
+        Returns: GlobalLeaderboardRow[];
+      };
+      get_effort_totals: {
+        Args: Record<string, never>;
+        Returns: EffortTotals;
       };
       cheer_apartment: {
         Args: { p_apt_id: string; p_emoji: string };

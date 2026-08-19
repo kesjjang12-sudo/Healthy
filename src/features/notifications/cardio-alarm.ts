@@ -41,6 +41,15 @@ type NotificationsModule = typeof import('expo-notifications');
 
 let cachedModule: NotificationsModule | null | undefined;
 
+/**
+ * 다른 알림 기능(운동 리마인더 등)도 이 안전한 로더를 같이 쓴다.
+ * NATIVE_ALARM_READY 스위치와 사고 이력은 위 주석 참고 — 새 알림 기능을
+ * 만들 때 이걸 우회해 expo-notifications 를 직접 import 하면 안 된다.
+ */
+export async function loadNotificationsModule(): Promise<NotificationsModule | null> {
+  return loadModule();
+}
+
 async function loadModule(): Promise<NotificationsModule | null> {
   if (cachedModule !== undefined) return cachedModule;
   // 네이티브 모듈이 확실히 있을 때만 불러온다. 여기서 막지 않으면 아래

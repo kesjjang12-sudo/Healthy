@@ -4,6 +4,7 @@ import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GrowthBadge } from '@/components/growth-badge';
+import { ProgressRing } from '@/components/progress-ring';
 import { SegmentedControl } from '@/components/segmented-control';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { useAuthSession } from '@/features/auth/auth-session';
@@ -13,8 +14,14 @@ import {
   cheerApartment,
   getApartmentLeaderboard,
   getApartmentWeek,
+  getGlobalLeaderboard,
 } from '@/features/ranking/api';
-import type { ApartmentWeek, LeaderboardOrder, LeaderboardRow } from '@/lib/database.types';
+import type {
+  ApartmentWeek,
+  GlobalLeaderboardRow,
+  LeaderboardOrder,
+  LeaderboardRow,
+} from '@/lib/database.types';
 
 const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
 const CHEER_EMOJIS = ['💪', '🔥', '👏'] as const;
@@ -35,7 +42,8 @@ export default function RankingTab() {
   const { user } = useAuthSession();
 
   const [order, setOrder] = useState<LeaderboardOrder>('attendance');
-  const [rows, setRows] = useState<LeaderboardRow[] | null>(null);
+  const [scope, setScope] = useState<'apt' | 'global'>('apt');
+  const [rows, setRows] = useState<LeaderboardRow[] | GlobalLeaderboardRow[] | null>(null);
   const [week, setWeek] = useState<ApartmentWeek | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isCheering, setIsCheering] = useState(false);
@@ -44,9 +52,13 @@ export default function RankingTab() {
     if (!user!.apt_id) return;
     let cancelled = false;
 
-    // 정렬을 바꾸면 목록만 다시 받는다 — 이전 목록을 지우고 로딩을 돌린다.
+    // 정렬·범위를 바꾸면 목록만 다시 받는다 — 이전 목록을 지우고 로딩을 돌린다.
     setRows(null);
-    getApartmentLeaderboard(user!.apt_id, order)
+    const request =
+      scope === 'global'
+        ? getGlobalLeaderboard(order)
+        : getApartmentLeaderboard(user!.apt_id, order);
+    request
       .then((result) => {
         if (!cancelled) setRows(result);
       })
@@ -58,7 +70,7 @@ export default function RankingTab() {
     return () => {
       cancelled = true;
     };
-  }, [user, order]);
+  }, [user, order, scope]);
 
   useEffect(() => {
     if (!user!.apt_id) return;
@@ -96,7 +108,7 @@ export default function RankingTab() {
       style={styles.screen}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + Spacing.xxl }]}>
       <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-        우리 단지
+        랭킹
       </Text>
 
       {!user!.apt_id ? (
@@ -107,14 +119,25 @@ export default function RankingTab() {
         <>
           {week ? <WeekCard week={week} isCheering={isCheering} onCheer={cheer} /> : null}
 
-          <SegmentedControl
-            options={[
-              { value: 'attendance', label: '출석순' },
-              { value: 'points', label: '포인트순' },
-            ]}
-            value={order}
-            onChange={(next) => setOrder(next)}
-          />
+          {/* 범위(우리 단지/전체)와 기준(출석/포인트)을 따로 고른다. */}
+          <View style={styles.toggles}>
+            <SegmentedControl
+              options={[
+                { value: 'apt', label: '우리 단지' },
+                { value: 'global', label: '전체' },
+              ]}
+              value={scope}
+              onChange={(next) => setScope(next)}
+            />
+            <SegmentedControl
+              options={[
+                { value: 'attendance', label: '출석순' },
+                { value: 'points', label: '포인트순' },
+              ]}
+              value={order}
+              onChange={(next) => setOrder(next)}
+            />
+          </View>
 
           {errorMessage ? (
             <Text style={styles.errorText} maxFontSizeMultiplier={1.3} accessibilityLiveRegion="polite">
@@ -163,12 +186,20 @@ export default function RankingTab() {
                       levelIndex={growthStatus(row.total_points ?? 0).level.index}
                       size={24}
                     />
-                    <Text
-                      style={[styles.nickname, row.is_me && styles.nicknameMe]}
-                      maxFontSizeMultiplier={1.3}
-                      numberOfLines={1}>
-                      {row.is_me ? `${row.nickname} (나)` : row.nickname}
-                    </Text>
+                    <View style={styles.nameColumn}>
+                      <Text
+                        style={[styles.nickname, row.is_me && styles.nicknameMe]}
+                        maxFontSizeMultiplier={1.3}
+                        numberOfLines={1}>
+                        {row.is_me ? `${row.nickname} (나)` : row.nickname}
+                      </Text>
+                      {/* 전체 랭킹에서는 어느 단지 사람인지가 절반의 재미다. */}
+                      {'apt_name' in row && scope === 'global' ? (
+                        <Text style={styles.aptName} maxFontSizeMultiplier={1.2} numberOfLines={1}>
+                          {row.apt_name}
+                        </Text>
+                      ) : null}
+                    </View>
                     <View style={styles.valueColumn}>
                       <Text
                         style={[styles.valueMain, row.is_me && styles.valueMainMe]}
@@ -226,19 +257,20 @@ function WeekCard({
         </Text>
       </View>
 
-      <Text style={styles.weekCount} maxFontSizeMultiplier={1.2}>
-        출석 {week.total_checkins}
-        <Text style={styles.weekGoal}> / 목표 {week.goal}번</Text>
-      </Text>
-
-      <View style={styles.weekTrack}>
-        <View
-          style={[
-            styles.weekFill,
-            done && styles.weekFillDone,
-            { width: `${Math.max(progress * 100, 2)}%` },
-          ]}
-        />
+      {/* 국토종주 링과 같은 문법 — 목표를 향해 차오르는 원. 막대보다
+          "어디로 가는 중"이라는 느낌이 산다(오너 피드백). */}
+      <View style={styles.ringWrap}>
+        <ProgressRing progress={progress} size={172}>
+          <Text style={styles.ringLabel} maxFontSizeMultiplier={1.2}>
+            {done ? '목표 달성!' : '단지 출석'}
+          </Text>
+          <Text style={[styles.ringValue, done && styles.ringValueDone]} maxFontSizeMultiplier={1.2}>
+            {week.total_checkins}
+          </Text>
+          <Text style={styles.ringGoal} maxFontSizeMultiplier={1.2}>
+            목표 {week.goal}번
+          </Text>
+        </ProgressRing>
       </View>
 
       {/* 요일별 막대. 오늘만 파랑 — 지금 찍으면 어디가 자라는지 보인다. */}
@@ -357,31 +389,45 @@ const styles = StyleSheet.create({
     letterSpacing: LetterSpacing.body,
     color: Colors.primary,
   },
-  weekCount: {
-    fontSize: FontSize.title,
-    fontWeight: '700',
-    letterSpacing: LetterSpacing.title,
-    color: Colors.text,
-    fontVariant: ['tabular-nums'],
+  ringWrap: {
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
   },
-  weekGoal: {
-    fontSize: FontSize.body,
+  ringLabel: {
+    fontSize: FontSize.caption,
     fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },
-  weekTrack: {
-    height: 10,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.grey[100],
-    overflow: 'hidden',
+  ringValue: {
+    fontSize: 44,
+    lineHeight: 52,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.title,
+    color: Colors.primary,
+    fontVariant: ['tabular-nums'],
   },
-  weekFill: {
-    height: '100%',
-    borderRadius: Radius.full,
-    backgroundColor: Colors.primary,
+  ringValueDone: {
+    color: Colors.success,
   },
-  weekFillDone: {
-    backgroundColor: Colors.success,
+  ringGoal: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+  },
+  toggles: {
+    gap: Spacing.sm,
+  },
+  nameColumn: {
+    flex: 1,
+    gap: 1,
+  },
+  aptName: {
+    fontSize: FontSize.caption,
+    fontWeight: '500',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textTertiary,
   },
   weekDays: {
     flexDirection: 'row',
@@ -520,7 +566,6 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   nickname: {
-    flex: 1,
     fontSize: FontSize.body,
     fontWeight: '600',
     letterSpacing: LetterSpacing.body,

@@ -1,4 +1,5 @@
 import type {
+  EffortTotals,
   ProgressSummary,
   WorkoutShareCard,
   WorkoutSummary,
@@ -95,6 +96,14 @@ export async function getWorkoutShareCard(
  * 최근 p_days 와 직전 같은 길이 기간을 나란히 + 연속 출석 주 수.
  * 화면은 이 둘을 비교해 "잘하고 있나"를 한 줄로 만든다(progress.ts).
  */
+/** 이번 주·이번 달·전체 누적 노력(유산소 분, 든 무게, 운동 횟수). */
+export async function getEffortTotals(): Promise<EffortTotals> {
+  const { data, error } = await supabase.rpc('get_effort_totals', {});
+  if (error) throw toAnalysisError(error);
+  if (!data) throw new AnalysisError(GENERIC_ERROR_MESSAGE);
+  return data;
+}
+
 export async function getProgressSummary(userId: string, days: number): Promise<ProgressSummary> {
   const { data, error } = await supabase.rpc('get_progress_summary', {
     p_user_id: userId,
