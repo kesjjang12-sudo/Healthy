@@ -181,10 +181,11 @@ export default function RankingTab() {
                         {row.rank}
                       </Text>
                     </View>
-                    {/* 호칭 배지. 옆 사람의 호칭이 보이면 "나도 저기까지"라는 목표가 생긴다. */}
+                    {/* 호칭 배지. 옆 사람의 호칭이 보이면 "나도 저기까지"라는 목표가 생긴다.
+                        32 부터 장식(리본·왕관)이 그려진다 — 그보다 작으면 뭉개진다. */}
                     <GrowthBadge
                       levelIndex={growthStatus(row.total_points ?? 0).level.index}
-                      size={24}
+                      size={32}
                     />
                     <View style={styles.nameColumn}>
                       <Text

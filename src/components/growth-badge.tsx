@@ -32,9 +32,14 @@ const PALETTES: readonly Palette[] = [
 export function GrowthBadge({ levelIndex, size = 40 }: { levelIndex: number; size?: number }) {
   const idx = Math.max(0, Math.min(PALETTES.length - 1, levelIndex));
   const p = PALETTES[idx];
-  const stars = idx >= 5 ? 3 : idx >= 4 ? 2 : idx >= 2 ? 1 : 0;
-  const laurel = idx >= 3;
-  const crown = idx >= 6;
+
+  // 작은 크기(랭킹 줄의 24px 등)에서는 장식을 뺀다. 리본·왕관·별 셋이
+  // 20px 남짓에 다 들어가면 뭉개져서 깨진 그림처럼 보인다(오너 피드백) —
+  // 작을 때는 색과 별 하나로만 단계를 말한다.
+  const compact = size < 32;
+  const stars = compact ? (idx >= 2 ? 1 : 0) : idx >= 5 ? 3 : idx >= 4 ? 2 : idx >= 2 ? 1 : 0;
+  const laurel = !compact && idx >= 3;
+  const crown = !compact && idx >= 6;
 
   return (
     <Svg width={size} height={size} viewBox="0 0 40 40">

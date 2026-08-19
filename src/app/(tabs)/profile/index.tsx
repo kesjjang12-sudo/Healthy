@@ -206,8 +206,12 @@ export default function ProfileTab() {
         </Text>
       </Pressable>
 
-      {/* 경험치와 호칭. 운동 홈의 성장 카드와 같은 값을 요약해서 보여준다. */}
-      <View style={styles.pointCard}>
+      {/* 경험치와 호칭. 누르면 등급 안내(7단계 전체와 올라가는 법)로 간다. */}
+      <Pressable
+        onPress={() => router.push('/profile/levels')}
+        accessibilityRole="button"
+        accessibilityLabel={`내 호칭 ${growthStatus(user?.total_points ?? 0).level.name}, 경험치 ${(user?.total_points ?? 0).toLocaleString('ko-KR')}점. 등급 안내 보기`}
+        style={({ pressed }) => [styles.pointCard, pressed && styles.cardPressed]}>
         <GrowthBadge levelIndex={growthStatus(user?.total_points ?? 0).level.index} size={34} />
         <Text style={styles.pointLabel} maxFontSizeMultiplier={1.3}>
           {growthStatus(user?.total_points ?? 0).level.name}
@@ -215,7 +219,10 @@ export default function ProfileTab() {
         <Text style={styles.pointValue} maxFontSizeMultiplier={1.3}>
           경험치 {(user?.total_points ?? 0).toLocaleString('ko-KR')}점
         </Text>
-      </View>
+        <Text style={styles.chevron} maxFontSizeMultiplier={1.2}>
+          ›
+        </Text>
+      </Pressable>
 
       {/* 시안에는 없지만 여기 남긴다. 글자 크기는 잘 안 보이는 분이 찾는
           설정이라, 한 겹 안쪽에 넣으면 정작 필요한 분이 못 찾는다. */}

@@ -44,12 +44,53 @@ export function WeightChart({ logs }: Props) {
 
   if (logs.length === 0) return null;
 
-  // 점 하나로는 선이 안 된다. 빈 그래프 틀을 보여 주느니 다음에 할 일을 말한다.
+  // 하루치만 있어도 그래프 틀을 보여준다 — 점 하나가 찍혀 있어야 "여기에
+  // 쌓인다"는 것이 보이고, 내일 또 재고 싶어진다(오너 피드백).
   if (logs.length === 1) {
+    const only = logs[0];
     return (
-      <Text style={styles.singleLog} maxFontSizeMultiplier={1.3}>
-        기록이 하루치뿐이에요. 며칠 더 재면 여기에 변화가 그려져요.
-      </Text>
+      <View
+        style={styles.wrap}
+        accessible
+        accessibilityRole="image"
+        accessibilityLabel={`${formatMonthDay(only.log_date)} ${only.weight_kg}kg. 기록이 하루치예요.`}>
+        <View style={styles.plotRow}>
+          <View style={styles.axis}>
+            <Text style={styles.axisLabel} maxFontSizeMultiplier={1.2}>
+              {only.weight_kg}kg
+            </Text>
+            <Text style={styles.axisLabel} maxFontSizeMultiplier={1.2}>
+              {''}
+            </Text>
+          </View>
+          <View
+            style={styles.plot}
+            onLayout={(event: LayoutChangeEvent) => setWidth(event.nativeEvent.layout.width)}>
+            {width > 0 ? (
+              <Svg width={width} height={CHART_HEIGHT}>
+                <Line
+                  x1={0}
+                  y1={CHART_HEIGHT / 2}
+                  x2={width}
+                  y2={CHART_HEIGHT / 2}
+                  stroke={Colors.grey[300]}
+                  strokeWidth={2}
+                  strokeDasharray="5,5"
+                />
+                <Circle
+                  cx={INSET}
+                  cy={CHART_HEIGHT / 2}
+                  r={LAST_DOT_RADIUS}
+                  fill={Colors.primary}
+                />
+              </Svg>
+            ) : null}
+          </View>
+        </View>
+        <Text style={styles.singleLog} maxFontSizeMultiplier={1.3}>
+          {formatMonthDay(only.log_date)}에 시작하셨어요. 며칠 더 재면 선이 그려져요.
+        </Text>
+      </View>
     );
   }
 

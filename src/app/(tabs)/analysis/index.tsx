@@ -23,7 +23,7 @@ import type {
   WorkoutTrend,
 } from '@/lib/database.types';
 
-type Period = 'week' | 'month';
+type Period = 'week' | 'month' | 'all';
 
 /**
  * 30일이 아니라 28일(4주)인 이유: 30일을 7일씩 자르면 마지막 칸이 이틀짜리가
@@ -31,8 +31,11 @@ type Period = 'week' | 'month';
  * 읽히므로, 칸 길이가 항상 같도록 7의 배수로 끊는다.
  */
 const PERIODS = {
-  week: { label: '최근 7일', previousLabel: '지난 7일', days: 7, bucket: 'day' },
-  month: { label: '최근 4주', previousLabel: '지난 4주', days: 28, bucket: 'week' },
+  week: { label: '이번 주', previousLabel: '지난 7일', days: 7, bucket: 'day' },
+  month: { label: '이번 달', previousLabel: '지난 4주', days: 28, bucket: 'week' },
+  // 전체는 추이 그래프를 안 그린다 — 10년치를 주 단위로 쪼개면 막대가 수백 개다.
+  // 완료·세트·유산소 합계와 부위별 분포만 전체 범위로 보여준다.
+  all: { label: '전체', previousLabel: '', days: 3650, bucket: 'week' },
 } as const;
 
 /** 오늘을 포함해 정확히 days 일. 시작일을 하루라도 어긋나게 잡으면 주 단위가 안 맞는다. */
@@ -125,7 +128,8 @@ export default function AnalysisTab() {
 
     Promise.all([
       getWorkoutSummary(user!.id, from, to),
-      getWorkoutTrend(user!.id, from, to, PERIODS[period].bucket),
+      // 전체 기간은 추이를 안 그리므로 부르지도 않는다.
+      period === 'all' ? Promise.resolve(null) : getWorkoutTrend(user!.id, from, to, PERIODS[period].bucket),
     ])
       .then(([summaryResult, trendResult]) => {
         if (cancelled) return;
@@ -139,11 +143,14 @@ export default function AnalysisTab() {
 
     // 진행 상황 칸은 덤이다. 이것만 실패했다고 탭 전체를 에러로 덮으면
     // 볼 수 있는 숫자까지 못 보게 된다 — 그 칸만 조용히 빠진다.
-    getProgressSummary(user!.id, PERIODS[period].days)
-      .then((result) => {
-        if (!cancelled) setProgress(result);
-      })
-      .catch(() => {});
+    // 전체에서는 "최근 3650일 동안" 같은 이상한 문장이 되므로 뺀다.
+    if (period !== 'all') {
+      getProgressSummary(user!.id, PERIODS[period].days)
+        .then((result) => {
+          if (!cancelled) setProgress(result);
+        })
+        .catch(() => {});
+    }
 
     return () => {
       cancelled = true;
@@ -164,6 +171,7 @@ export default function AnalysisTab() {
         options={[
           { value: 'week', label: PERIODS.week.label },
           { value: 'month', label: PERIODS.month.label },
+          { value: 'all', label: PERIODS.all.label },
         ]}
         value={period}
         onChange={setPeriod}
@@ -173,7 +181,7 @@ export default function AnalysisTab() {
         <Text style={styles.errorText} maxFontSizeMultiplier={1.3} accessibilityLiveRegion="polite">
           {errorMessage}
         </Text>
-      ) : !summary || !trend ? (
+      ) : !summary || (period !== 'all' && !trend) ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
@@ -201,19 +209,21 @@ export default function AnalysisTab() {
               설명 문장은 여기 두지 않는다 — 출석·연속·증감은 위 ProgressCard 가
               이미 말했고, 같은 말을 두 번 하면 읽는 사람이 새 정보인 줄 알고
               다시 읽는다. 여기서는 세트 수 증감만 한 줄로 곁들인다. */}
-          <View style={styles.section}>
-            <View style={styles.sectionHead}>
-              <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
-                운동량 추이
-              </Text>
-              {compareSentence(trend, period) ? (
-                <Text style={styles.sectionAside} maxFontSizeMultiplier={1.2}>
-                  {compareSentence(trend, period)}
+          {trend && period !== 'all' ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHead}>
+                <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
+                  운동량 추이
                 </Text>
-              ) : null}
+                {compareSentence(trend, period) ? (
+                  <Text style={styles.sectionAside} maxFontSizeMultiplier={1.2}>
+                    {compareSentence(trend, period)}
+                  </Text>
+                ) : null}
+              </View>
+              <TrendChart points={trend.points} bucket={trend.bucket} />
             </View>
-            <TrendChart points={trend.points} bucket={trend.bucket} />
-          </View>
+          ) : null}
 
           {summary.by_muscle.length > 0 ? (
             <View style={styles.section}>
