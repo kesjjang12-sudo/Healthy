@@ -808,16 +808,13 @@ function LoggingView({
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
             수고하셨어요
           </Text>
-          <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-            앱이 잰 시간을 적어 뒀어요. 실제와 다르면 아래 숫자판으로 고쳐 주세요.
+          <Text style={[styles.helper, styles.helperLeft]} maxFontSizeMultiplier={1.3}>
+            시간이 다르면 고쳐 주세요.
           </Text>
         </View>
 
         <View style={styles.hero}>
-          <Text style={styles.heroValue} maxFontSizeMultiplier={1.2}>
-            {minutesText === '' ? '−' : minutesText}
-            <Text style={styles.heroUnit}>분</Text>
-          </Text>
+          <HeroAmount value={minutesText} unit="분" />
           {edited ? (
             <Text style={styles.heroSub} maxFontSizeMultiplier={1.2}>
               앱이 잰 시간은 {measuredMinutes}분이에요
@@ -846,8 +843,8 @@ function LoggingView({
         <Text style={styles.title} maxFontSizeMultiplier={1.2}>
           {`${item.target_sets ?? 1}세트 모두 끝났어요`}
         </Text>
-        <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          아래 버튼을 누르면 오늘 기록이 저장돼요.
+        <Text style={[styles.helper, styles.helperLeft]} maxFontSizeMultiplier={1.3}>
+          오늘 어떠셨어요?
         </Text>
       </View>
     );
@@ -862,20 +859,43 @@ function LoggingView({
         <Text style={styles.title} maxFontSizeMultiplier={1.2}>
           {item.target_sets ?? 1}세트 모두 끝났어요
         </Text>
-        <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          {isKg
-            ? '오늘 드신 무게가 몇 kg 이었나요? 다음에 시작점으로 알려드려요. 적으셨으면 아래에서 오늘 어떠셨는지 눌러 주세요 — 그걸로 마치기가 돼요.'
-            : '오늘 꽂으신 핀이 몇 번째 칸이었나요? 다음에 시작점으로 알려드려요. 적으셨으면 아래에서 오늘 어떠셨는지 눌러 주세요 — 그걸로 마치기가 돼요.'}
+        <Text style={[styles.helper, styles.helperLeft]} maxFontSizeMultiplier={1.3}>
+          {isKg ? '몇 kg 으로 하셨어요?' : '핀을 몇 칸에 꽂으셨어요?'}
         </Text>
       </View>
 
       <View style={styles.hero}>
-        <Text style={styles.heroValue} maxFontSizeMultiplier={1.2}>
-          {pin === '' ? '−' : pin}
-          <Text style={styles.heroUnit}>{isKg ? 'kg' : '칸'}</Text>
-        </Text>
+        <HeroAmount value={pin} unit={isKg ? 'kg' : '칸'} />
       </View>
     </>
+  );
+}
+
+/**
+ * 숫자판으로 채우는 큰 값 한 개.
+ *
+ * 빈 칸을 예전엔 '−' 로 뒀는데, 56px 짜리 빼기 기호는 글자 한가운데 높이에
+ * 그려져서 옆에 붙은 단위("칸")와 눈높이가 안 맞았다 — 파란 작대기가 허공에
+ * 떠 있는 것처럼 보였다(오너 피드백). 자리를 지키면서 눈높이도 맞는 건
+ * 흐린 '0' 이다. 한 자만 눌러도 사라지니 헷갈릴 일도 없다.
+ *
+ * 단위는 감싼 Text 안에 넣지 않고 baseline 로 나란히 세운다. 안쪽에 넣으면
+ * 줄높이(66)를 물려받아 아래로 내려앉는다.
+ */
+function HeroAmount({ value, unit }: { value: string; unit: string }) {
+  const isEmpty = value === '';
+
+  return (
+    <View style={styles.heroRow}>
+      <Text
+        style={[styles.heroValue, isEmpty && styles.heroValueEmpty]}
+        maxFontSizeMultiplier={1.2}>
+        {isEmpty ? '0' : value}
+      </Text>
+      <Text style={styles.heroUnit} maxFontSizeMultiplier={1.2}>
+        {unit}
+      </Text>
+    </View>
   );
 }
 
@@ -1143,6 +1163,10 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     color: Colors.primary,
   },
+  /** 제목이 왼쪽에 붙는 화면(숫자판)에서는 안내문도 왼쪽으로 맞춘다. */
+  helperLeft: {
+    textAlign: 'left',
+  },
   helper: {
     fontSize: FontSize.body,
     fontWeight: '500',
@@ -1243,8 +1267,20 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     textAlign: 'center',
   },
+  /** 숫자와 단위를 밑줄 높이로 나란히. 가운데 정렬은 감싼 hero 가 한다. */
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+  },
+  /** 아직 안 누른 자리. 흐리게 둬서 "적힌 값"으로 안 읽히게 한다. */
+  heroValueEmpty: {
+    color: Colors.textDisabled,
+  },
   heroUnit: {
-    fontSize: FontSize.subtitle,
+    fontSize: FontSize.title,
+    fontWeight: '700',
     color: Colors.textSecondary,
   },
   heroSub: {
