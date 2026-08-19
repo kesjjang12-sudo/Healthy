@@ -86,8 +86,22 @@ export default function WorkoutSummaryScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-        {card ? <PrimaryButton label="자랑하기" onPress={share} /> : null}
-        <PrimaryButton label="닫기" variant={card ? 'secondary' : 'primary'} onPress={goBack} />
+        {/* 카드가 있으면 [닫기 / 자랑하기]를 좌우로. 세로로 쌓으면 자리를 많이
+            먹어 정작 카드가 밀리고, 위쪽 버튼이 정답처럼 보인다. 앱의 다른
+            화면과 같은 규칙 — 회색이 왼쪽(보조), 파랑이 오른쪽(주 동작). */}
+        {card ? (
+          <View style={styles.footerRow}>
+            <PrimaryButton
+              label="닫기"
+              variant="secondary"
+              onPress={goBack}
+              style={styles.footerRowButton}
+            />
+            <PrimaryButton label="자랑하기" onPress={share} style={styles.footerRowButton} />
+          </View>
+        ) : (
+          <PrimaryButton label="닫기" onPress={goBack} />
+        )}
       </View>
     </View>
   );
@@ -398,6 +412,15 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: 'center',
     paddingVertical: Spacing.xxxl,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  footerRowButton: {
+    // 반반으로 나눠도 글자가 잘리지 않게 기본 좌우 여백을 줄인다.
+    flex: 1,
+    paddingHorizontal: Spacing.sm,
   },
   footer: {
     gap: Spacing.sm,
