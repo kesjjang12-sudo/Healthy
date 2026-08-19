@@ -437,10 +437,10 @@ function WorkoutSession({
           />
         ) : session.phase === 'resting' ? (
           <PrimaryButton label="바로 다음 세트" variant="secondary" onPress={() => session.skipRest()} />
-        ) : isCardio || !logsWeight ? (
+        ) : isCardio ? (
           <PrimaryButton
             label="기록하고 마치기"
-            disabled={isCardio && !isMinutesValid}
+            disabled={!isMinutesValid}
             loading={isSaving}
             onPress={() => void finishAndSave()}
           />
@@ -448,19 +448,24 @@ function WorkoutSession({
           /* 마치는 버튼이 곧 오늘 소감이다. 어느 쪽을 눌러도 기록되고,
              "힘들었어요"가 쌓이면 다음에 무게를 내려보자고 먼저 말을 건다.
              둘은 대등한 선택지라 위아래가 아니라 좌우로 놓는다 — 세로로 쌓으면
-             위쪽이 정답처럼 보이고, 아래 것을 고르려면 한참 내려봐야 한다. */
+             위쪽이 정답처럼 보이고, 아래 것을 고르려면 한참 내려봐야 한다.
+
+             맨몸운동도 여기로 온다. 예전엔 "기록하고 마치기" 한 개였는데,
+             그러면 소감이 늘 '할 만했어요'로 저장돼서 의자 스쿼트·벽 팔굽혀펴기는
+             힘들어한 기록이 서버에 한 번도 안 남았다. 꽂을 핀이 없을 뿐 힘든
+             정도는 똑같이 물을 수 있다. */
           <View style={styles.footerRow}>
             <PrimaryButton
               label="힘들었어요"
               variant="secondary"
-              disabled={pin.length === 0}
+              disabled={logsWeight && pin.length === 0}
               loading={isSaving}
               onPress={() => void finishAndSave('hard')}
               style={styles.footerRowButton}
             />
             <PrimaryButton
               label="할 만했어요"
-              disabled={pin.length === 0}
+              disabled={logsWeight && pin.length === 0}
               loading={isSaving}
               onPress={() => void finishAndSave('ok')}
               style={styles.footerRowButton}
@@ -838,15 +843,37 @@ function LoggingView({
   // 맨몸운동은 꽂을 핀이 없다. 없는 걸 물으면 대답을 못 해 마지막 버튼이
   // 안 눌린다 — 여기서 갈라 주는 게 그 화면의 출구다.
   if (!needsWeightLog(item)) {
+    const sets = item.target_sets ?? 1;
+
+    // 숫자판이 없으니 화면 한복판이 통째로 비어 있었다(오너 피드백). 빈 자리를
+    // 장식으로 채우는 대신, 방금 한 것을 그대로 되짚어 준다 — 무엇이 기록될지
+    // 눈으로 확인하고 아래 두 버튼으로 답하는 흐름이 된다.
     return (
-      <View style={styles.headings}>
-        <Text style={styles.title} maxFontSizeMultiplier={1.2}>
-          {`${item.target_sets ?? 1}세트 모두 끝났어요`}
-        </Text>
-        <Text style={[styles.helper, styles.helperLeft]} maxFontSizeMultiplier={1.3}>
-          오늘 어떠셨어요?
-        </Text>
-      </View>
+      <>
+        <View style={styles.headings}>
+          <Text style={styles.title} maxFontSizeMultiplier={1.2}>
+            {`${sets}세트 모두 끝났어요`}
+          </Text>
+          <Text style={[styles.helper, styles.helperLeft]} maxFontSizeMultiplier={1.3}>
+            오늘 어떠셨어요?
+          </Text>
+        </View>
+
+        {/* 사진이 없는 운동에는 "불러오지 못했어요" 자리표시가 뜬다 — 그건 빈
+            자리보다 나쁘다. 있을 때만 그린다(이미 받아 둔 것이라 새로 안 부른다). */}
+        {item.image_url ? <ExercisePhoto uri={item.image_url} name={primaryName(item)} /> : null}
+
+        <View style={styles.hero}>
+          <Text style={styles.heroLabel} maxFontSizeMultiplier={1.2}>
+            오늘 하신 만큼
+          </Text>
+          <Text style={styles.heroPhrase} maxFontSizeMultiplier={1.2}>
+            {formatVolume(item) ?? `${sets}세트`}
+          </Text>
+        </View>
+
+        <SetDots total={sets} done={sets} />
+      </>
     );
   }
 
