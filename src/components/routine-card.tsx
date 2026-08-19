@@ -56,7 +56,7 @@ export function RoutineCard({ item, order, onPress }: Props) {
     <>
       <View style={[styles.badge, done && styles.badgeDone]}>
         {done ? (
-          <CheckMark size={26} thickness={3} />
+          <CheckMark size={22} thickness={3} />
         ) : (
           <Text style={styles.badgeText} maxFontSizeMultiplier={1.2}>
             {order}
@@ -144,9 +144,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfacePressed,
   },
   badge: {
-    // 피드백: 숫자가 주인공이 아닌데 52는 과했다.
-    width: 36,
-    height: 36,
+    // 피드백: 숫자가 주인공이 아닌데 52는 과했다. 36도 크다는 피드백이 또
+    // 와서 한 단계 더 내렸다.
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: Radius.full,
@@ -156,7 +157,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success,
   },
   badgeText: {
-    fontSize: FontSize.body,
+    fontSize: 15,
     fontWeight: '700',
     letterSpacing: LetterSpacing.subtitle,
     color: Colors.textOnPrimary,
@@ -192,9 +193,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     // 숫자가 한 자리든 두 자리든 칩 너비가 같아야 목록의 오른쪽 끝이 흔들리지 않는다.
-    minWidth: 74,
+    minWidth: 62,
     paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.sm,
     borderRadius: Radius.md,
     backgroundColor: Colors.primaryFaint,
   },
@@ -202,13 +203,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfacePressed,
   },
   placeMain: {
-    fontSize: FontSize.subtitle,
+    fontSize: 15,
     fontWeight: '700',
     letterSpacing: LetterSpacing.subtitle,
     color: Colors.primary,
   },
   placeSub: {
-    fontSize: FontSize.caption,
+    fontSize: 13,
     fontWeight: '600',
     letterSpacing: LetterSpacing.body,
     color: Colors.primary,

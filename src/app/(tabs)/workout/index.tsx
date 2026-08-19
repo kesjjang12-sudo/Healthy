@@ -481,10 +481,10 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.8)',
   },
   progressCount: {
-    // 시안 히어로 카드의 카운트(36px).
-    fontSize: 36,
+    // 시안은 36px 였는데 화면에서 혼자 소리를 질렀다 — 30 으로.
+    fontSize: 30,
     fontWeight: '700',
-    lineHeight: 40,
+    lineHeight: 34,
     letterSpacing: LetterSpacing.subtitle,
     color: Colors.textOnPrimary,
     fontVariant: ['tabular-nums'],

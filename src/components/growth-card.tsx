@@ -25,7 +25,7 @@ export function GrowthCard({ xp }: { xp: number }) {
           : `내 호칭 ${status.level.name}. 경험치 ${xp}점. 가장 높은 호칭이에요.`
       }>
       <View style={styles.top}>
-        <GrowthBadge levelIndex={status.level.index} size={44} />
+        <GrowthBadge levelIndex={status.level.index} size={40} />
         <View style={styles.titles}>
           <Text style={styles.levelName} maxFontSizeMultiplier={1.2}>
             {status.level.name}

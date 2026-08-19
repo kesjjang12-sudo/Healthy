@@ -67,7 +67,7 @@ export function ListRow({
     <>
       {icon ? (
         <View style={[styles.tile, { backgroundColor: IconTint[tint] }]}>
-          <Icon name={icon} size={26} color="#FFFFFF" strokeWidth={2} />
+          <Icon name={icon} size={22} color="#FFFFFF" strokeWidth={2} />
         </View>
       ) : null}
 
@@ -147,11 +147,13 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.grey[100],
   },
   tile: {
-    width: 48,
-    height: 48,
+    // 부록 줄의 아이콘이 화면의 주인공(운동 목록 뱃지 36→32)보다 크면 눈이
+    // 아래로 끌려간다(오너 피드백 "아이콘들이 조금 크다") — 한 단계 아래로.
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 16,
+    borderRadius: 14,
   },
   texts: {
     flex: 1,
