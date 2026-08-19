@@ -384,10 +384,16 @@ const styles = StyleSheet.create({
   headings: {
     gap: Spacing.sm,
   },
+  /**
+   * 인사말. 아래 응원 한 줄과 같은 크기(18)로 맞춘다 — 오너 요청.
+   * 22 로 두면 응원글을 22 로 올려야 짝이 맞는데, 그러면 두 줄이 화면
+   * 위쪽을 다 먹어 정작 "오늘의 운동"이 밀린다. 그래서 큰 쪽을 내렸다.
+   * 둘의 구분은 이제 색이 맡는다 — 이름은 검정, 응원은 회색.
+   */
   title: {
-    fontSize: FontSize.title,
+    fontSize: FontSize.section,
     fontWeight: '700',
-    lineHeight: FontSize.title * 1.3,
+    lineHeight: FontSize.section * 1.45,
     letterSpacing: LetterSpacing.title,
     color: Colors.text,
   },
