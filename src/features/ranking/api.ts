@@ -1,4 +1,4 @@
-import type { LeaderboardRow } from '@/lib/database.types';
+import type { ApartmentWeek, LeaderboardOrder, LeaderboardRow } from '@/lib/database.types';
 import {
   GENERIC_ERROR_MESSAGE,
   NETWORK_ERROR_MESSAGE,
@@ -25,12 +25,34 @@ function toRankingError(error: RpcError): RankingError {
 }
 
 /** 같은 단지 랭킹. 닉네임/포인트만 오고 전화번호 등 PII 는 없다. */
-export async function getApartmentLeaderboard(aptId: string, limit = 50): Promise<LeaderboardRow[]> {
+export async function getApartmentLeaderboard(
+  aptId: string,
+  order: LeaderboardOrder = 'attendance',
+  limit = 50,
+): Promise<LeaderboardRow[]> {
   const { data, error } = await supabase.rpc('get_apartment_leaderboard', {
     p_apt_id: aptId,
     p_limit: limit,
+    p_order: order,
   });
 
   if (error) throw toRankingError(error);
   return data ?? [];
+}
+
+/** 이번 주 단지 현황(요일별 출석·공동 목표·응원). */
+export async function getApartmentWeek(aptId: string): Promise<ApartmentWeek> {
+  const { data, error } = await supabase.rpc('get_apartment_week', { p_apt_id: aptId });
+  if (error) throw toRankingError(error);
+  return data as ApartmentWeek;
+}
+
+/** 오늘의 응원 남기기(하루 하나, 다시 누르면 바꾼다). 갱신된 주간 현황이 돌아온다. */
+export async function cheerApartment(aptId: string, emoji: string): Promise<ApartmentWeek> {
+  const { data, error } = await supabase.rpc('cheer_apartment', {
+    p_apt_id: aptId,
+    p_emoji: emoji,
+  });
+  if (error) throw toRankingError(error);
+  return data as ApartmentWeek;
 }

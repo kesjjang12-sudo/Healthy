@@ -18,7 +18,6 @@ import {
   listMyGymMemberships,
   makeGymPrimary,
 } from '@/features/gym-membership/api';
-import { getHealthConnectionStatus } from '@/features/health/provider';
 import { updateProfileData } from '@/features/onboarding/api';
 import { useFontScale } from '@/features/settings/font-scale';
 import { copyToClipboard } from '@/lib/clipboard';
@@ -203,10 +202,8 @@ export default function ProfileTab() {
         <Text style={styles.sectionTitle} maxFontSizeMultiplier={1.2}>
           글자 크기
         </Text>
+        {/* 설명 문구는 뺐다 — 누르면 화면 전체가 그 자리에서 바뀌니 말이 필요 없다. */}
         <FontScalePicker value={fontScale} onChange={(next) => void selectFontScale(next)} />
-        <Text style={styles.helper} maxFontSizeMultiplier={1.3}>
-          누르시면 앱 전체 글씨가 바로 바뀌어요.
-        </Text>
       </View>
 
       <View style={styles.divider} />
@@ -265,31 +262,18 @@ export default function ProfileTab() {
         </Text>
 
         <View style={styles.rows}>
-          {/* getHealthConnectionStatus() 는 지금 항상 'unavailable' 이다
-              (features/health/provider.ts 참고) — 네이티브 모듈 없이는 실제
-              연동을 할 수 없어 "준비 중"만 정직하게 보여준다. */}
-          {getHealthConnectionStatus() === 'unavailable' ? (
-            <ListRow
-                divider
-              icon="heart"
-              tint="red"
-              title="애플 헬스 · Health Connect"
-              subtitle="연결되면 걸음 수와 활동 시간을 자동으로 불러와요"
-              value="준비 중"
-              valueTone="secondary"
-            />
-          ) : null}
+          {/* 애플 헬스 "준비 중" 행은 뺐다 — 눌러도 아무 일 없는 행은 자리만
+              차지한다. 실제로 연동되는 날 다시 넣는다(health/provider.ts). */}
 
           {/* 고객대응용 계정번호. 문의 전화·채팅에서 "계정번호 알려주세요"
-              한마디로 회원을 특정하기 위한 값이라, 눈에 띌 필요는 없고 찾을 수
-              있으면 된다. 행 전체가 복사 버튼이다 — 작은 칩보다 누르기 쉽다. */}
+              한마디로 회원을 특정하기 위한 값. 행 전체가 복사 버튼이다. */}
           {user?.support_code ? (
             <ListRow
-                divider
+              divider
               icon="person"
               tint="grey"
               title="계정번호"
-              subtitle={codeCopied ? '복사했어요' : '문의할 때 알려주세요 · 누르면 복사돼요'}
+              subtitle={codeCopied ? '복사했어요' : '누르면 복사돼요'}
               value={user.support_code}
               onPress={() => void copySupportCode()}
               accessibilityLabel={`계정번호 ${user.support_code}, 누르면 복사해요`}
@@ -297,7 +281,7 @@ export default function ProfileTab() {
           ) : null}
 
           <ListRow
-                divider
+            divider
             icon="document"
             tint="grey"
             title="이용약관"
@@ -305,7 +289,7 @@ export default function ProfileTab() {
             onPress={() => router.push('/legal/terms')}
           />
           <ListRow
-                divider
+            divider
             icon="document"
             tint="grey"
             title="개인정보처리방침"
@@ -313,11 +297,11 @@ export default function ProfileTab() {
             onPress={() => router.push('/legal/privacy')}
           />
           <ListRow
-                divider
+            divider
             icon="logout"
             tint="grey"
             title="로그아웃"
-            subtitle={providerLabel ? `${providerLabel}로 로그인되어 있어요` : undefined}
+            subtitle={providerLabel ? `${providerLabel} 로그인` : undefined}
             chevron
             onPress={() => setIsLogoutAsking(true)}
           />

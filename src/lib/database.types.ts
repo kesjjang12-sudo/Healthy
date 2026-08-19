@@ -519,11 +519,28 @@ export type LeaderboardRow = {
   rank: number;
   /** 닉네임이 없으면 "회원xxxx" 형태로 대체된다. 전화번호 등 PII 는 절대 노출하지 않는다. */
   nickname: string;
-  /** 랭킹 정렬 기준. 포인트는 자기신고라 검증이 안 돼서 순위는 이걸로만 매긴다. */
+  /** 출석순일 때의 정렬 기준. 키오스크 체크인이 있어야만 쌓여 조작이 어렵다. */
   attendance_count: number;
-  /** 참고용으로만 같이 내려온다. 정렬에는 안 쓰인다. */
+  /** 포인트순일 때의 정렬 기준(운동 완료로 쌓이는 자기신고값). */
   total_points: number;
   is_me: boolean;
+};
+
+/** 랭킹 정렬 기준 */
+export type LeaderboardOrder = 'attendance' | 'points';
+
+/** get_apartment_week 응답 — 랭킹 탭 상단 "우리 단지 이번 주" 카드 */
+export type ApartmentWeek = {
+  week_start: string;
+  days: { date: string; count: number }[];
+  total_checkins: number;
+  /** 단지 공동 목표(회). 활동 멤버 x 주 2회, 최소 6. */
+  goal: number;
+  member_count: number;
+  my_checkins: number;
+  cheers: { emoji: string; count: number }[];
+  /** 오늘 내가 남긴 응원 이모지. 아직 안 남겼으면 null. */
+  my_cheer: string | null;
 };
 
 /** postgrest-js 가 임베디드 select 를 추론할 때 쓰는 외래키 정보 */
@@ -752,8 +769,16 @@ export type Database = {
         Returns: VisitStats;
       };
       get_apartment_leaderboard: {
-        Args: { p_apt_id: string; p_limit?: number };
+        Args: { p_apt_id: string; p_limit?: number; p_order?: LeaderboardOrder };
         Returns: LeaderboardRow[];
+      };
+      get_apartment_week: {
+        Args: { p_apt_id: string };
+        Returns: ApartmentWeek;
+      };
+      cheer_apartment: {
+        Args: { p_apt_id: string; p_emoji: string };
+        Returns: ApartmentWeek;
       };
       get_equipment_by_qr: {
         Args: { p_qr_code: string };

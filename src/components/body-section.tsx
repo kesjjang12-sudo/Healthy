@@ -105,6 +105,11 @@ export function BodySection() {
         </View>
       </View>
 
+      {/* 그래프가 먼저다 — 이 섹션에서 궁금한 건 "빠지고 있나"이고, 그 답은
+          그래프가 준다(위 운동 추세 차트와 같은 순서: 숫자 → 그림 → 입력).
+          입력칸이 먼저 있으면 그래프가 화면 밖으로 밀려 있는 줄도 모른다. */}
+      <WeightChart logs={status.logs} />
+
       <View style={styles.inputRow}>
         <View style={styles.inputGrow}>
           <TextField
@@ -135,8 +140,6 @@ export function BodySection() {
           {message}
         </Text>
       ) : null}
-
-      <WeightChart logs={status.logs} />
 
       {status.logs.length > 0 ? (
         <View style={styles.logs}>

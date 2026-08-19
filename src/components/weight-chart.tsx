@@ -142,6 +142,11 @@ export function WeightChart({ logs }: Props) {
 const styles = StyleSheet.create({
   wrap: {
     gap: Spacing.sm,
+    // 위 운동 추세 차트와 같은 옷 — 회색 면 위의 그래프. 흰 바탕에 선만 있으면
+    // 어디부터 어디까지가 그래프인지 경계가 없다.
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.surface,
   },
   plotRow: {
     flexDirection: 'row',
