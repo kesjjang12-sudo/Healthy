@@ -332,9 +332,12 @@ export default function WorkoutTab() {
                 />
               ) : null}
               <View style={styles.shortcutTiles}>
+                {/* 셋을 같은 파랑으로 두니 한 덩어리로 보여 무엇이 무엇인지
+                    구분이 안 됐다(오너 피드백). 성격에 맞는 색을 따로 준다 —
+                    배우기는 초록, 찍기는 앱 주색인 파랑, 몸풀기는 주황. */}
                 <ShortcutTile
                   icon="dumbbell"
-                  tint="blue"
+                  tint="green"
                   label="기구 사용법"
                   accessibilityLabel="기구 사용법 모아보기. 오늘 목록에 없는 기구도 부위별로 찾아볼 수 있어요"
                   onPress={() => router.push('/workout/guide')}
@@ -348,7 +351,7 @@ export default function WorkoutTab() {
                 />
                 <ShortcutTile
                   icon="play"
-                  tint="blue"
+                  tint="orange"
                   label="스트레칭"
                   accessibilityLabel="스트레칭 보기. 운동 전후 5분, 다치지 않게 풀어 주세요"
                   onPress={() => router.push('/workout/stretching')}

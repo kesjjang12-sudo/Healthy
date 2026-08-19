@@ -677,6 +677,12 @@ function WorkingView({
         {primaryName(item)}
       </Text>
 
+      {/* 세트를 도는 동안에도 자세를 볼 수 있어야 한다. 시작 화면에서 사진을
+          봤더라도 시작을 누르는 순간 사라져서, 정작 기구 앞에서 "이게 맞나"
+          싶을 때 확인할 데가 없었다(오너 피드백). 사진은 이미 받아 둔 것이라
+          여기 한 번 더 그려도 새로 불러오지 않는다. */}
+      <ExercisePhoto uri={item.image_url} name={primaryName(item)} />
+
       <View style={styles.hero}>
         <Text style={styles.heroLabel} maxFontSizeMultiplier={1.2}>
           {totalSets}세트 중
@@ -692,6 +698,16 @@ function WorkingView({
       </View>
 
       <SetDots total={totalSets} done={currentSet - 1} />
+
+      {/* 사진으로 부족하면 영상까지 갈 수 있게 한다. 하단 버튼은 "세트 완료"가
+          맡고 있어서, 영상은 여기 본문에 둔다. */}
+      {item.video_url ? (
+        <PrimaryButton
+          label="영상으로 보기"
+          variant="secondary"
+          onPress={() => void Linking.openURL(item.video_url).catch(() => {})}
+        />
+      ) : null}
 
       <WeightGuide item={item} />
     </>
