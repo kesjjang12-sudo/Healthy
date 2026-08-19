@@ -57,13 +57,26 @@ export default function Root({ children }: PropsWithChildren) {
             없는 긴 문자열(주소·계정번호)이 화면 밖으로 삐져나가므로,
             overflow-wrap 으로 그런 경우에만 강제로 끊는다.
 
+            여기서 anywhere 를 쓰면 안 된다. anywhere 는 "이 글은 아무데서나
+            끊어도 된다"고 브라우저에 알려주는 값이라, 칸 너비를 재는 단계
+            (min-content)부터 반영된다 — 가로로 늘어선 목록 행처럼 옆에 다른
+            것이 있는 자리에서 글칸이 한 글자 너비까지 쭈그러들 수 있고, 그러면
+            keep-all 을 줬는데도 어절이 중간에서 찢어진다. 글자 크기를 크게로
+            올리면 자리가 더 빠듯해져서 더 자주 나타난다.
+            break-word 는 칸 너비 계산에는 끼어들지 않고, 한 어절이 혼자서도
+            한 줄에 안 들어갈 때만 마지막 수단으로 끊는다. 그게 우리가 원하는
+            동작이다.
+
+            선택자는 * 로 둔다. 태그를 나열해 두면 새 태그가 생길 때마다 빠지고,
+            빠진 곳만 조용히 예전 방식으로 끊긴다.
+
             React Native Web 은 Text 를 div 로 그리므로 CSS 가 그대로 먹는다. */}
         <style
           dangerouslySetInnerHTML={{
             __html: `
-              html, body, div, span, p, h1, h2, h3, h4, li, td, th, button, input, textarea {
+              *, *::before, *::after {
                 word-break: keep-all;
-                overflow-wrap: anywhere;
+                overflow-wrap: break-word;
               }
             `,
           }}
