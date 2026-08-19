@@ -209,7 +209,7 @@ export default function EquipmentGuideScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-        <PrimaryButton label="운동 목록으로" onPress={goBack} />
+        <PrimaryButton label="홈으로" onPress={goBack} />
       </View>
     </View>
   );

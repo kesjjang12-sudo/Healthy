@@ -95,7 +95,7 @@ export default function EquipmentExploreScreen() {
           </View>
         </ScrollView>
         <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-          <PrimaryButton label="운동 목록으로" onPress={goBack} />
+          <PrimaryButton label={fromGuide ? '기구 목록으로' : '홈으로'} onPress={goBack} />
         </View>
       </View>
     );

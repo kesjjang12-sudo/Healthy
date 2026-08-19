@@ -103,7 +103,7 @@ export default function EquipmentScanScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-        <PrimaryButton label="운동 목록으로" onPress={() => router.back()} />
+        <PrimaryButton label="홈으로" onPress={() => router.back()} />
       </View>
     </View>
   );

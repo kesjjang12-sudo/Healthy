@@ -123,7 +123,7 @@ export default function RoutineDetailScreen() {
         </ScrollView>
 
         <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-          <PrimaryButton label="목록으로" variant={errorMessage ? 'secondary' : 'primary'} onPress={goBack} />
+          <PrimaryButton label="홈으로" variant={errorMessage ? 'secondary' : 'primary'} onPress={goBack} />
         </View>
       </View>
     );
@@ -384,19 +384,27 @@ function WorkoutSession({
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
         {isFinished ? (
-          <>
-            {/* 방금 끝낸 직후가 가장 뿌듯한 순간이다. 카드를 여기서 바로 연다. */}
-            <PrimaryButton label="오늘 운동 카드 보기" onPress={onShowCard} />
+          /* 방금 끝낸 직후가 가장 뿌듯한 순간이다. 카드를 여기서 바로 연다.
+             돌아가는 곳은 운동 탭이 아니라 홈이 됐으니(탭 이름을 홈으로 바꿨다)
+             버튼 글자도 "홈으로"로 맞춘다 — 화면에 없는 이름을 부르면 어디로
+             가는지 알 수 없다. */
+          <View style={styles.footerRow}>
             <PrimaryButton
-              label="목록으로"
+              label="홈으로"
               variant="secondary"
               onPress={() =>
                 saveError
                   ? onExit()
                   : onExitCompleted(item.name_ko ?? item.name, pointsAwarded)
               }
+              style={styles.footerRowButton}
             />
-          </>
+            <PrimaryButton
+              label="운동 카드 보기"
+              onPress={onShowCard}
+              style={styles.footerRowButton}
+            />
+          </View>
         ) : session.phase === 'ready' ? (
           item.video_url ? (
             <View style={styles.footerRow}>
@@ -433,23 +441,27 @@ function WorkoutSession({
             onPress={() => void finishAndSave()}
           />
         ) : (
-          <>
-            {/* 마치는 버튼이 곧 오늘 소감이다. 어느 쪽을 눌러도 기록되고,
-                "힘들었어요"가 쌓이면 다음에 무게를 내려보자고 먼저 말을 건다. */}
-            <PrimaryButton
-              label="할 만했어요"
-              disabled={pin.length === 0}
-              loading={isSaving}
-              onPress={() => void finishAndSave('ok')}
-            />
+          /* 마치는 버튼이 곧 오늘 소감이다. 어느 쪽을 눌러도 기록되고,
+             "힘들었어요"가 쌓이면 다음에 무게를 내려보자고 먼저 말을 건다.
+             둘은 대등한 선택지라 위아래가 아니라 좌우로 놓는다 — 세로로 쌓으면
+             위쪽이 정답처럼 보이고, 아래 것을 고르려면 한참 내려봐야 한다. */
+          <View style={styles.footerRow}>
             <PrimaryButton
               label="힘들었어요"
               variant="secondary"
               disabled={pin.length === 0}
               loading={isSaving}
               onPress={() => void finishAndSave('hard')}
+              style={styles.footerRowButton}
             />
-          </>
+            <PrimaryButton
+              label="할 만했어요"
+              disabled={pin.length === 0}
+              loading={isSaving}
+              onPress={() => void finishAndSave('ok')}
+              style={styles.footerRowButton}
+            />
+          </View>
         )}
       </View>
     </View>
