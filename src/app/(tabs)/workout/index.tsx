@@ -397,9 +397,9 @@ const styles = StyleSheet.create({
    * 색(검정 vs 회색)이 잡는다.
    */
   greetingSub: {
-    fontSize: FontSize.body,
+    fontSize: FontSize.section,
     fontWeight: '700',
-    lineHeight: FontSize.body * 1.5,
+    lineHeight: FontSize.section * 1.45,
     letterSpacing: LetterSpacing.body,
     color: Colors.textSecondary,
   },
