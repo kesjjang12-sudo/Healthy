@@ -15,21 +15,29 @@ export type Stretch = {
   steps: readonly string[];
   /** 유지 시간 안내. 동적 스트레칭(운동 전)은 없을 수 있다. */
   hold?: string;
+  /** 자세 사진. 기구 도감과 같은 퍼블릭 도메인 저장소(free-exercise-db)에서 온다. */
+  image?: string;
 };
+
+/** 기구 사진과 같은 저장소 — 퍼블릭 도메인(Unlicense)이라 출처 표기 의무도 없다. */
+const IMG = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises';
 
 export const WARM_UP_STRETCHES: readonly Stretch[] = [
   {
     name: '목 좌우로 기울이기',
+    image: `${IMG}/Side_Neck_Stretch/0.jpg`,
     steps: ['정면을 보고 편하게 서요.', '한쪽 귀를 어깨 쪽으로 천천히 기울여요.', '반대쪽도 같은 만큼 기울여요.'],
     hold: '양쪽 각 5초씩, 3번',
   },
   {
     name: '어깨 돌리기',
+    image: `${IMG}/Shoulder_Circles/0.jpg`,
     steps: ['양쪽 어깨를 귀 쪽으로 으쓱 올렸다 내려요.', '이어서 어깨를 앞에서 뒤로 크게 돌려요.'],
     hold: '10회',
   },
   {
     name: '팔 벌려 크게 돌리기',
+    image: `${IMG}/Arm_Circles/0.jpg`,
     steps: ['양팔을 옆으로 벌려요.', '작은 원에서 시작해 점점 크게 돌려요.'],
     hold: '앞으로 10회, 뒤로 10회',
   },
@@ -43,6 +51,7 @@ export const WARM_UP_STRETCHES: readonly Stretch[] = [
 export const COOL_DOWN_STRETCHES: readonly Stretch[] = [
   {
     name: '앉아서 다리 뻗어 앞으로 숙이기',
+    image: `${IMG}/Seated_Floor_Hamstring_Stretch/0.jpg`,
     steps: [
       '의자에 앉거나 바닥에 앉아 한쪽 다리를 앞으로 펴요.',
       '무릎을 편 채로 허리부터 천천히 숙여요.',
@@ -52,6 +61,7 @@ export const COOL_DOWN_STRETCHES: readonly Stretch[] = [
   },
   {
     name: '종아리 늘리기',
+    image: `${IMG}/Calf_Stretch_Hands_Against_Wall/0.jpg`,
     steps: [
       '벽이나 의자를 짚고 서요.',
       '한쪽 다리를 뒤로 뻗고 뒤꿈치를 바닥에 붙인 채 무릎을 펴요.',
@@ -61,11 +71,13 @@ export const COOL_DOWN_STRETCHES: readonly Stretch[] = [
   },
   {
     name: '가슴 펴고 양손 뒤로 잡기',
+    image: `${IMG}/Chest_And_Front_Of_Shoulder_Stretch/0.jpg`,
     steps: ['등받이 없는 의자나 선 자세에서 양손을 등 뒤로 모아요.', '어깨를 뒤로 펴며 가슴을 열어요.'],
     hold: '15~20초',
   },
   {
     name: '허리 좌우로 비틀기',
+    image: `${IMG}/Torso_Rotation/0.jpg`,
     steps: ['의자에 앉아 등을 곧게 펴요.', '상체만 천천히 한쪽으로 돌려요.', '반대쪽도 같은 만큼 돌려요.'],
     hold: '양쪽 각 10초',
   },

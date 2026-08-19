@@ -9,11 +9,15 @@ import { Colors } from '@/constants/theme';
  *
  * 12시에서 시작해 시계 방향으로 찬다. 목표를 넘으면 초록으로 바뀐다.
  */
+/** 게이지 끝 배지의 지름. 링 밖으로 절반쯤 걸치도록 위치를 잡는다. */
+const TIP_SIZE = 44;
+
 export function ProgressRing({
   progress,
   size = 168,
   stroke = 14,
   children,
+  tip,
 }: {
   /** 0~1. 1 이상이면 꽉 찬 초록 링. */
   progress: number;
@@ -21,11 +25,21 @@ export function ProgressRing({
   stroke?: number;
   /** 링 중앙에 올라갈 내용. */
   children?: React.ReactNode;
+  /**
+   * 게이지 끝(선발대)에 붙는 배지 내용. 국토종주 링의 배낭 배지와 같은
+   * 문법 — "우리가 지금 여기까지 왔다"를 점 하나 대신 얼굴 있는 표식으로.
+   */
+  tip?: React.ReactNode;
 }) {
   const clamped = Math.min(Math.max(progress, 0), 1);
   const done = progress >= 1;
   const r = (size - stroke) / 2;
   const circumference = 2 * Math.PI * r;
+
+  // 12시에서 시작해 시계 방향으로 clamped 만큼 간 지점.
+  const angle = -Math.PI / 2 + clamped * 2 * Math.PI;
+  const tipX = size / 2 + r * Math.cos(angle) - TIP_SIZE / 2;
+  const tipY = size / 2 + r * Math.sin(angle) - TIP_SIZE / 2;
 
   return (
     <View style={{ width: size, height: size }}>
@@ -34,7 +48,7 @@ export function ProgressRing({
           cx={size / 2}
           cy={size / 2}
           r={r}
-          stroke={Colors.grey[100]}
+          stroke={Colors.primaryFaint}
           strokeWidth={stroke}
           fill="none"
         />
@@ -53,6 +67,15 @@ export function ProgressRing({
         />
       </Svg>
       <View style={styles.center}>{children}</View>
+      {tip ? (
+        <View
+          style={[
+            styles.tip,
+            { left: tipX, top: tipY, borderColor: done ? Colors.success : Colors.primary },
+          ]}>
+          {tip}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -64,6 +87,16 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tip: {
+    position: 'absolute',
+    width: TIP_SIZE,
+    height: TIP_SIZE,
+    borderRadius: TIP_SIZE / 2,
+    borderWidth: 3,
+    backgroundColor: Colors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },

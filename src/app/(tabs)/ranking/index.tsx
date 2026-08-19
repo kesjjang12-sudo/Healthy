@@ -4,6 +4,7 @@ import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GrowthBadge } from '@/components/growth-badge';
+import { Icon } from '@/components/icon';
 import { ProgressRing } from '@/components/progress-ring';
 import { SegmentedControl } from '@/components/segmented-control';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
@@ -24,7 +25,13 @@ import type {
 } from '@/lib/database.types';
 
 const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
-const CHEER_EMOJIS = ['💪', '🔥', '👏'] as const;
+
+/**
+ * 응원은 겉으로는 버튼 하나다. DB 는 이모지 세 종을 받게 돼 있지만
+ * (apartment_cheers.emoji check) 화면에 이모지를 늘어놓으니 싸구려처럼
+ * 보였다(오너 피드백 "짜친다") — 종류 구분은 접고 개수만 보여준다.
+ */
+const CHEER_EMOJI = '💪';
 
 /**
  * 랭킹 탭 = 우리 단지의 화합의 장.
@@ -258,10 +265,21 @@ function WeekCard({
         </Text>
       </View>
 
-      {/* 국토종주 링과 같은 문법 — 목표를 향해 차오르는 원. 막대보다
-          "어디로 가는 중"이라는 느낌이 산다(오너 피드백). */}
+      {/* 국토종주 링과 같은 문법 — 목표를 향해 차오르는 원, 게이지 끝에는
+          트로피 배지(선발대). 막대보다 "어디로 가는 중"이라는 느낌이 산다. */}
       <View style={styles.ringWrap}>
-        <ProgressRing progress={progress} size={172}>
+        <ProgressRing
+          progress={progress}
+          size={216}
+          stroke={16}
+          tip={
+            <Icon
+              name="trophy"
+              size={22}
+              color={done ? Colors.success : Colors.primary}
+              strokeWidth={2}
+            />
+          }>
           <Text style={styles.ringLabel} maxFontSizeMultiplier={1.2}>
             {done ? '목표 달성!' : '단지 출석'}
           </Text>
@@ -269,7 +287,7 @@ function WeekCard({
             {week.total_checkins}
           </Text>
           <Text style={styles.ringGoal} maxFontSizeMultiplier={1.2}>
-            목표 {week.goal}번
+            / 목표 {week.goal}번
           </Text>
         </ProgressRing>
       </View>
@@ -296,35 +314,40 @@ function WeekCard({
         ))}
       </View>
 
-      {/* 응원. 누르면 오늘의 내 응원이 된다(다시 누르면 바꾸기). */}
-      <View style={styles.cheerRow}>
-        {CHEER_EMOJIS.map((emoji) => {
-          const count = week.cheers.find((c) => c.emoji === emoji)?.count ?? 0;
-          const mine = week.my_cheer === emoji;
-          return (
-            <Pressable
-              key={emoji}
-              onPress={() => onCheer(emoji)}
-              disabled={isCheering}
-              accessibilityRole="button"
-              accessibilityLabel={`${emoji} 응원 ${count}개${mine ? ', 내가 남긴 응원' : ''}`}
-              style={({ pressed }) => [
-                styles.cheerButton,
-                mine && styles.cheerButtonMine,
-                pressed && styles.cheerButtonPressed,
-              ]}>
-              <Text style={styles.cheerEmoji} maxFontSizeMultiplier={1.2}>
-                {emoji}
-              </Text>
-              <Text
-                style={[styles.cheerCount, mine && styles.cheerCountMine]}
-                maxFontSizeMultiplier={1.2}>
+      {/* 응원 — 버튼 하나. 누르면 오늘의 내 응원이 남는다. */}
+      {(() => {
+        const count = week.cheers.reduce((sum, c) => sum + c.count, 0);
+        const mine = week.my_cheer !== null;
+        return (
+          <Pressable
+            onPress={() => onCheer(CHEER_EMOJI)}
+            disabled={isCheering || mine}
+            accessibilityRole="button"
+            accessibilityLabel={
+              mine ? `오늘 응원했어요. 이번 주 응원 ${count}개` : `단지에 응원 보내기. 이번 주 응원 ${count}개`
+            }
+            style={({ pressed }) => [
+              styles.cheerButton,
+              mine && styles.cheerButtonMine,
+              pressed && !mine && styles.cheerButtonPressed,
+            ]}>
+            <Icon
+              name="heart"
+              size={18}
+              color={mine ? Colors.primary : Colors.textSecondary}
+              strokeWidth={2}
+            />
+            <Text style={[styles.cheerLabel, mine && styles.cheerLabelMine]} maxFontSizeMultiplier={1.2}>
+              {mine ? '오늘 응원했어요' : '응원 보내기'}
+            </Text>
+            {count > 0 ? (
+              <Text style={[styles.cheerCount, mine && styles.cheerCountMine]} maxFontSizeMultiplier={1.2}>
                 {count}
               </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+            ) : null}
+          </Pressable>
+        );
+      })()}
     </View>
   );
 }
@@ -462,20 +485,15 @@ const styles = StyleSheet.create({
   weekDayLabelToday: {
     color: Colors.primary,
   },
-  cheerRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    marginTop: Spacing.xs,
-  },
   cheerButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.xs,
+    gap: Spacing.sm,
     paddingVertical: Spacing.md,
     borderRadius: Radius.md,
     backgroundColor: Colors.background,
+    marginTop: Spacing.xs,
   },
   cheerButtonMine: {
     backgroundColor: Colors.primaryFaint,
@@ -483,11 +501,17 @@ const styles = StyleSheet.create({
   cheerButtonPressed: {
     backgroundColor: Colors.surfacePressed,
   },
-  cheerEmoji: {
-    fontSize: FontSize.label,
+  cheerLabel: {
+    fontSize: FontSize.body,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+  },
+  cheerLabelMine: {
+    color: Colors.primary,
   },
   cheerCount: {
-    fontSize: FontSize.caption,
+    fontSize: FontSize.body,
     fontWeight: '700',
     color: Colors.textSecondary,
     fontVariant: ['tabular-nums'],

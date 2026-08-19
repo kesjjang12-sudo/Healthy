@@ -457,7 +457,8 @@ const styles = StyleSheet.create({
     color: Colors.primaryPressed,
   },
   pointValue: {
-    fontSize: FontSize.headline,
+    // 호칭 글자(body)와 같은 크기로 — 한 줄에서 값만 크면 따로 논다(오너 피드백).
+    fontSize: FontSize.body,
     fontWeight: '700',
     letterSpacing: LetterSpacing.subtitle,
     color: Colors.primary,

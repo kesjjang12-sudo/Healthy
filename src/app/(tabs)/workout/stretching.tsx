@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ExercisePhoto } from '@/components/exercise-photo';
 import { PrimaryButton } from '@/components/primary-button';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import {
@@ -69,6 +70,11 @@ function StretchSection({ title, items }: { title: string; items: readonly Stret
                 </Text>
               ) : null}
             </View>
+            {/* 자세 사진(퍼블릭 도메인). 글보다 그림이 먼저다 — 사진 없는
+                동작(제자리 걷기)은 자리 표시 없이 글만 남는다. */}
+            {stretch.image ? (
+              <ExercisePhoto uri={stretch.image} name={stretch.name} />
+            ) : null}
             <View style={styles.steps}>
               {stretch.steps.map((step, index) => (
                 <View key={step} style={styles.step}>
