@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,7 +13,6 @@ import { useAuthSession } from '@/features/auth/auth-session';
 import { growthStatus } from '@/features/growth/levels';
 import {
   RankingError,
-  cheerApartment,
   getApartmentLeaderboard,
   getApartmentWeek,
   getGlobalLeaderboard,
@@ -25,13 +25,6 @@ import type {
 } from '@/lib/database.types';
 
 const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
-
-/**
- * 응원은 겉으로는 버튼 하나다. DB 는 이모지 세 종을 받게 돼 있지만
- * (apartment_cheers.emoji check) 화면에 이모지를 늘어놓으니 싸구려처럼
- * 보였다(오너 피드백 "짜친다") — 종류 구분은 접고 개수만 보여준다.
- */
-const CHEER_EMOJI = '💪';
 
 /** 유산소 분 → km. 국토종주와 같은 환산이라 두 화면의 숫자가 서로 맞는다. */
 const KM_PER_MINUTE = 0.15;
@@ -51,14 +44,15 @@ function formatWeight(kg: number): string {
  *
  * 위에는 "우리 단지 이번 주" — 개인 순위 전에 단지 공동 목표부터 보인다.
  * 출석은 혼자 하는 일이지만 목표는 같이 채우는 것이라, 경쟁(아래 순위표)보다
- * 협동(위 카드)을 먼저 놓는다. 응원은 글·사진 없이 이모지 하나다 — 하루 한 번,
- * 부담 없이 "나 오늘도 봤다"만 남긴다.
+ * 협동(위 카드)을 먼저 놓는다. 응원은 이웃끼리 하루 한 줄씩 남기는 글이고,
+ * 여기서는 문만 열어 준다(ranking/cheers).
  *
  * 순위는 두 갈래로 세운다. 출석은 키오스크 체크인이 있어야만 쌓여 조작이
  * 어렵고, 포인트는 운동 완료로 쌓이는 노력값이다.
  */
 export default function RankingTab() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { user } = useAuthSession();
 
   const [order, setOrder] = useState<LeaderboardOrder>('attendance');
@@ -66,7 +60,6 @@ export default function RankingTab() {
   const [rows, setRows] = useState<LeaderboardRow[] | GlobalLeaderboardRow[] | null>(null);
   const [week, setWeek] = useState<ApartmentWeek | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isCheering, setIsCheering] = useState(false);
 
   useEffect(() => {
     if (!user!.apt_id) return;
@@ -106,21 +99,6 @@ export default function RankingTab() {
     };
   }, [user]);
 
-  const cheer = useCallback(
-    async (emoji: string) => {
-      if (!user?.apt_id || isCheering) return;
-      setIsCheering(true);
-      try {
-        setWeek(await cheerApartment(user.apt_id, emoji));
-      } catch {
-        // 응원 실패는 조용히 넘긴다. 다시 누르면 된다.
-      } finally {
-        setIsCheering(false);
-      }
-    },
-    [user, isCheering],
-  );
-
   const isPoints = order === 'points';
 
   return (
@@ -137,7 +115,9 @@ export default function RankingTab() {
         </Text>
       ) : (
         <>
-          {week ? <WeekCard week={week} isCheering={isCheering} onCheer={cheer} /> : null}
+          {week ? (
+            <WeekCard week={week} onOpenCheers={() => router.push('/ranking/cheers')} />
+          ) : null}
 
           {/* 범위(우리 단지/전체)와 기준(출석/포인트)을 따로 고른다. */}
           <View style={styles.toggles}>
@@ -251,15 +231,7 @@ export default function RankingTab() {
  * 숫자 셋(단지 출석·목표·내 출석)이 한 카드에 다 있어서, 주간 현황을 보러
  * 다른 데 갈 필요가 없다.
  */
-function WeekCard({
-  week,
-  isCheering,
-  onCheer,
-}: {
-  week: ApartmentWeek;
-  isCheering: boolean;
-  onCheer: (emoji: string) => void;
-}) {
+function WeekCard({ week, onOpenCheers }: { week: ApartmentWeek; onOpenCheers: () => void }) {
   const progress = Math.min(week.total_checkins / week.goal, 1);
   const maxDay = Math.max(...week.days.map((d) => d.count), 1);
   // toISOString 은 UTC 라 한국 새벽(0~9시)에는 어제 날짜가 나온다.
@@ -361,20 +333,20 @@ function WeekCard({
         />
       </View>
 
-      {/* 응원 — 버튼 하나. 누르기 전 빈 하트, 누른 뒤 꽉 찬 빨간 하트. */}
+      {/* 응원 — 이제 이모지 하나가 아니라 이웃끼리 남기는 한 줄 글이다.
+          여기서는 문을 열어 주기만 하고, 쓰고 읽는 일은 다음 화면에서 한다. */}
       <Pressable
-        onPress={() => onCheer(CHEER_EMOJI)}
-        disabled={isCheering || cheered}
+        onPress={onOpenCheers}
         accessibilityRole="button"
         accessibilityLabel={
           cheered
-            ? `오늘 응원했어요. 이번 주 응원 ${cheerCount}개`
-            : `단지에 응원 보내기. 이번 주 응원 ${cheerCount}개`
+            ? `오늘의 응원. 이번 주 ${cheerCount}개. 내 글도 남겼어요`
+            : `오늘의 응원 글 쓰러 가기. 이번 주 ${cheerCount}개`
         }
         style={({ pressed }) => [
           styles.cheerButton,
           cheered && styles.cheerButtonMine,
-          pressed && !cheered && styles.cheerButtonPressed,
+          pressed && styles.cheerButtonPressed,
         ]}>
         <Icon
           name="heart"
@@ -384,13 +356,14 @@ function WeekCard({
           filled={cheered}
         />
         <Text style={[styles.cheerLabel, cheered && styles.cheerLabelMine]} maxFontSizeMultiplier={1.2}>
-          {cheered ? '오늘 응원했어요' : '응원 보내기'}
+          {cheered ? '오늘의 응원 보러 가기' : '오늘의 응원 글 쓰러 가기'}
         </Text>
         {cheerCount > 0 ? (
           <Text style={[styles.cheerCount, cheered && styles.cheerCountMine]} maxFontSizeMultiplier={1.2}>
             {cheerCount}
           </Text>
         ) : null}
+        <Icon name="chevron-right" size={18} color={Colors.grey[300]} strokeWidth={2.2} />
       </Pressable>
     </View>
   );

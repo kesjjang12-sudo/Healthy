@@ -546,6 +546,26 @@ export type EffortTotals = {
   all: EffortPeriod;
 };
 
+/** 단지 응원 글 한 줄. 닉네임만 나가고 실명·전화번호는 절대 안 실린다. */
+export type CheerPost = {
+  id: string;
+  nickname: string;
+  /** 호칭 배지용 단계(0~6). 서버의 growth_level_index 가 계산한다. */
+  level_index: number;
+  message: string;
+  emoji: string;
+  cheered_on: string;
+  created_at: string;
+  is_me: boolean;
+};
+
+/** get_apartment_cheers 응답 — 이번 주 글 + 오늘 내가 쓴 글 */
+export type CheerFeed = {
+  posts: CheerPost[];
+  /** 오늘 내가 쓴 글. 아직 안 썼으면 null. */
+  my_message: string | null;
+};
+
 /** get_apartment_week 응답 — 랭킹 탭 상단 "우리 단지 이번 주" 카드 */
 export type ApartmentWeek = {
   week_start: string;
@@ -798,6 +818,18 @@ export type Database = {
       get_apartment_week: {
         Args: { p_apt_id: string };
         Returns: ApartmentWeek;
+      };
+      get_apartment_cheers: {
+        Args: { p_apt_id: string; p_limit?: number };
+        Returns: CheerFeed;
+      };
+      post_cheer: {
+        Args: { p_apt_id: string; p_message: string; p_emoji?: string };
+        Returns: CheerFeed;
+      };
+      delete_my_cheer: {
+        Args: { p_apt_id: string };
+        Returns: CheerFeed;
       };
       get_global_leaderboard: {
         Args: { p_limit?: number; p_order?: LeaderboardOrder };
