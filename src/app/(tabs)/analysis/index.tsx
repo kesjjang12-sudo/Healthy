@@ -276,10 +276,6 @@ export default function AnalysisTab() {
             </Text>
           )}
 
-          <Text style={styles.footNote} maxFontSizeMultiplier={1.3}>
-            유산소는 실제로 움직인 시간으로, 근력은 완료한 세트 수로 셉니다.
-          </Text>
-
         </>
       )}
 

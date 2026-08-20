@@ -46,12 +46,6 @@ function formatWeight(kg: number): string {
   return `${Math.round(kg).toLocaleString('ko-KR')}kg`;
 }
 
-/** "2026-08-19" → "8/19" */
-function formatDay(date: string): string {
-  const [, m, d] = date.split('-');
-  return `${Number(m)}/${Number(d)}`;
-}
-
 /**
  * 랭킹 탭 = 우리 단지의 화합의 장.
  *
@@ -273,10 +267,6 @@ function WeekCard({
   const todayIndex = week.days.findIndex((d) => d.date === todayKst);
   const done = week.total_checkins >= week.goal;
 
-  // 막대만으로는 "저 날 몇 명이었지"를 알 수 없다. 눌러서 그 요일 값을 본다.
-  const [pickedDay, setPickedDay] = useState<number | null>(null);
-  const picked = pickedDay === null ? null : week.days[pickedDay];
-
   const cheerCount = week.cheers.reduce((sum, c) => sum + c.count, 0);
   const cheered = week.my_cheer !== null;
 
@@ -318,48 +308,40 @@ function WeekCard({
         </ProgressRing>
       </View>
 
-      {/* 요일별 막대. 오늘은 파랑, 누른 요일은 진한 파랑 + 값이 아래에 뜬다. */}
+      {/* 요일별 막대. 사람 수를 막대 위에 그대로 얹는다 — 눌러야 보이는 값은
+          있는 줄도 모른다(오너 피드백). 0인 날은 숫자를 비워 눈이 쉰다. */}
       <View style={styles.weekDays}>
         {week.days.map((day, index) => {
           const isToday = index === todayIndex;
-          const isPicked = index === pickedDay;
           return (
-            <Pressable
+            <View
               key={day.date}
-              onPress={() => setPickedDay(isPicked ? null : index)}
-              accessibilityRole="button"
-              accessibilityLabel={`${DAY_LABELS[index]}요일 ${day.count}명`}
-              style={styles.weekDay}>
+              style={styles.weekDay}
+              accessible
+              accessibilityLabel={`${DAY_LABELS[index]}요일 ${day.count}명`}>
+              <Text
+                style={[styles.weekBarValue, isToday && styles.weekBarValueToday]}
+                maxFontSizeMultiplier={1.2}>
+                {day.count > 0 ? day.count : ''}
+              </Text>
               <View style={styles.weekBarSlot}>
                 <View
                   style={[
                     styles.weekBar,
                     isToday && styles.weekBarToday,
-                    isPicked && styles.weekBarPicked,
                     { height: `${Math.max((day.count / maxDay) * 100, day.count > 0 ? 12 : 4)}%` },
                   ]}
                 />
               </View>
               <Text
-                style={[
-                  styles.weekDayLabel,
-                  isToday && styles.weekDayLabelToday,
-                  isPicked && styles.weekDayLabelPicked,
-                ]}
+                style={[styles.weekDayLabel, isToday && styles.weekDayLabelToday]}
                 maxFontSizeMultiplier={1.2}>
                 {DAY_LABELS[index]}
               </Text>
-            </Pressable>
+            </View>
           );
         })}
       </View>
-
-      {/* 누른 요일의 값. 자리를 늘 잡아 둬서 눌렀다 뗄 때 카드가 튀지 않는다. */}
-      <Text style={styles.dayPickLine} maxFontSizeMultiplier={1.2} accessibilityLiveRegion="polite">
-        {picked
-          ? `${formatDay(picked.date)} ${DAY_LABELS[pickedDay!]}요일 · ${picked.count}명 오셨어요`
-          : '요일을 누르면 그날 몇 명 왔는지 보여요'}
-      </Text>
 
       {/* 단지가 이번 주 움직인 양. 출석 횟수만으로는 "이만큼 했다"가 안 와닿는다. */}
       <View style={styles.totals}>
@@ -576,8 +558,15 @@ const styles = StyleSheet.create({
   weekBarToday: {
     backgroundColor: Colors.primary,
   },
-  weekBarPicked: {
-    backgroundColor: Colors.primaryPressed,
+  weekBarValue: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textTertiary,
+    fontVariant: ['tabular-nums'],
+    minHeight: 16,
+  },
+  weekBarValueToday: {
+    color: Colors.primary,
   },
   weekDayLabel: {
     fontSize: 12,
@@ -586,19 +575,6 @@ const styles = StyleSheet.create({
   },
   weekDayLabelToday: {
     color: Colors.primary,
-  },
-  weekDayLabelPicked: {
-    color: Colors.primaryPressed,
-    fontWeight: '700',
-  },
-  /** 누른 요일 값이 뜨는 줄. 안 눌렀을 땐 안내가 대신 자리를 지킨다. */
-  dayPickLine: {
-    fontSize: FontSize.caption,
-    fontWeight: '600',
-    letterSpacing: LetterSpacing.body,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    minHeight: 20,
   },
   totals: {
     gap: Spacing.md,
