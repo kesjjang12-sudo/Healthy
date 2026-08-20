@@ -72,8 +72,15 @@ function keepAll(text: string): string {
  */
 const SENTENCE_END = /([.?!]+["')\]]?)[ \t]+/g;
 
-export function bySentence(text: string): string {
-  return text.replace(/\s+/g, ' ').replace(SENTENCE_END, '$1\n').trim();
+/**
+ * @param trimEdges 앞뒤 공백을 떼도 되는지. Text 안에 조각이 여럿이면
+ *   ("…쌓으면 " + {이름} + "이 돼요.") 조각의 끝 공백이 곧 단어 사이 띄어쓰기라
+ *   떼면 글자가 붙어 버린다(오너 피드백 "띄어쓰기 좀 하고"). 조각이 하나일
+ *   때만 뗀다.
+ */
+export function bySentence(text: string, trimEdges = true): string {
+  const collapsed = text.replace(/\s+/g, ' ').replace(SENTENCE_END, '$1\n');
+  return trimEdges ? collapsed.trim() : collapsed;
 }
 
 type Props = TextProps & {
@@ -86,9 +93,10 @@ export function Text({ children, style, sentenceBreak, ...props }: Props) {
 
   const content = useMemo(() => {
     if (!sentenceBreak && Platform.OS !== 'android') return children;
+    const single = Children.count(children) === 1;
     return Children.map(children, (child) => {
       if (typeof child !== 'string') return child;
-      const broken = sentenceBreak ? bySentence(child) : child;
+      const broken = sentenceBreak ? bySentence(child, single) : child;
       return Platform.OS === 'android' ? keepAll(broken) : broken;
     });
   }, [children, sentenceBreak]);

@@ -558,6 +558,12 @@ export type ApartmentWeek = {
   cheers: { emoji: string; count: number }[];
   /** 오늘 내가 남긴 응원 이모지. 아직 안 남겼으면 null. */
   my_cheer: string | null;
+  /** 단지 전체가 이번 주 움직인 유산소 분. km 환산은 앱이 한다(KM_PER_MINUTE). */
+  cardio_minutes: number;
+  goal_cardio_minutes: number;
+  /** 단지 전체가 이번 주 든 무게 합(kg). */
+  volume_kg: number;
+  goal_volume_kg: number;
 };
 
 /** postgrest-js 가 임베디드 select 를 추론할 때 쓰는 외래키 정보 */

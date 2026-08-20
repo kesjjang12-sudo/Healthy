@@ -19,7 +19,8 @@ export type IconName =
   | 'heart'
   | 'sparkle'
   | 'document'
-  | 'coin';
+  | 'coin'
+  | 'runner';
 
 type Props = {
   name: IconName;
@@ -27,7 +28,7 @@ type Props = {
   color?: string;
   /** 선 굵기. 탭바처럼 작게 쓸 땐 살짝 두껍게 주면 또렷하다. */
   strokeWidth?: number;
-  /** 활성 탭처럼 면을 채워 그린다(FIT ROTEIN 의 fill 변형). home · thunder 만 지원. */
+  /** 활성 탭처럼 면을 채워 그린다(FIT ROTEIN 의 fill 변형). home · thunder · heart 만 지원. */
   filled?: boolean;
 };
 
@@ -47,6 +48,8 @@ const NORMALIZE: Partial<Record<IconName, { scale: number; dy?: number }>> = {
   thunder: { scale: 17 / 19 },
   trophy: { scale: 17 / 15.5, dy: -0.3 },
   person: { scale: 17 / 16 },
+  // 달리는 사람은 머리 위(2.3)부터 뒷발(18.6)까지라 잉크 높이가 18.1 로 크다.
+  runner: { scale: 17 / 18.1 },
   // calendar · column 은 이미 17 이라 건드리지 않는다.
 };
 
@@ -179,11 +182,29 @@ export function Icon({ name, size = 24, color = Colors.text, strokeWidth = 1.9, 
           <Path d="M10.5 20.5v-3a1.5 1.5 0 0 1 3 0v3" {...stroke} />
         </>
       )}
+      {/* 하트. 응원 버튼은 누르기 전 빈 하트, 누른 뒤 꽉 찬 하트로 답한다 —
+          같은 자리에서 모양만 바뀌어야 "내가 눌렀다"가 한눈에 읽힌다. */}
       {name === 'heart' && (
         <Path
           d="M12 20c-4.5-2.9-7.5-5.8-8.6-8.4C2.2 8.7 4 5.5 7.2 5.5c1.9 0 3.5 1 4.8 2.9 1.3-1.9 2.9-2.9 4.8-2.9 3.2 0 5 3.2 3.8 6.1-1.1 2.6-4.1 5.5-8.6 8.4z"
           {...stroke}
+          {...(filled ? { fill: color } : null)}
         />
+      )}
+      {/* 달리는 사람. 단지 주간 목표 링의 선발대 배지 — 트로피(도착한 상)보다
+          "지금 가는 중"이 이 게이지의 뜻에 맞는다(오너 피드백). */}
+      {name === 'runner' && (
+        <>
+          <Circle cx={15.2} cy={4.6} r={2.3} {...stroke} />
+          {/* 몸통 → 앞다리(무릎·발) */}
+          <Path d="M14 9.1 10.9 12.8 13.6 15.6 12.4 20.4" {...stroke} />
+          {/* 뒷다리 */}
+          <Path d="M10.9 12.8 7.4 14.4 5.2 18.6" {...stroke} />
+          {/* 앞으로 뻗은 팔 */}
+          <Path d="M14.4 9.6 17.9 11.4 19.6 8.9" {...stroke} />
+          {/* 뒤로 젖힌 팔 */}
+          <Path d="M13.4 9.4 10 8.2 7.8 10.2" {...stroke} />
+        </>
       )}
       {name === 'sparkle' && (
         <>

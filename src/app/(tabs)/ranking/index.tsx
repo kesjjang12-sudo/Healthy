@@ -33,6 +33,25 @@ const DAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
  */
 const CHEER_EMOJI = '💪';
 
+/** 유산소 분 → km. 국토종주와 같은 환산이라 두 화면의 숫자가 서로 맞는다. */
+const KM_PER_MINUTE = 0.15;
+
+function formatKm(minutes: number): string {
+  return (Math.round(minutes * KM_PER_MINUTE * 10) / 10).toLocaleString('ko-KR');
+}
+
+/** 1톤을 넘으면 톤으로 읽는다 — "90,000kg"보다 "90톤"이 자랑이 된다. */
+function formatWeight(kg: number): string {
+  if (kg >= 1000) return `${(Math.round(kg / 100) / 10).toLocaleString('ko-KR')}톤`;
+  return `${Math.round(kg).toLocaleString('ko-KR')}kg`;
+}
+
+/** "2026-08-19" → "8/19" */
+function formatDay(date: string): string {
+  const [, m, d] = date.split('-');
+  return `${Number(m)}/${Number(d)}`;
+}
+
 /**
  * 랭킹 탭 = 우리 단지의 화합의 장.
  *
@@ -254,6 +273,13 @@ function WeekCard({
   const todayIndex = week.days.findIndex((d) => d.date === todayKst);
   const done = week.total_checkins >= week.goal;
 
+  // 막대만으로는 "저 날 몇 명이었지"를 알 수 없다. 눌러서 그 요일 값을 본다.
+  const [pickedDay, setPickedDay] = useState<number | null>(null);
+  const picked = pickedDay === null ? null : week.days[pickedDay];
+
+  const cheerCount = week.cheers.reduce((sum, c) => sum + c.count, 0);
+  const cheered = week.my_cheer !== null;
+
   return (
     <View style={styles.weekCard}>
       <View style={styles.weekHead}>
@@ -266,7 +292,7 @@ function WeekCard({
       </View>
 
       {/* 국토종주 링과 같은 문법 — 목표를 향해 차오르는 원, 게이지 끝에는
-          트로피 배지(선발대). 막대보다 "어디로 가는 중"이라는 느낌이 산다. */}
+          달리는 사람(선발대). 막대보다 "어디로 가는 중"이라는 느낌이 산다. */}
       <View style={styles.ringWrap}>
         <ProgressRing
           progress={progress}
@@ -274,8 +300,8 @@ function WeekCard({
           stroke={16}
           tip={
             <Icon
-              name="trophy"
-              size={22}
+              name="runner"
+              size={24}
               color={done ? Colors.success : Colors.primary}
               strokeWidth={2}
             />
@@ -292,62 +318,135 @@ function WeekCard({
         </ProgressRing>
       </View>
 
-      {/* 요일별 막대. 오늘만 파랑 — 지금 찍으면 어디가 자라는지 보인다. */}
+      {/* 요일별 막대. 오늘은 파랑, 누른 요일은 진한 파랑 + 값이 아래에 뜬다. */}
       <View style={styles.weekDays}>
-        {week.days.map((day, index) => (
-          <View key={day.date} style={styles.weekDay}>
-            <View style={styles.weekBarSlot}>
-              <View
+        {week.days.map((day, index) => {
+          const isToday = index === todayIndex;
+          const isPicked = index === pickedDay;
+          return (
+            <Pressable
+              key={day.date}
+              onPress={() => setPickedDay(isPicked ? null : index)}
+              accessibilityRole="button"
+              accessibilityLabel={`${DAY_LABELS[index]}요일 ${day.count}명`}
+              style={styles.weekDay}>
+              <View style={styles.weekBarSlot}>
+                <View
+                  style={[
+                    styles.weekBar,
+                    isToday && styles.weekBarToday,
+                    isPicked && styles.weekBarPicked,
+                    { height: `${Math.max((day.count / maxDay) * 100, day.count > 0 ? 12 : 4)}%` },
+                  ]}
+                />
+              </View>
+              <Text
                 style={[
-                  styles.weekBar,
-                  index === todayIndex && styles.weekBarToday,
-                  { height: `${Math.max((day.count / maxDay) * 100, day.count > 0 ? 12 : 4)}%` },
+                  styles.weekDayLabel,
+                  isToday && styles.weekDayLabelToday,
+                  isPicked && styles.weekDayLabelPicked,
                 ]}
-              />
-            </View>
-            <Text
-              style={[styles.weekDayLabel, index === todayIndex && styles.weekDayLabelToday]}
-              maxFontSizeMultiplier={1.2}>
-              {DAY_LABELS[index]}
-            </Text>
-          </View>
-        ))}
+                maxFontSizeMultiplier={1.2}>
+                {DAY_LABELS[index]}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
-      {/* 응원 — 버튼 하나. 누르면 오늘의 내 응원이 남는다. */}
-      {(() => {
-        const count = week.cheers.reduce((sum, c) => sum + c.count, 0);
-        const mine = week.my_cheer !== null;
-        return (
-          <Pressable
-            onPress={() => onCheer(CHEER_EMOJI)}
-            disabled={isCheering || mine}
-            accessibilityRole="button"
-            accessibilityLabel={
-              mine ? `오늘 응원했어요. 이번 주 응원 ${count}개` : `단지에 응원 보내기. 이번 주 응원 ${count}개`
-            }
-            style={({ pressed }) => [
-              styles.cheerButton,
-              mine && styles.cheerButtonMine,
-              pressed && !mine && styles.cheerButtonPressed,
-            ]}>
-            <Icon
-              name="heart"
-              size={18}
-              color={mine ? Colors.primary : Colors.textSecondary}
-              strokeWidth={2}
-            />
-            <Text style={[styles.cheerLabel, mine && styles.cheerLabelMine]} maxFontSizeMultiplier={1.2}>
-              {mine ? '오늘 응원했어요' : '응원 보내기'}
-            </Text>
-            {count > 0 ? (
-              <Text style={[styles.cheerCount, mine && styles.cheerCountMine]} maxFontSizeMultiplier={1.2}>
-                {count}
-              </Text>
-            ) : null}
-          </Pressable>
-        );
-      })()}
+      {/* 누른 요일의 값. 자리를 늘 잡아 둬서 눌렀다 뗄 때 카드가 튀지 않는다. */}
+      <Text style={styles.dayPickLine} maxFontSizeMultiplier={1.2} accessibilityLiveRegion="polite">
+        {picked
+          ? `${formatDay(picked.date)} ${DAY_LABELS[pickedDay!]}요일 · ${picked.count}명 오셨어요`
+          : '요일을 누르면 그날 몇 명 왔는지 보여요'}
+      </Text>
+
+      {/* 단지가 이번 주 움직인 양. 출석 횟수만으로는 "이만큼 했다"가 안 와닿는다. */}
+      <View style={styles.totals}>
+        <TotalRow
+          label="다 같이 걸은 거리"
+          value={`${formatKm(week.cardio_minutes)}km`}
+          goal={`${formatKm(week.goal_cardio_minutes)}km`}
+          progress={week.goal_cardio_minutes > 0 ? week.cardio_minutes / week.goal_cardio_minutes : 0}
+        />
+        <TotalRow
+          label="다 같이 든 무게"
+          value={formatWeight(week.volume_kg)}
+          goal={formatWeight(week.goal_volume_kg)}
+          progress={week.goal_volume_kg > 0 ? week.volume_kg / week.goal_volume_kg : 0}
+        />
+      </View>
+
+      {/* 응원 — 버튼 하나. 누르기 전 빈 하트, 누른 뒤 꽉 찬 빨간 하트. */}
+      <Pressable
+        onPress={() => onCheer(CHEER_EMOJI)}
+        disabled={isCheering || cheered}
+        accessibilityRole="button"
+        accessibilityLabel={
+          cheered
+            ? `오늘 응원했어요. 이번 주 응원 ${cheerCount}개`
+            : `단지에 응원 보내기. 이번 주 응원 ${cheerCount}개`
+        }
+        style={({ pressed }) => [
+          styles.cheerButton,
+          cheered && styles.cheerButtonMine,
+          pressed && !cheered && styles.cheerButtonPressed,
+        ]}>
+        <Icon
+          name="heart"
+          size={18}
+          color={cheered ? Colors.danger : Colors.textSecondary}
+          strokeWidth={2}
+          filled={cheered}
+        />
+        <Text style={[styles.cheerLabel, cheered && styles.cheerLabelMine]} maxFontSizeMultiplier={1.2}>
+          {cheered ? '오늘 응원했어요' : '응원 보내기'}
+        </Text>
+        {cheerCount > 0 ? (
+          <Text style={[styles.cheerCount, cheered && styles.cheerCountMine]} maxFontSizeMultiplier={1.2}>
+            {cheerCount}
+          </Text>
+        ) : null}
+      </Pressable>
+    </View>
+  );
+}
+
+/** 단지 합계 한 줄: 이름 · 값/목표 · 가는 막대. */
+function TotalRow({
+  label,
+  value,
+  goal,
+  progress,
+}: {
+  label: string;
+  value: string;
+  goal: string;
+  progress: number;
+}) {
+  const filled = Math.min(Math.max(progress, 0), 1);
+  const done = progress >= 1;
+
+  return (
+    <View style={styles.totalRow} accessible accessibilityLabel={`${label} ${value}, 목표 ${goal}`}>
+      <View style={styles.totalHead}>
+        <Text style={styles.totalLabel} maxFontSizeMultiplier={1.2}>
+          {label}
+        </Text>
+        <Text style={styles.totalValue} maxFontSizeMultiplier={1.2}>
+          {value}
+          <Text style={styles.totalGoal}> / {goal}</Text>
+        </Text>
+      </View>
+      <View style={styles.totalTrack}>
+        <View
+          style={[
+            styles.totalFill,
+            done && styles.totalFillDone,
+            { width: `${Math.max(filled * 100, 2)}%` },
+          ]}
+        />
+      </View>
     </View>
   );
 }
@@ -477,6 +576,9 @@ const styles = StyleSheet.create({
   weekBarToday: {
     backgroundColor: Colors.primary,
   },
+  weekBarPicked: {
+    backgroundColor: Colors.primaryPressed,
+  },
   weekDayLabel: {
     fontSize: 12,
     fontWeight: '600',
@@ -484,6 +586,64 @@ const styles = StyleSheet.create({
   },
   weekDayLabelToday: {
     color: Colors.primary,
+  },
+  weekDayLabelPicked: {
+    color: Colors.primaryPressed,
+    fontWeight: '700',
+  },
+  /** 누른 요일 값이 뜨는 줄. 안 눌렀을 땐 안내가 대신 자리를 지킨다. */
+  dayPickLine: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    minHeight: 20,
+  },
+  totals: {
+    gap: Spacing.md,
+    marginTop: Spacing.xs,
+  },
+  totalRow: {
+    gap: Spacing.xs,
+  },
+  totalHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  totalLabel: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.textSecondary,
+  },
+  totalValue: {
+    fontSize: FontSize.body,
+    fontWeight: '700',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.text,
+    fontVariant: ['tabular-nums'],
+  },
+  totalGoal: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    color: Colors.textTertiary,
+  },
+  totalTrack: {
+    height: 8,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.grey[100],
+    overflow: 'hidden',
+  },
+  totalFill: {
+    height: '100%',
+    borderRadius: Radius.full,
+    backgroundColor: Colors.primary,
+  },
+  totalFillDone: {
+    backgroundColor: Colors.success,
   },
   cheerButton: {
     flexDirection: 'row',

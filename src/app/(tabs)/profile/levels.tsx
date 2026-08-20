@@ -10,6 +10,16 @@ import { useAuthSession } from '@/features/auth/auth-session';
 import { GROWTH_LEVELS, growthStatus } from '@/features/growth/levels';
 
 /**
+ * 받침에 맞는 주격 조사. "성실회원이 / 운동 고수가" — 하나로 고정하면
+ * 호칭 절반이 어색해진다. 한글 음절은 (코드-0xAC00) % 28 이 0 이 아니면 받침이 있다.
+ */
+function subjectParticle(word: string): string {
+  const last = word.charCodeAt(word.length - 1);
+  if (last < 0xac00 || last > 0xd7a3) return '가';
+  return (last - 0xac00) % 28 === 0 ? '가' : '이';
+}
+
+/**
  * 등급 안내 — 호칭 7단계 전체와 올라가는 법.
  *
  * 쇼핑앱 멤버십 등급 페이지의 문법(내 등급 카드 → 등급별 기준표)을 그대로
@@ -51,13 +61,24 @@ export default function GrowthLevelsScreen() {
 
           {status.next ? (
             <>
-              <Text style={styles.myNext} sentenceBreak maxFontSizeMultiplier={1.3}>
-                {status.remaining.toLocaleString('ko-KR')}점 더 쌓으면 {status.next.name}이 돼요.
+              {/* 한 조각으로 만들어 넘긴다. 조각을 나누면 조각 끝 공백이
+                  다듬어지면서 "쌓으면성실회원이" 처럼 붙는다. */}
+              <Text style={styles.myNext} maxFontSizeMultiplier={1.3}>
+                {`${status.remaining.toLocaleString('ko-KR')}점 더 쌓으면 ${status.next.name}${subjectParticle(status.next.name)} 돼요.`}
               </Text>
               <View style={styles.track}>
                 <View
                   style={[styles.fill, { width: `${Math.max(status.progress * 100, 3)}%` }]}
                 />
+              </View>
+              {/* 막대 양끝의 눈금. 지금 구간이 어디서 어디까지인지 숫자로 못 박는다. */}
+              <View style={styles.scaleRow}>
+                <Text style={styles.scaleLabel} maxFontSizeMultiplier={1.2}>
+                  {status.level.minXp.toLocaleString('ko-KR')}점
+                </Text>
+                <Text style={styles.scaleLabel} maxFontSizeMultiplier={1.2}>
+                  {status.next.minXp.toLocaleString('ko-KR')}점
+                </Text>
               </View>
             </>
           ) : (
@@ -196,6 +217,18 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: Radius.full,
     backgroundColor: Colors.primary,
+  },
+  scaleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: -Spacing.xs,
+  },
+  scaleLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: LetterSpacing.body,
+    color: Colors.primaryPressed,
+    fontVariant: ['tabular-nums'],
   },
   section: {
     gap: Spacing.md,
