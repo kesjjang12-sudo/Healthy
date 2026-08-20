@@ -1,5 +1,6 @@
 import { Redirect } from 'expo-router';
 
+import { Splash } from '@/components/splash';
 import { useDeviceRole } from '@/features/device-role/context';
 
 /**
@@ -13,7 +14,7 @@ import { useDeviceRole } from '@/features/device-role/context';
 export default function EntryDispatcher() {
   const { role, isLoading } = useDeviceRole();
 
-  if (isLoading) return null;
+  if (isLoading) return <Splash />;
   if (role === null) return <Redirect href="/device-setup" />;
   if (role === 'kiosk') return <Redirect href="/kiosk/checkin" />;
   return <Redirect href="/login" />;

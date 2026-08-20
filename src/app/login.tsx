@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/icon';
 import { PrimaryButton } from '@/components/primary-button';
 import { SocialButton, type SocialProvider } from '@/components/social-button';
+import { Splash } from '@/components/splash';
 import { StrengthHookBanner } from '@/components/strength-hook-banner';
 import { Colors, FontSize, LetterSpacing, Radius, Spacing } from '@/constants/theme';
 import { isEmptyProfile, signInAsTestUser } from '@/features/auth/anonymous';
@@ -138,6 +139,13 @@ export default function LoginScreen() {
   // 아래 handleTestSignIn 에서 직접 이동시키므로 이 문을 열어 둘 필요가 없다.
   if (!isRestoring && user && !(isAnonymous && isEmptyProfile(user))) {
     return <Redirect href={user.profile_data?.onboarded_at ? '/workout' : '/onboarding'} />;
+  }
+
+  // 세션을 복원하는 동안 로그인 버튼들을 보여주면 안 된다 — 이미 로그인된
+  // 사람에게 반투명한 로그인 화면이 스쳐 보이고, 성급히 누르면 이중 로그인이
+  // 된다. 복원이 끝나면 위 Redirect 가 바로 데려간다.
+  if (isRestoring) {
+    return <Splash message="로그인 정보를 확인하는 중이에요" />;
   }
 
   return (

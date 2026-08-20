@@ -2,6 +2,7 @@ import { Redirect } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
 import { useEffect } from 'react';
 
+import { Splash } from '@/components/splash';
 import { TextTabBar } from '@/components/tab-bar';
 import { useAuthSession } from '@/features/auth/auth-session';
 import { needsConsent } from '@/features/legal/api';
@@ -26,7 +27,7 @@ export default function TabsLayout() {
     void refreshReminders();
   }, []);
 
-  if (isRestoring) return null;
+  if (isRestoring) return <Splash />;
   if (!user) return <Redirect href="/login" />;
   // 동의가 설문보다 먼저다. 설문에서 받는 "아프거나 불편한 곳"이 건강에 관한
   // 정보라, 동의 없이 물어보면 안 된다.
