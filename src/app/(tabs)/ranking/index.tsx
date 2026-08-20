@@ -329,7 +329,9 @@ function WeekCard({
                   style={[
                     styles.weekBar,
                     isToday && styles.weekBarToday,
-                    { height: `${Math.max((day.count / maxDay) * 100, day.count > 0 ? 12 : 4)}%` },
+                    // 0인 날은 빈 트랙만 남는다 — 없는 날에 토막을 그리면
+                    // 뭔가 있었던 것처럼 읽힌다.
+                    { height: `${day.count > 0 ? Math.max((day.count / maxDay) * 100, 14) : 0}%` },
                   ]}
                 />
               </View>
@@ -496,7 +498,6 @@ const styles = StyleSheet.create({
   },
   ringWrap: {
     alignItems: 'center',
-    paddingVertical: Spacing.sm,
   },
   ringLabel: {
     fontSize: FontSize.caption,
@@ -536,23 +537,31 @@ const styles = StyleSheet.create({
   },
   weekDays: {
     flexDirection: 'row',
-    gap: Spacing.sm,
-    marginTop: Spacing.xs,
+    gap: Spacing.xs,
   },
   weekDay: {
     flex: 1,
     alignItems: 'center',
     gap: Spacing.xs,
   },
+  /**
+   * 막대가 담기는 홈. 옅은 트랙을 늘 깔아 둔다 — 예전에는 막대만 허공에
+   * 떠 있어서 짧은 날은 토막처럼 흩어져 보였다(오너 피드백 "간격 좀"). 트랙이
+   * 공통 틀이 되면 높이 차이가 같은 자 위에서 읽힌다.
+   */
   weekBarSlot: {
-    height: 44,
-    width: '100%',
+    height: 56,
+    width: 20,
+    borderRadius: Radius.full,
+    // 회색 카드 위라 트랙은 흰색이 맞다. grey[100] 은 막대(grey[300])와
+    // 너무 가까워 채워진 부분이 안 도드라진다.
+    backgroundColor: Colors.background,
     justifyContent: 'flex-end',
-    alignItems: 'center',
+    overflow: 'hidden',
   },
   weekBar: {
-    width: 14,
-    borderRadius: Radius.sm,
+    width: '100%',
+    borderRadius: Radius.full,
     backgroundColor: Colors.grey[300],
   },
   weekBarToday: {
