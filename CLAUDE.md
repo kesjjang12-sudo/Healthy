@@ -122,3 +122,25 @@
 
 CI 가 앱 업데이트까지 하려면 저장소 시크릿 `EXPO_TOKEN` 이 있어야 한다.
 없으면 웹만 나가고 경고만 남긴다(빌드는 실패하지 않는다).
+
+## 계정 정리 (2026-08-21 이관 완료)
+
+어느 계정이 무엇을 쥐고 있는지 헷갈려서 한 번 사고 날 뻔했다. 여기 적어 둔다.
+
+| 서비스 | 소유 | 비고 |
+| --- | --- | --- |
+| 깃허브 저장소 · gh-pages | `kesjjang12-sudo` | 라이브 웹 `kesjjang12-sudo.github.io/Healthy` |
+| Supabase 조직 `healthy` | 12 계정 | 프로젝트 ref `hhjmhdxcxjuhhhgjsilu` — 이관해도 주소·anon 키 그대로 |
+| Expo(EAS) | 조직 **`health-leader`** | `@health-leader/fitroutine`, 프로젝트 ID `a4d7f146-…` |
+
+깃허브 계정이 두 개다(`kesjjang12-sudo`, `kesjjang4545-byte`). **저장소·배포는 12 쪽이
+전부다.** 4545 쪽으로 뭘 만들지 말 것.
+
+Expo 는 2026-08-21 에 개인 계정 `kesjjang4545` → 조직 `health-leader` 로 이관했다.
+**프로젝트 ID 는 이관해도 안 바뀐다**(Expo 공식 문서). `app.json` 의 `updates.url` 과
+`extra.eas.projectId` 는 둘 다 그 ID 기준이라 깔려 있는 앱은 계속 업데이트를 받는다.
+바꿔야 했던 건 `app.json` 의 `owner` 한 줄뿐.
+
+주의: **Expo 이관은 횟수 제한이 있고 Expo 가 그 숫자를 공개하지 않는다**(API 에도
+관련 필드가 없다). 계정을 또 옮겨야 하면 이관하지 말고 조직 멤버만 갈아 끼울 것 —
+멤버 초대·제거는 횟수를 안 먹는다.

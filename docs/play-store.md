@@ -1,7 +1,7 @@
 # 플레이스토어 출시 절차 (2026-08 기준)
 
 앱 쪽 준비는 끝나 있다 — 패키지명 `com.fitroutine.app`, 아이콘·스플래시,
-EAS 프로젝트(kesjjang4545 계정), 개인정보처리방침 공개 URL까지. 아래에서
+EAS 프로젝트(health-leader 조직), 개인정보처리방침 공개 URL까지. 아래에서
 오너가 눌러야 하는 것만 순서대로 적는다.
 
 ## 0. 준비물
@@ -32,7 +32,7 @@ npm install
 npx eas build --platform android --profile production
 ```
 
-- Expo 로그인 창이 뜨면 kesjjang4545 계정으로 로그인.
+- Expo 로그인 창이 뜨면 health-leader 조직에 속한 계정으로 로그인.
 - 서명 키는 "EAS가 관리"를 선택(기본값). 직접 보관할 필요 없다.
 - 20~30분 뒤 빌드가 끝나면 링크에서 `.aab` 파일을 내려받는다.
 
