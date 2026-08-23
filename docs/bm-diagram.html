@@ -1,0 +1,434 @@
+<title>헬스반장 비즈니스 모델 구조도</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@500;700;800&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   ▼▼▼ 여기만 고치면 됩니다. 아래 두 목록이 그림의 전부입니다. ▼▼▼
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── 1. 참여자(상자) ──────────────────────────────────────────────
+   col = 가로 칸(0이 맨 왼쪽), row = 세로 칸(0이 맨 위)
+   group = 색깔 종류: core(중심) supply(공급) cost(비용)
+                      customer(돈내는쪽) user(사용자) channel(창구)
+   state = 'live'(지금 됨) 또는 'plan'(계획) — plan 은 점선으로 그려짐
+   big   = true 면 상자를 크게 (중심용)
+   ─────────────────────────────────────────────────────────────── */
+const NODES = [
+  // ---- 왼쪽: 공급·비용 ----
+  { id:'catalog', label:'운동 도감',      sub:'무료 사진 DB 75개', col:0, row:0, group:'supply',  state:'live' },
+  { id:'video',   label:'운동 영상',      sub:'직접 촬영',        col:0, row:1, group:'supply',  state:'plan' },
+  { id:'infra',   label:'인프라',        sub:'Supabase·Expo',    col:0, row:3, group:'cost',    state:'live' },
+  { id:'kakao',   label:'카카오',        sub:'로그인',           col:0, row:4, group:'supply',  state:'live' },
+
+  // ---- 가운데: 우리 ----
+  { id:'hb',      label:'헬스반장',      sub:'플랫폼',           col:2, row:2, group:'core',    state:'live', big:true },
+  { id:'tablet',  label:'헬스장 태블릿',  sub:'출석·기구 안내',    col:2, row:4, group:'channel', state:'live' },
+
+  // ---- 오른쪽: 고객·수익 ----
+  { id:'office',  label:'아파트 관리사무소', sub:'입주자대표회의',  col:4, row:0, group:'customer',state:'plan' },
+  { id:'resident',label:'주민 회원',      sub:'40~60대',          col:4, row:2, group:'user',    state:'live' },
+  { id:'partner', label:'제휴·광고',      sub:'병원·용품·필라테스', col:4, row:4, group:'customer',state:'plan' },
+];
+
+/* ── 2. 주고받는 것(화살표) ───────────────────────────────────────
+   from → to  (NODES 의 id)
+   kind = 색깔: service(서비스·파랑) data(데이터·회색)
+                money(돈·초록) content(콘텐츠·주황)
+   state = 'live' 또는 'plan'
+   both  = true 면 양쪽 화살표
+   bend  = 나가는 자리를 옆으로 밀기(px). 선이 겹칠 때만. 예: -26, 26
+   elbow = 선이 꺾이는 위치(0~1, 기본 0.5). 세로선이 몰릴 때 0.3 / 0.7 로 흩는다
+   ─────────────────────────────────────────────────────────────── */
+const FLOWS = [
+  // 공급 → 우리
+  { from:'catalog', to:'hb', label:'기구 사진·동작',  kind:'content', state:'live' },
+  { from:'video',   to:'hb', label:'운동 영상',      kind:'content', state:'plan' },
+  { from:'kakao',   to:'hb', label:'로그인 인증',    kind:'service', state:'live' },
+  { from:'hb',  to:'infra',  label:'서버 비용(월)',   kind:'money',   state:'live' },
+
+  // 우리 ↔ 주민
+  { from:'hb', to:'resident', label:'오늘의 운동·기구 사용법', kind:'service', state:'live', bend:-30 },
+  { from:'hb', to:'resident', label:'랭킹·등급·알림',        kind:'service', state:'live', bend:30 },
+  { from:'resident', to:'hb', label:'출석·운동 기록·몸무게',  kind:'data',    state:'live', bend:0 },
+
+  // 태블릿 경유
+  { from:'resident', to:'tablet', label:'출석 체크',    kind:'data',    state:'live', elbow:0.82 },
+  { from:'tablet',   to:'hb',     label:'이용 데이터',   kind:'data',    state:'live', both:true },
+
+  // 우리 ↔ 관리사무소  ← 핵심 수익
+  { from:'hb',     to:'office',   label:'이용 실적 리포트', kind:'service', state:'plan', bend:-26, elbow:0.62 },
+  { from:'office', to:'hb',       label:'월 이용료',      kind:'money',   state:'plan', bend:26,  elbow:0.38 },
+  { from:'office', to:'resident', label:'헬스장 시설 제공', kind:'service', state:'live' },
+
+  // 우리 ↔ 제휴
+  { from:'hb',      to:'partner', label:'타겟 노출',      kind:'service', state:'plan', bend:-24, elbow:0.62 },
+  { from:'partner', to:'hb',      label:'광고비·수수료',   kind:'money',   state:'plan', bend:24,  elbow:0.38 },
+];
+
+/* ══════════════════════════════════════════════════════════════════
+   ▲▲▲ 여기까지. 아래는 그리는 코드라 건드릴 필요 없습니다. ▲▲▲
+   ══════════════════════════════════════════════════════════════════ */
+</script>
+
+<style>
+  :root {
+    --ground:   #F2F3F6;
+    --surface:  #FFFFFF;
+    --line:     #DDE0E6;
+    --ink:      #16171A;
+    --ink-2:    #565B64;
+    --ink-3:    #868B94;
+
+    --core:     #0055E0;
+    --core-ink: #FFFFFF;
+
+    --supply:   #F0F2F6;  --supply-bd:  #C6CBD4;
+    --cost:     #FCF1DF;  --cost-bd:    #E5C58C;
+    --customer: #E3F4EC;  --customer-bd:#93CDB2;
+    --user:     #E7EFFE;  --user-bd:    #9BBBF4;
+    --channel:  #F0F2F6;  --channel-bd: #C6CBD4;
+
+    --k-service: #0055E0;
+    --k-data:    #7B818C;
+    --k-money:   #10794F;
+    --k-content: #B26A00;
+
+    --shadow: 0 1px 2px rgba(16,18,22,.06), 0 8px 20px -14px rgba(16,18,22,.3);
+
+    --f-d: "Gothic A1","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    --f-b: "IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:#0F1013; --surface:#191B1F; --line:#2C2F35;
+      --ink:#F1F2F4; --ink-2:#B0B5BD; --ink-3:#7E838C;
+      --core:#3D82FF; --core-ink:#FFFFFF;
+      --supply:#22252A;  --supply-bd:#3C4048;
+      --cost:#2B2214;    --cost-bd:#6B5327;
+      --customer:#12291F; --customer-bd:#2F6349;
+      --user:#141F33;    --user-bd:#2D4C80;
+      --channel:#22252A; --channel-bd:#3C4048;
+      --k-service:#6EA4FF; --k-data:#8C929C; --k-money:#4FCFA1; --k-content:#E0A44E;
+      --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 20px -14px rgba(0,0,0,.8);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:#0F1013; --surface:#191B1F; --line:#2C2F35;
+    --ink:#F1F2F4; --ink-2:#B0B5BD; --ink-3:#7E838C;
+    --core:#3D82FF; --core-ink:#FFFFFF;
+    --supply:#22252A;  --supply-bd:#3C4048;
+    --cost:#2B2214;    --cost-bd:#6B5327;
+    --customer:#12291F; --customer-bd:#2F6349;
+    --user:#141F33;    --user-bd:#2D4C80;
+    --channel:#22252A; --channel-bd:#3C4048;
+    --k-service:#6EA4FF; --k-data:#8C929C; --k-money:#4FCFA1; --k-content:#E0A44E;
+    --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 20px -14px rgba(0,0,0,.8);
+  }
+
+  body { background: var(--ground); color: var(--ink); font-family: var(--f-b); line-height:1.6; }
+
+  .page { padding: clamp(1rem,3vw,2rem) clamp(.75rem,3vw,2rem) 3rem; display:flex; flex-direction:column; gap:1.25rem; }
+
+  header h1 { font-family:var(--f-d); font-weight:800; font-size:clamp(1.4rem,4.5vw,1.9rem);
+              letter-spacing:-.02em; margin:0 0 .25rem; }
+  header p  { margin:0; color:var(--ink-2); font-size:.9375rem; }
+
+  /* ---- 조작 줄 ---- */
+  .bar { display:flex; flex-wrap:wrap; gap:.5rem .75rem; align-items:center;
+         background:var(--surface); border:1px solid var(--line); border-radius:12px;
+         padding:.625rem .875rem; box-shadow:var(--shadow); }
+  .bar label { display:inline-flex; align-items:center; gap:.4rem; font-size:.875rem; color:var(--ink-2); cursor:pointer; }
+  .bar input[type=range] { width:110px; accent-color:var(--core); }
+  .bar .sep { flex:1 1 auto; }
+  .btn { font-family:var(--f-d); font-weight:700; font-size:.8125rem; padding:.35rem .7rem;
+         border:1px solid var(--line); border-radius:999px; background:var(--surface);
+         color:var(--ink-2); cursor:pointer; }
+  .btn:hover, .btn:focus-visible { border-color:var(--core); color:var(--core); }
+  .btn:focus-visible { outline:2px solid var(--core); outline-offset:1px; }
+
+  /* ---- 범례 ---- */
+  .legend { display:flex; flex-wrap:wrap; gap:.4rem .9rem; font-size:.8125rem; color:var(--ink-2); }
+  .legend span { display:inline-flex; align-items:center; gap:.35rem; }
+  .swatch { width:18px; height:0; border-top-width:3px; border-top-style:solid; border-radius:2px; }
+  .swatch.dash { border-top-style:dashed; }
+
+  /* ---- 캔버스 ---- */
+  .scroller { overflow:auto; background:var(--surface); border:1px solid var(--line);
+              border-radius:14px; box-shadow:var(--shadow); padding:1rem; }
+  .canvas { position:relative; transform-origin:0 0; }
+  .canvas svg { position:absolute; inset:0; overflow:visible; pointer-events:none; }
+
+  .node { position:absolute; border-radius:12px; border:1.5px solid var(--line);
+          display:flex; flex-direction:column; align-items:center; justify-content:center;
+          text-align:center; padding:.5rem .55rem; cursor:pointer; background:var(--surface);
+          transition:opacity .15s ease, box-shadow .15s ease; }
+  .node .nm  { font-family:var(--f-d); font-weight:700; font-size:.9375rem; line-height:1.3; word-break:keep-all; }
+  .node .sb  { font-size:.6875rem; color:var(--ink-3); line-height:1.35; margin-top:.15rem; word-break:keep-all; }
+  .node.core { background:var(--core); border-color:var(--core); color:var(--core-ink); }
+  .node.core .nm { font-size:1.125rem; font-weight:800; }
+  .node.core .sb { color:rgba(255,255,255,.75); }
+  .node.supply  { background:var(--supply);   border-color:var(--supply-bd); }
+  .node.cost    { background:var(--cost);     border-color:var(--cost-bd); }
+  .node.customer{ background:var(--customer); border-color:var(--customer-bd); }
+  .node.user    { background:var(--user);     border-color:var(--user-bd); }
+  .node.channel { background:var(--channel);  border-color:var(--channel-bd); }
+  .node.plan    { border-style:dashed; }
+  .node.dim     { opacity:.22; }
+  .node.sel     { box-shadow:0 0 0 3px var(--core); }
+
+  .flag { position:absolute; top:-9px; font-family:var(--f-d); font-weight:700; font-size:.625rem;
+          letter-spacing:.02em; padding:.05rem .4rem; border-radius:999px;
+          background:var(--ground); border:1px solid var(--line); color:var(--ink-3); }
+
+  .elabel { position:absolute; transform:translate(-50%,-50%); font-size:.6875rem; font-weight:500;
+            background:var(--surface); padding:.1rem .35rem; border-radius:5px; white-space:nowrap;
+            pointer-events:none; transition:opacity .15s ease; }
+  .elabel.dim { opacity:.15; }
+  path.edge { transition:opacity .15s ease; }
+  path.edge.dim { opacity:.12; }
+
+  .hint { font-size:.8125rem; color:var(--ink-3); }
+  .hint code { background:var(--ground); padding:.1rem .3rem; border-radius:4px; font-size:.75rem; }
+</style>
+
+<div class="page">
+  <header>
+    <h1>헬스반장 비즈니스 모델 구조도</h1>
+    <p>누가 우리에게 무엇을 주고, 우리는 무엇을 돌려주는가. 점선은 아직 계획입니다.</p>
+  </header>
+
+  <div class="bar">
+    <label><input type="checkbox" id="showPlan" checked> 계획도 함께 보기</label>
+    <label>크기 <input type="range" id="zoom" min="55" max="140" value="100"></label>
+    <span class="sep"></span>
+    <button class="btn" id="reset">선택 해제</button>
+  </div>
+
+  <div class="legend">
+    <span><i class="swatch" style="border-color:var(--k-service)"></i>서비스</span>
+    <span><i class="swatch" style="border-color:var(--k-data)"></i>데이터</span>
+    <span><i class="swatch" style="border-color:var(--k-money)"></i>돈</span>
+    <span><i class="swatch" style="border-color:var(--k-content)"></i>콘텐츠</span>
+    <span><i class="swatch dash" style="border-color:var(--ink-3)"></i>계획</span>
+  </div>
+
+  <div class="scroller">
+    <div class="canvas" id="canvas"><svg id="svg"></svg></div>
+  </div>
+
+  <p class="hint">상자를 누르면 그 참여자와 연결된 흐름만 남습니다. 내용을 바꾸려면 파일 맨 위의 <code>NODES</code> · <code>FLOWS</code> 목록만 고치면 됩니다.</p>
+</div>
+
+<script>
+(() => {
+  const NW = 152, NH = 84, BW = 178, BH = 100;   // 보통 상자 / 큰 상자
+  const GX = 250, GY = 152;                       // 칸 사이 간격(상자 크기보다 커야 안 겹친다)
+  const PAD = 26;
+  const SVGNS = 'http://www.w3.org/2000/svg';
+
+  const canvas = document.getElementById('canvas');
+  const svg = document.getElementById('svg');
+  const kindVar = k => `var(--k-${k})`;
+
+  let selected = null;
+  const boxes = new Map();   // id -> {x,y,w,h,el}
+
+  function build() {
+    // 이전에 그린 것 지우기
+    canvas.querySelectorAll('.node,.elabel').forEach(n => n.remove());
+    svg.innerHTML = '';
+    boxes.clear();
+
+    const showPlan = document.getElementById('showPlan').checked;
+    const nodes = NODES.filter(n => showPlan || n.state !== 'plan');
+    const alive = new Set(nodes.map(n => n.id));
+    const flows = FLOWS.filter(f =>
+      (showPlan || f.state !== 'plan') && alive.has(f.from) && alive.has(f.to));
+
+    // 캔버스 크기
+    const maxCol = Math.max(...nodes.map(n => n.col));
+    const maxRow = Math.max(...nodes.map(n => n.row));
+    const W = PAD * 2 + maxCol * GX + BW;
+    const H = PAD * 2 + maxRow * GY + BH;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('width', W);
+    svg.setAttribute('height', H);
+
+    // 화살촉
+    const defs = document.createElementNS(SVGNS, 'defs');
+    ['service','data','money','content'].forEach(k => {
+      const m = document.createElementNS(SVGNS, 'marker');
+      m.setAttribute('id', 'a-' + k);
+      m.setAttribute('viewBox', '0 0 8 8');
+      m.setAttribute('refX', '7'); m.setAttribute('refY', '4');
+      m.setAttribute('markerWidth', '6'); m.setAttribute('markerHeight', '6');
+      m.setAttribute('orient', 'auto-start-reverse');
+      const p = document.createElementNS(SVGNS, 'path');
+      p.setAttribute('d', 'M0 0 L8 4 L0 8 z');
+      p.setAttribute('fill', kindVar(k));
+      m.appendChild(p); defs.appendChild(m);
+    });
+    svg.appendChild(defs);
+
+    // 상자 그리기
+    nodes.forEach(n => {
+      const w = n.big ? BW : NW, h = n.big ? BH : NH;
+      const x = PAD + n.col * GX + (n.big ? 0 : (BW - NW) / 2);
+      const y = PAD + n.row * GY + (n.big ? 0 : (BH - NH) / 2);
+
+      const el = document.createElement('div');
+      el.className = `node ${n.group}` + (n.state === 'plan' ? ' plan' : '');
+      el.style.cssText = `left:${x}px;top:${y}px;width:${w}px;height:${h}px`;
+      el.innerHTML =
+        (n.state === 'plan' ? '<span class="flag">계획</span>' : '') +
+        `<span class="nm">${n.label}</span>` +
+        (n.sub ? `<span class="sb">${n.sub}</span>` : '');
+      el.onclick = () => { selected = (selected === n.id) ? null : n.id; paint(); };
+      canvas.appendChild(el);
+      boxes.set(n.id, { x, y, w, h, el });
+    });
+
+    // 화살표 그리기
+    flows.forEach((f, i) => {
+      const a = boxes.get(f.from), b = boxes.get(f.to);
+      const pts = route(a, b, f.bend || 0, f.elbow);
+      const path = document.createElementNS(SVGNS, 'path');
+      path.setAttribute('d', rounded(pts, 10));
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', kindVar(f.kind));
+      path.setAttribute('stroke-width', '1.8');
+      path.setAttribute('stroke-linecap', 'round');
+      if (f.state === 'plan') path.setAttribute('stroke-dasharray', '6 5');
+      path.setAttribute('marker-end', `url(#a-${f.kind})`);
+      if (f.both) path.setAttribute('marker-start', `url(#a-${f.kind})`);
+      path.classList.add('edge');
+      path.dataset.from = f.from; path.dataset.to = f.to;
+      svg.appendChild(path);
+
+      // 글씨는 가장 긴 직선 구간 한가운데에, 선에서 살짝 띄워서
+      const spot = labelSpot(pts);
+      const lab = document.createElement('div');
+      lab.className = 'elabel';
+      lab.textContent = f.label;
+      lab.style.cssText = `left:${spot.x}px;top:${spot.y}px;color:${kindVar(f.kind)}`;
+      lab.dataset.from = f.from; lab.dataset.to = f.to;
+      canvas.appendChild(lab);
+    });
+
+    spreadLabels();
+    paint();
+  }
+
+  /** 가장 긴 직선 구간의 한가운데를 찾아 선 옆으로 살짝 띄운 지점. */
+  function labelSpot(pts) {
+    let best = 0, bestLen = -1;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const len = dist(pts[i], pts[i + 1]);
+      if (len > bestLen) { bestLen = len; best = i; }
+    }
+    const p = pts[best], q = pts[best + 1];
+    const cx = (p.x + q.x) / 2, cy = (p.y + q.y) / 2;
+    const horizontal = Math.abs(q.x - p.x) >= Math.abs(q.y - p.y);
+    return { x: horizontal ? cx : cx + 46, y: horizontal ? cy - 11 : cy, horizontal };
+  }
+
+  /** 글씨끼리 겹치면 위아래로 밀어 떼어 놓는다. */
+  function spreadLabels() {
+    const labs = [...canvas.querySelectorAll('.elabel')];
+    const box = el => {
+      const w = el.offsetWidth, h = el.offsetHeight;
+      const x = parseFloat(el.style.left), y = parseFloat(el.style.top);
+      return { l: x - w / 2, r: x + w / 2, t: y - h / 2, b: y + h / 2, w, h, el, x, y };
+    };
+    for (let pass = 0; pass < 8; pass++) {
+      const rects = labs.map(box);
+      let moved = false;
+      for (let i = 0; i < rects.length; i++) {
+        for (let j = i + 1; j < rects.length; j++) {
+          const a = rects[i], b = rects[j];
+          if (a.r < b.l || b.r < a.l || a.b < b.t || b.b < a.t) continue;
+          const push = (Math.min(a.b, b.b) - Math.max(a.t, b.t)) / 2 + 3;
+          const up = a.y <= b.y ? a : b, down = a.y <= b.y ? b : a;
+          up.el.style.top = (parseFloat(up.el.style.top) - push) + 'px';
+          down.el.style.top = (parseFloat(down.el.style.top) + push) + 'px';
+          moved = true;
+        }
+      }
+      if (!moved) break;
+    }
+  }
+
+  /** 두 상자를 ㄱ자로 잇는 꺾은선 좌표를 만든다. */
+  function route(a, b, bend, elbow) {
+    const t = (elbow == null ? 0.5 : elbow);
+    const ac = { x: a.x + a.w / 2, y: a.y + a.h / 2 };
+    const bc = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+    const dx = bc.x - ac.x, dy = bc.y - ac.y;
+
+    if (Math.abs(dx) >= Math.abs(dy)) {           // 좌우로 더 먼 경우
+      const sx = dx > 0 ? a.x + a.w : a.x;
+      const ex = dx > 0 ? b.x : b.x + b.w;
+      const sy = clamp(ac.y + bend, a.y + 12, a.y + a.h - 12);
+      const ey = clamp(bc.y + bend, b.y + 12, b.y + b.h - 12);
+      const mx = sx + (ex - sx) * t;
+      return [{x:sx,y:sy},{x:mx,y:sy},{x:mx,y:ey},{x:ex,y:ey}];
+    }
+    const sy = dy > 0 ? a.y + a.h : a.y;          // 위아래로 더 먼 경우
+    const ey = dy > 0 ? b.y : b.y + b.h;
+    const sx = clamp(ac.x + bend, a.x + 12, a.x + a.w - 12);
+    const ex = clamp(bc.x + bend, b.x + 12, b.x + b.w - 12);
+    const my = sy + (ey - sy) * t;
+    return [{x:sx,y:sy},{x:sx,y:my},{x:ex,y:my},{x:ex,y:ey}];
+  }
+
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+  /** 꺾이는 자리를 둥글게 다듬은 path 문자열. */
+  function rounded(pts, r) {
+    let d = `M ${pts[0].x} ${pts[0].y}`;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const p = pts[i], prev = pts[i - 1], next = pts[i + 1];
+      const r1 = Math.min(r, dist(prev, p) / 2), r2 = Math.min(r, dist(p, next) / 2);
+      const rr = Math.min(r1, r2);
+      if (rr < 1) { d += ` L ${p.x} ${p.y}`; continue; }
+      const i1 = lerp(p, prev, rr), i2 = lerp(p, next, rr);
+      d += ` L ${i1.x} ${i1.y} Q ${p.x} ${p.y} ${i2.x} ${i2.y}`;
+    }
+    const last = pts[pts.length - 1];
+    return d + ` L ${last.x} ${last.y}`;
+  }
+  const dist = (p, q) => Math.hypot(q.x - p.x, q.y - p.y);
+  function lerp(from, to, len) {
+    const d = dist(from, to) || 1;
+    return { x: from.x + (to.x - from.x) * len / d, y: from.y + (to.y - from.y) * len / d };
+  }
+
+  /** 선택된 참여자와 무관한 것들을 흐리게. */
+  function paint() {
+    const on = (f, t) => !selected || f === selected || t === selected;
+    boxes.forEach((b, id) => {
+      b.el.classList.toggle('sel', id === selected);
+      b.el.classList.toggle('dim', !!selected && id !== selected && !linked(id));
+    });
+    svg.querySelectorAll('path.edge').forEach(p =>
+      p.classList.toggle('dim', !on(p.dataset.from, p.dataset.to)));
+    canvas.querySelectorAll('.elabel').forEach(l =>
+      l.classList.toggle('dim', !on(l.dataset.from, l.dataset.to)));
+  }
+  function linked(id) {
+    return FLOWS.some(f => (f.from === selected && f.to === id) || (f.to === selected && f.from === id));
+  }
+
+  document.getElementById('showPlan').onchange = build;
+  document.getElementById('reset').onclick = () => { selected = null; paint(); };
+  document.getElementById('zoom').oninput = e => {
+    canvas.style.transform = `scale(${e.target.value / 100})`;
+  };
+
+  build();
+})();
+</script>
